@@ -2,6 +2,9 @@
   import { FolderOpen, Plus, Clock } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
   import { keyboardManager, createNavigationActions } from "../utils/keyboardManager.js";
+  import { openProject, recentProjects } from "../stores/projectStore.js";
+  import { openRecentProjectsDialog } from "../stores/dialogStore.js";
+  import { open } from "@tauri-apps/plugin-dialog";
   
   // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
   const version = "1.0.0-alpha";
@@ -9,16 +12,32 @@
   let selectedIndex = 0; // 0, 1, 2 para los tres botones
   let welcomeContainer;
 
-  function handleOpenProject() {
-    console.log('Opening project...');
+  async function handleOpenProject() {
+    try {
+      console.log('Opening project dialog...');
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Project Folder",
+      });
+
+      if (selected) {
+        console.log("Selected project folder:", selected);
+        openProject(selected);
+      }
+    } catch (error) {
+      console.error("Error opening folder dialog:", error);
+    }
   }
 
   function handleNewProject() {
     console.log('Creating new project...');
+    // TODO: Implement new project creation
   }
 
   function handleRecentProjects() {
     console.log('Showing recent projects...');
+    openRecentProjectsDialog();
   }
 
   function moveUp() {
@@ -82,6 +101,14 @@
     // Focus the container
     if (welcomeContainer) {
       welcomeContainer.focus();
+    }
+
+    // Clear any old mocked data (one time cleanup)
+    const hasCleanedMockData = localStorage.getItem('forja-cleaned-mock-data');
+    if (!hasCleanedMockData) {
+      localStorage.removeItem('forja-recent-projects');
+      localStorage.setItem('forja-cleaned-mock-data', 'true');
+      recentProjects.set([]);
     }
   });
 
