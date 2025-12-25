@@ -1,16 +1,40 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { Folder, Clock, X } from '@lucide/svelte';
-  import { recentProjects, openProject } from '../stores/projectStore.js';
-  import { keyboardManager, createNavigationActions } from '../utils/keyboardManager.js';
+  import { invoke } from "@tauri-apps/api/core";
+  import { onMount, onDestroy } from "svelte";
+  import { Folder, Clock, X } from "@lucide/svelte";
+  import { recentProjects, openProject } from "../stores/projectStore.js";
+  import {
+    keyboardManager,
+    createNavigationActions,
+  } from "../utils/keyboardManager.js";
 
-  let { isOpen, onClose }: { 
-    isOpen: boolean; 
+  let {
+    isOpen,
+    onClose,
+  }: {
+    isOpen: boolean;
     onClose: () => void;
   } = $props();
 
   let selectedIndex = $state(0);
   let dialogElement = $state<HTMLElement>();
+  let shortenedPaths = $state<string[]>([]);
+
+  async function initializeShortenedPaths() {
+    try {
+      const shortened = await invoke<string[]>('get_shortened_paths', {
+        paths: $recentProjects
+      });
+      shortenedPaths = shortened;
+    } catch (error) {
+      console.error('Failed to shorten paths:', error);
+      shortenedPaths = $recentProjects; // Fallback to original paths
+    }
+  }
+
+  function getDisplayPath(index: number): string {
+    return shortenedPaths[index] || $recentProjects[index] || '';
+  }
 
   function handleProjectSelect(projectPath: string) {
     openProject(projectPath);
@@ -18,21 +42,7 @@
   }
 
   function getProjectName(path: string): string {
-    return path.split(/[/\\]/).pop() || 'Unknown Project';
-  }
-
-  function formatProjectPath(path: string): string {
-    // Look for /Desktop or \Desktop in the path and show from there
-    const desktopIndex = path.toLowerCase().indexOf('desktop');
-    if (desktopIndex !== -1) {
-      // Find the actual Desktop folder position
-      const parts = path.split(/[/\\]/);
-      const desktopPartIndex = parts.findIndex(part => part.toLowerCase() === 'desktop');
-      if (desktopPartIndex !== -1) {
-        return '~/Desktop/' + parts.slice(desktopPartIndex + 1).join('/');
-      }
-    }
-    return path;
+    return path.split(/[/\\]/).pop() || "Unknown Project";
   }
 
   function moveUp() {
@@ -55,12 +65,12 @@
 
   function deleteCurrentProject() {
     if ($recentProjects[selectedIndex]) {
-      recentProjects.update(projects => {
+      recentProjects.update((projects) => {
         const newProjects = [...projects];
         newProjects.splice(selectedIndex, 1);
         return newProjects;
       });
-      
+
       // Adjust selectedIndex if needed
       if (selectedIndex >= $recentProjects.length - 1) {
         selectedIndex = Math.max(0, $recentProjects.length - 2);
@@ -68,10 +78,10 @@
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
     if (isOpen) {
       selectedIndex = 0;
-      
+
       // Register keyboard context for dialog
       const navigationActions = createNavigationActions({
         onMoveUp: moveUp,
@@ -82,12 +92,15 @@
 
       // Add delete action
       navigationActions.push({
-        key: 'd',
+        key: "d",
         handler: deleteCurrentProject,
-        description: 'Delete project from recent list',
+        description: "Delete project from recent list",
       });
 
-      keyboardManager.registerContext("recent-projects-dialog", navigationActions);
+      keyboardManager.registerContext(
+        "recent-projects-dialog",
+        navigationActions,
+      );
       keyboardManager.setActiveContext("recent-projects-dialog");
 
       if (dialogElement) {
@@ -104,7 +117,10 @@
   $effect(() => {
     if (isOpen) {
       selectedIndex = 0;
-      
+
+      // Initialize shortened paths when dialog opens
+      initializeShortenedPaths();
+
       // Register keyboard context for dialog
       const navigationActions = createNavigationActions({
         onMoveUp: moveUp,
@@ -115,12 +131,15 @@
 
       // Add delete action
       navigationActions.push({
-        key: 'd',
+        key: "d",
         handler: deleteCurrentProject,
-        description: 'Delete project from recent list',
+        description: "Delete project from recent list",
       });
 
-      keyboardManager.registerContext("recent-projects-dialog", navigationActions);
+      keyboardManager.registerContext(
+        "recent-projects-dialog",
+        navigationActions,
+      );
       keyboardManager.setActiveContext("recent-projects-dialog");
 
       setTimeout(() => {
@@ -139,8 +158,8 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div 
-      class="dialog-container" 
+    <div
+      class="dialog-container"
       onclick={(e) => e.stopPropagation()}
       bind:this={dialogElement}
       tabindex="0"
@@ -162,7 +181,7 @@
           </div>
         {:else}
           {#each $recentProjects as project, index}
-            <button 
+            <button
               class="project-item {selectedIndex === index ? 'selected' : ''}"
               onclick={() => handleProjectSelect(project)}
             >
@@ -171,7 +190,7 @@
               </div>
               <div class="project-info">
                 <div class="project-name">{getProjectName(project)}</div>
-                <div class="project-path">{project}</div>
+                <div class="project-path">{getDisplayPath(index)}</div>
               </div>
             </button>
           {/each}
@@ -202,7 +221,7 @@
     align-items: center;
     justify-content: center;
     z-index: 2000;
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(1px);
   }
 
   .dialog-container {
@@ -310,7 +329,7 @@
   .project-path {
     font-size: 12px;
     color: #888888;
-    font-family: 'Courier New', monospace;
+    font-family: "Courier New", monospace;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -335,7 +354,7 @@
     padding: 2px 6px;
     border-radius: 3px;
     font-size: 11px;
-    font-family: 'Courier New', monospace;
+    font-family: "Courier New", monospace;
     border: 1px solid rgba(255, 255, 255, 0.2);
     margin-right: 4px;
   }
