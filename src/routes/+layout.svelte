@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import TitleBar from "../lib/components/TitleBar.svelte";
+  import ShortcutsManager from "../lib/components/shortcuts/ShortcutsManager.svelte";
   let { children }: { children: Snippet } = $props();
 </script>
 
@@ -10,6 +11,8 @@
     {@render children()}
   </main>
 </div>
+
+<ShortcutsManager />
 
 <style>
   .app-container {
@@ -44,5 +47,9 @@
       "Open Sans",
       "Helvetica Neue",
       sans-serif;
+  }
+
+  :global(main) {
+    height: 100%;
   }
 </style>

@@ -22,9 +22,16 @@ export class KeyboardManager {
   private activeContext: string | null = null;
   private globalActions: KeyboardAction[] = [];
   private isListening = false;
+  private leaderKey = ' '; // Space as leader key
+  private isLeaderPressed = false;
+  private leaderTimeout: number | null = null;
+  private leaderTimeoutDuration = 1000; // 1 second
+  private onShowShortcuts?: () => void;
+  private onHideShortcuts?: () => void;
 
   constructor() {
     this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleKeyUp = this.handleKeyUp.bind(this);
   }
 
   /**
@@ -68,6 +75,7 @@ export class KeyboardManager {
   startListening(): void {
     if (!this.isListening) {
       document.addEventListener('keydown', this.handleKeyDown);
+      document.addEventListener('keyup', this.handleKeyUp);
       this.isListening = true;
     }
   }
@@ -78,6 +86,7 @@ export class KeyboardManager {
   stopListening(): void {
     if (this.isListening) {
       document.removeEventListener('keydown', this.handleKeyDown);
+      document.removeEventListener('keyup', this.handleKeyUp);
       this.isListening = false;
     }
   }
@@ -86,19 +95,94 @@ export class KeyboardManager {
    * Handle keydown events
    */
   private handleKeyDown(event: KeyboardEvent): void {
-    const pressedKey = event.key.toLowerCase();
+    const pressedKey = event.key;
     
-    // Check global actions first
-    if (this.executeActions(this.globalActions, event, pressedKey)) {
+    // Handle help key (?) for showing shortcuts panel
+    if (pressedKey === '?') {
+      event.preventDefault();
+      this.onShowShortcuts?.();
+      console.log('Help key (?) pressed - showing shortcuts panel');
       return;
     }
 
-    // Check active context actions
+    const normalizedKey = pressedKey.toLowerCase();
+    
+    // Handle leader key activation
+    if (normalizedKey === this.leaderKey && !this.isLeaderPressed) {
+      event.preventDefault();
+      this.isLeaderPressed = true;
+      this.startLeaderTimeout();
+      console.log('Leader key activated - waiting for next key...');
+      return;
+    }
+
+    // If leader is pressed, only handle leader combinations
+    if (this.isLeaderPressed) {
+      this.clearLeaderTimeout();
+      this.isLeaderPressed = false;
+      
+      // Look for leader combinations in active context
+      if (this.activeContext) {
+        const context = this.contexts.get(this.activeContext);
+        if (context && context.enabled) {
+          const leaderActions = context.actions.filter(action => {
+            const keys = Array.isArray(action.key) ? action.key : [action.key];
+            return keys.some(key => key.toLowerCase() === `${this.leaderKey}${normalizedKey}`);
+          });
+          
+          if (leaderActions.length > 0) {
+            event.preventDefault();
+            leaderActions[0].handler(event);
+            return;
+          }
+        }
+      }
+      
+      console.log('No leader combination found for:', `${this.leaderKey}${normalizedKey}`);
+      return;
+    }
+    
+    // Handle normal key presses
+    // Check global actions first
+    if (this.executeActions(this.globalActions, event, normalizedKey)) {
+      return;
+    }
+
+    // Check active context actions  
     if (this.activeContext) {
       const context = this.contexts.get(this.activeContext);
       if (context && context.enabled) {
-        this.executeActions(context.actions, event, pressedKey);
+        this.executeActions(context.actions, event, normalizedKey);
       }
+    }
+  }
+
+  /**
+   * Handle keyup events
+   */
+  private handleKeyUp(event: KeyboardEvent): void {
+    // Leader key handling is done in keydown
+  }
+
+  /**
+   * Start leader key timeout
+   */
+  private startLeaderTimeout(): void {
+    this.clearLeaderTimeout();
+    this.leaderTimeout = window.setTimeout(() => {
+      this.isLeaderPressed = false;
+      // Don't hide shortcuts panel on timeout - let user close with 'q'
+      console.log('Leader key timeout - returning to normal mode');
+    }, this.leaderTimeoutDuration);
+  }
+
+  /**
+   * Clear leader key timeout
+   */
+  private clearLeaderTimeout(): void {
+    if (this.leaderTimeout) {
+      clearTimeout(this.leaderTimeout);
+      this.leaderTimeout = null;
     }
   }
 
@@ -108,7 +192,14 @@ export class KeyboardManager {
   private executeActions(actions: KeyboardAction[], event: KeyboardEvent, pressedKey: string): boolean {
     for (const action of actions) {
       const keys = Array.isArray(action.key) ? action.key : [action.key];
-      const matchesKey = keys.some(key => key.toLowerCase() === pressedKey);
+      const matchesKey = keys.some(key => {
+        const normalizedKey = key.toLowerCase();
+        // Skip leader combinations in normal execution
+        if (normalizedKey.startsWith(this.leaderKey)) {
+          return false;
+        }
+        return normalizedKey === pressedKey;
+      });
 
       if (matchesKey) {
         if (action.preventDefault !== false) {
@@ -148,9 +239,72 @@ export class KeyboardManager {
    */
   destroy(): void {
     this.stopListening();
+    this.clearLeaderTimeout();
     this.contexts.clear();
     this.globalActions = [];
     this.activeContext = null;
+  }
+
+  /**
+   * Check if leader key is currently active
+   */
+  isLeaderActive(): boolean {
+    return this.isLeaderPressed;
+  }
+
+  /**
+   * Get current leader key
+   */
+  getLeaderKey(): string {
+    return this.leaderKey;
+  }
+
+  /**
+   * Set leader key
+   */
+  setLeaderKey(key: string): void {
+    this.leaderKey = key;
+  }
+
+  /**
+   * Set callbacks for shortcuts panel
+   */
+  setShortcutsCallbacks(onShow: () => void, onHide: () => void): void {
+    this.onShowShortcuts = onShow;
+    this.onHideShortcuts = onHide;
+  }
+
+  /**
+   * Manually hide shortcuts panel
+   */
+  hideShortcutsPanel(): void {
+    this.isLeaderPressed = false;
+    this.clearLeaderTimeout();
+    this.onHideShortcuts?.();
+  }
+
+  /**
+   * Get leader shortcuts for current context
+   */
+  getLeaderShortcuts(): Array<{key: string, description: string}> {
+    if (!this.activeContext) return [];
+    
+    const context = this.contexts.get(this.activeContext);
+    if (!context) return [];
+    
+    return context.actions
+      .filter(action => {
+        const keys = Array.isArray(action.key) ? action.key : [action.key];
+        return keys.some(key => key.toLowerCase().startsWith(this.leaderKey));
+      })
+      .map(action => {
+        const keys = Array.isArray(action.key) ? action.key : [action.key];
+        const leaderKey = keys.find(key => key.toLowerCase().startsWith(this.leaderKey));
+        return {
+          key: leaderKey?.replace(' ', 'Space+') || '',
+          description: action.description || 'No description'
+        };
+      });
   }
 }
 

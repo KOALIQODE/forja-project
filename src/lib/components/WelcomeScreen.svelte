@@ -53,7 +53,29 @@
       onSelect: selectCurrent,
     });
 
-    keyboardManager.registerContext("welcome-screen", navigationActions);
+    // Add leader key combinations
+    const leaderActions = [
+      {
+        key: ' o', // Space + O
+        handler: () => handleOpenProject(),
+        description: 'Open Project',
+      },
+      {
+        key: ' n', // Space + N  
+        handler: () => handleNewProject(),
+        description: 'New Project',
+      },
+      {
+        key: ' r', // Space + R
+        handler: () => handleRecentProjects(), 
+        description: 'Recent Projects',
+      },
+    ];
+
+    keyboardManager.registerContext("welcome-screen", [
+      ...navigationActions,
+      ...leaderActions,
+    ]);
     keyboardManager.setActiveContext("welcome-screen");
     keyboardManager.startListening();
 
@@ -68,6 +90,7 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <main class="welcome-screen" tabindex="0" bind:this={welcomeContainer}>
   <div class="welcome-container">
     <!-- Header section -->
@@ -82,10 +105,10 @@
     <!-- Tagline -->
     <section class="tagline-section">
       <p class="tagline">
-        La esencia de <span class="vim-highlight">Vim</span> en una interfaz nativa
+        The essence of <span class="vim-highlight">Vim</span> in a native interface
       </p>
       <p class="description">
-        Navegación por teclado, comandos rápidos, edición eficiente
+        Keyboard navigation, fast commands, efficient editing
       </p>
     </section>
 
@@ -94,19 +117,19 @@
       <button class="action-btn primary {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
         <FolderOpen size="20" />
         <span>Open Project</span>
-        <kbd class="shortcut">Ctrl+O</kbd>
+        <kbd class="shortcut">Space+O</kbd>
       </button>
 
       <button class="action-btn secondary {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
         <Plus size="20" />
         <span>New Empty Project</span>
-        <kbd class="shortcut">Ctrl+N</kbd>
+        <kbd class="shortcut">Space+N</kbd>
       </button>
 
       <button class="action-btn secondary {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
         <Clock size="20" />
         <span>Recent Projects</span>
-        <kbd class="shortcut">Ctrl+R</kbd>
+        <kbd class="shortcut">Space+R</kbd>
       </button>
     </section>
 
@@ -208,7 +231,7 @@
     border-radius: 8px;
     padding: 20px 24px;
     color: #e0e0e0;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;

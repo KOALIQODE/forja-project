@@ -3,9 +3,3 @@
 </script>
 
 <WelcomeScreen />
-
-<style>
-  :global(main) {
-    height: 100%;
-  }
-</style>
