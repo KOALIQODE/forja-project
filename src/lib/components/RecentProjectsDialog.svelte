@@ -1,8 +1,11 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { onMount, onDestroy } from "svelte";
   import { Folder, Clock, X } from "@lucide/svelte";
-  import { recentProjects, openProject } from "../stores/projectStore.js";
+  import {
+    recentProjects,
+    openProject,
+    shortenedPaths,
+  } from "../stores/projectStore.js";
   import {
     keyboardManager,
     createNavigationActions,
@@ -18,22 +21,9 @@
 
   let selectedIndex = $state(0);
   let dialogElement = $state<HTMLElement>();
-  let shortenedPaths = $state<string[]>([]);
-
-  async function initializeShortenedPaths() {
-    try {
-      const shortened = await invoke<string[]>('get_shortened_paths', {
-        paths: $recentProjects
-      });
-      shortenedPaths = shortened;
-    } catch (error) {
-      console.error('Failed to shorten paths:', error);
-      shortenedPaths = $recentProjects; // Fallback to original paths
-    }
-  }
 
   function getDisplayPath(index: number): string {
-    return shortenedPaths[index] || $recentProjects[index] || '';
+    return $shortenedPaths[index] || $recentProjects[index] || "";
   }
 
   function handleProjectSelect(projectPath: string) {
@@ -117,9 +107,6 @@
   $effect(() => {
     if (isOpen) {
       selectedIndex = 0;
-
-      // Initialize shortened paths when dialog opens
-      initializeShortenedPaths();
 
       // Register keyboard context for dialog
       const navigationActions = createNavigationActions({
@@ -216,12 +203,12 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.2);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 2000;
-    backdrop-filter: blur(1px);
+    /*backdrop-filter: blur(1px);*/
   }
 
   .dialog-container {

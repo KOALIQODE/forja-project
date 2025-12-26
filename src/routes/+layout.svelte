@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import { type Snippet } from "svelte";
   import TitleBar from "../lib/components/TitleBar.svelte";
   import ShortcutsManager from "../lib/components/shortcuts/ShortcutsManager.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
