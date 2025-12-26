@@ -1,10 +1,19 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { Folder, Clock, X } from "@lucide/svelte";
+  import {
+    Folder,
+    Clock,
+    X,
+    ChevronUp,
+    ChevronDown,
+    MoveUp,
+    MoveDown,
+  } from "@lucide/svelte";
   import {
     recentProjects,
     openProject,
     shortenedPaths,
+    gitStatuses,
   } from "../stores/projectStore.js";
   import {
     keyboardManager,
@@ -168,6 +177,7 @@
           </div>
         {:else}
           {#each $recentProjects as project, index}
+            {@const git = $gitStatuses[index]}
             <button
               class="project-item {selectedIndex === index ? 'selected' : ''}"
               onclick={() => handleProjectSelect(project)}
@@ -179,6 +189,21 @@
                 <div class="project-name">{getProjectName(project)}</div>
                 <div class="project-path">{getDisplayPath(index)}</div>
               </div>
+              {#if git}
+                <div class="project-git-status">
+                  {#if git.is_repo}
+                    <span class="branch">{git.branch}</span>
+                    {#if git.has_upstream}
+                      <span><MoveUp size={12} /> {git.ahead}</span>
+                      <span><MoveDown size={12} /> {git.behind}</span>
+                    {:else}
+                      <span class="git-no-upstream">Publish</span>
+                    {/if}
+                  {:else}
+                    <span class="git-not-repo">No Git</span>
+                  {/if}
+                </div>
+              {/if}
             </button>
           {/each}
         {/if}
@@ -345,4 +370,51 @@
     border: 1px solid rgba(255, 255, 255, 0.2);
     margin-right: 4px;
   }
+  /*:root {
+    --bg-hover: rgba(255, 255, 255, 0.04);
+    --bg-selected: rgba(0, 122, 204, 0.15);
+
+    --text-primary: #e5e7eb;
+    --text-secondary: #9ca3af;
+
+    --git-clean: #9ca3af;
+    --git-ahead: #22c55e;
+    --git-behind: #f59e0b;
+    --git-upstream: #38bdf8;
+    --git-muted: #6b7280;
+  }*/
+  /* ===== Git ===== */
+  .project-git-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    font-weight: 600;
+    font-size: 11px;
+    color: #6b7280;
+  }
+
+  /*.branch {
+    color: #9ca3af;
+  }
+
+  .git-diffs {
+    color: #9ca3af;
+  }
+
+  .git-behind {
+    color: var(--git-behind);
+  }
+
+  .git-clean {
+    color: var(--git-clean);
+  }
+
+  .git-no-upstream {
+    color: var(--git-upstream);
+  }
+
+  .git-not-repo {
+    color: var(--git-muted);
+  }*/
 </style>

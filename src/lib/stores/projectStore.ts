@@ -1,8 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { writable } from "svelte/store";
 
+export interface GitStatus {
+  path: string;
+  is_repo: boolean;
+  ahead: number;
+  behind: number;
+  branch: string;
+  has_upstream: boolean;
+}
+
 export const currentProject = writable<string | null>(null);
 export const shortenedPaths = writable<string[]>([]);
+export const gitStatuses = writable<GitStatus[]>([]);
 const cache = new Map<string, string[]>();
 
 // Recent projects with localStorage persistence
@@ -66,8 +76,14 @@ function createRecentProjectsStore() {
         paths: projects,
       });
 
+      const statuses = await invoke<GitStatus[]>("git_status_batch", {
+        paths: projects,
+      });
+
+      console.log(statuses);
       cache.set(key, shortened);
       shortenedPaths.set(shortened);
+      gitStatuses.set(statuses);
     } catch (e) {
       console.error("Failed to shorten paths:", e);
       shortenedPaths.set(projects);
