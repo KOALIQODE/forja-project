@@ -1,16 +1,16 @@
-<script>
+<script lang="ts">
   import { FolderOpen, Plus, Clock } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
-  import { keyboardManager, createNavigationActions } from "../utils/keyboardManager.js";
-  import { openProject, recentProjects } from "../stores/projectStore.js";
-  import { openRecentProjectsDialog } from "../stores/dialogStore.js";
+  import { keyboardManager, createNavigationActions } from "../utils/keyboardManager";
+  import { openProject, recentProjects } from "../stores/projectStore";
+  import { openRecentProjectsDialog } from "../stores/dialogStore";
   import { open } from "@tauri-apps/plugin-dialog";
   
   // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
   const version = "1.0.0-alpha";
   
   let selectedIndex = 0; // 0, 1, 2 para los tres botones
-  let welcomeContainer;
+  let welcomeContainer: HTMLElement;
 
   async function handleOpenProject() {
     try {
@@ -206,7 +206,6 @@
   .title-sub {
     color: #888888;
     font-weight: 300;
-    margin-left: 8px;
   }
 
   .version {

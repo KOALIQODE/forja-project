@@ -14,11 +14,11 @@
     openProject,
     shortenedPaths,
     gitStatuses,
-  } from "../stores/projectStore.js";
+  } from "../stores/projectStore";
   import {
     keyboardManager,
     createNavigationActions,
-  } from "../utils/keyboardManager.js";
+  } from "../utils/keyboardManager";
 
   let {
     isOpen,

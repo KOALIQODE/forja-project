@@ -1,7 +1,7 @@
-<script>
+<script lang="ts">
   import RecentProjectsDialog from "../RecentProjectsDialog.svelte";
-  import { dialogState, closeRecentProjectsDialog } from "../../stores/dialogStore.js";
-  import { keyboardManager } from "../../utils/keyboardManager.js";
+  import { dialogState, closeRecentProjectsDialog } from "../../stores/dialogStore";
+  import { keyboardManager } from "../../utils/keyboardManager";
 
   let showRecentProjects = false;
 

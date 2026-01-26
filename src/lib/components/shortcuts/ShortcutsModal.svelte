@@ -1,15 +1,15 @@
-<script>
-  import { keyboardManager } from "../../utils/keyboardManager.js";
+<script lang="ts">
+  import { keyboardManager } from "../../utils/keyboardManager";
   
   export let visible = false;
-  export let shortcuts = [];
+  export let shortcuts: Array<{key: string, description: string}> = [];
   
   function handleQuit() {
     keyboardManager.hideShortcutsPanel();
   }
   
   // Listen for 'q' key to close
-  function handleKeyDown(event) {
+  function handleKeyDown(event: KeyboardEvent) {
     if (visible && event.key.toLowerCase() === 'q') {
       event.preventDefault();
       event.stopPropagation();
