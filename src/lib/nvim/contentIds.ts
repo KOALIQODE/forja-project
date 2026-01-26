@@ -10,13 +10,10 @@ export const NVIM_MODES = {
   VISUAL: 'visual'
 } as const;
 
-// Buffer Type IDs
+// Buffer Type IDs - Only active buffers
 export const BUFFER_IDS = {
   DEFAULT: 'default',
-  WELCOME_SCREEN: 'welcome_screen',
-  FILE_EXPLORER: 'file_explorer',
-  COMMAND_PALETTE: 'command_palette',
-  SETTINGS_PANEL: 'settings_panel'
+  WELCOME_SCREEN: 'welcome_screen'
 } as const;
 
 // Welcome Screen Content IDs
@@ -26,46 +23,12 @@ export const WELCOME_CONTENT = {
   RECENT_PROJECTS: 'nav_recent_projects'
 } as const;
 
-// File Explorer Content IDs
-export const FILE_EXPLORER_CONTENT = {
-  NO_FILES_FOUND: 'no_files_found'
-} as const;
-
-// Command Palette Content IDs (for future use)
-export const COMMAND_PALETTE_CONTENT = {
-  SEARCH_FILES: 'cmd_search_files',
-  OPEN_SETTINGS: 'cmd_open_settings',
-  TOGGLE_TERMINAL: 'cmd_toggle_terminal'
-} as const;
-
-// Settings Panel Content IDs (for future use)
-export const SETTINGS_CONTENT = {
-  GENERAL: 'settings_general',
-  APPEARANCE: 'settings_appearance',
-  SHORTCUTS: 'settings_shortcuts',
-  EXTENSIONS: 'settings_extensions'
-} as const;
-
-// Content Display Mapping - Central mapping of IDs to display text
+// Content Display Mapping - Only for active content
 export const CONTENT_DISPLAY_MAP: Record<string, string> = {
   // Welcome Screen
   [WELCOME_CONTENT.OPEN_PROJECT]: 'Open Project',
   [WELCOME_CONTENT.NEW_PROJECT]: 'New Empty Project', 
-  [WELCOME_CONTENT.RECENT_PROJECTS]: 'Recent Projects',
-  
-  // File Explorer
-  [FILE_EXPLORER_CONTENT.NO_FILES_FOUND]: 'No files found',
-  
-  // Command Palette
-  [COMMAND_PALETTE_CONTENT.SEARCH_FILES]: 'Search Files...',
-  [COMMAND_PALETTE_CONTENT.OPEN_SETTINGS]: 'Open Settings',
-  [COMMAND_PALETTE_CONTENT.TOGGLE_TERMINAL]: 'Toggle Terminal',
-  
-  // Settings Panel
-  [SETTINGS_CONTENT.GENERAL]: 'General',
-  [SETTINGS_CONTENT.APPEARANCE]: 'Appearance',
-  [SETTINGS_CONTENT.SHORTCUTS]: 'Keyboard Shortcuts', 
-  [SETTINGS_CONTENT.EXTENSIONS]: 'Extensions'
+  [WELCOME_CONTENT.RECENT_PROJECTS]: 'Recent Projects'
 } as const;
 
 // Type for nvim modes (for type safety)
