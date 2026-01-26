@@ -1,20 +1,46 @@
 <script lang="ts">
   import { FolderOpen, Plus, Clock } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
-  import { keyboardManager, createNavigationActions } from "../utils/keyboardManager";
   import { openProject, recentProjects } from "../stores/projectStore";
   import { openRecentProjectsDialog } from "../stores/dialogStore";
   import { open } from "@tauri-apps/plugin-dialog";
   
+  // Nvim integration imports
+  import { 
+    nvimConnected, 
+    nvimNavEnabled, 
+    cursorPosition, 
+    connectNvim,
+    sendNvimCommand 
+  } from "$lib/stores/nvimStore";
+
   // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
   const version = "1.0.0-alpha";
-  
+
   let selectedIndex = 0; // 0, 1, 2 para los tres botones
   let welcomeContainer: HTMLElement;
+  let showNvimDebug = true; // Para mostrar info de debug
+
+  // Map nvim cursor line to button selection (line 1-3 maps to buttons 0-2)
+  $: {
+    if ($nvimNavEnabled && $cursorPosition) {
+      selectedIndex = Math.max(0, Math.min(2, $cursorPosition.line - 1));
+    }
+  }
+
+  // Initialize nvim navigation
+  async function initializeNvim() {
+    const connected = await connectNvim();
+    if (connected) {
+      // Enable nvim navigation mode
+      $nvimNavEnabled = true;
+      // Set initial cursor position to line 1 (first button)
+      await sendNvimCommand('1G', 'command'); // Go to line 1
+    }
+  }
 
   async function handleOpenProject() {
     try {
-      console.log('Opening project dialog...');
       const selected = await open({
         directory: true,
         multiple: false,
@@ -22,7 +48,6 @@
       });
 
       if (selected) {
-        console.log("Selected project folder:", selected);
         openProject(selected);
       }
     } catch (error) {
@@ -35,19 +60,40 @@
     // TODO: Implement new project creation
   }
 
+  // function handleRecentProjects() {
+  //   console.log('Showing recent projects...');
+  //   openRecentProjectsDialog();
+  // }
+
+  // function handleNewProject() {
+  //   console.log('Creating new project...');
+  //   // TODO: Implement new project creation
+  // }
+
   function handleRecentProjects() {
     console.log('Showing recent projects...');
     openRecentProjectsDialog();
   }
 
-  function moveUp() {
-    selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : 2;
-    console.log("Moving up, selectedIndex:", selectedIndex);
-  }
-
-  function moveDown() {
-    selectedIndex = (selectedIndex + 1) % 3;
-    console.log("Moving down, selectedIndex:", selectedIndex);
+  // Navigation via nvim j/k keys
+  async function handleNvimNavigation() {
+    if (!$nvimNavEnabled) return;
+    
+    // Listen for nvim navigation
+    document.addEventListener('keydown', async (e) => {
+      if (!$nvimNavEnabled) return;
+      
+      if (e.key === 'j') {
+        e.preventDefault();
+        await sendNvimCommand('j', 'input');
+      } else if (e.key === 'k') {
+        e.preventDefault();
+        await sendNvimCommand('k', 'input');
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        selectCurrent();
+      }
+    });
   }
 
   function selectCurrent() {
@@ -64,44 +110,12 @@
     }
   }
 
-  onMount(() => {
-    // Register keyboard navigation for welcome screen
-    const navigationActions = createNavigationActions({
-      onMoveUp: moveUp,
-      onMoveDown: moveDown,
-      onSelect: selectCurrent,
-    });
-
-    // Add leader key combinations
-    const leaderActions = [
-      {
-        key: ' o', // Space + O
-        handler: () => handleOpenProject(),
-        description: 'Open Project',
-      },
-      {
-        key: ' n', // Space + N  
-        handler: () => handleNewProject(),
-        description: 'New Project',
-      },
-      {
-        key: ' r', // Space + R
-        handler: () => handleRecentProjects(), 
-        description: 'Recent Projects',
-      },
-    ];
-
-    keyboardManager.registerContext("welcome-screen", [
-      ...navigationActions,
-      ...leaderActions,
-    ]);
-    keyboardManager.setActiveContext("welcome-screen");
-    keyboardManager.startListening();
-
-    // Focus the container
-    if (welcomeContainer) {
-      welcomeContainer.focus();
-    }
+  onMount(async () => {
+    // Initialize nvim connection and navigation
+    await initializeNvim();
+    
+    // Setup nvim navigation listeners
+    await handleNvimNavigation();
 
     // Clear any old mocked data (one time cleanup)
     const hasCleanedMockData = localStorage.getItem('forja-cleaned-mock-data');
@@ -113,7 +127,7 @@
   });
 
   onDestroy(() => {
-    keyboardManager.stopListening();
+    // Clean up nvim navigation listeners
   });
 </script>
 
