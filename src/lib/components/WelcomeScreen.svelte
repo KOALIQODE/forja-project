@@ -1,42 +1,49 @@
 <script lang="ts">
   import { FolderOpen, Plus, Clock } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
-  import { openProject, recentProjects } from "../stores/projectStore";
+  import { openProject } from "../stores/projectStore";
   import { openRecentProjectsDialog } from "../stores/dialogStore";
   import { open } from "@tauri-apps/plugin-dialog";
   
   // Nvim integration imports
   import { 
-    nvimConnected, 
     nvimNavEnabled, 
-    cursorPosition, 
-    connectNvim,
-    sendNvimCommand 
+    selectedIndex,
+    connectNvimForComponent
   } from "$lib/stores/nvimStore";
+  
+  import { BUFFER_IDS } from "$lib/nvim/contentIds";
+  import { NavigationFactory } from "$lib/nvim/navigationStrategies";
 
   // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
   const version = "1.0.0-alpha";
 
-  let selectedIndex = 0; // 0, 1, 2 para los tres botones
+  let selectedButton = 0; // 0, 1, 2 para los tres botones
   let welcomeContainer: HTMLElement;
-  let showNvimDebug = true; // Para mostrar info de debug
+  let navigationCleanup: (() => void) | null = null;
 
   // Map nvim cursor line to button selection (line 1-3 maps to buttons 0-2)
-  $: {
-    if ($nvimNavEnabled && $cursorPosition) {
-      selectedIndex = Math.max(0, Math.min(2, $cursorPosition.line - 1));
-    }
+  $: if ($nvimNavEnabled) {
+    selectedButton = $selectedIndex;
   }
 
   // Initialize nvim navigation
   async function initializeNvim() {
-    const connected = await connectNvim();
+    const connected = await connectNvimForComponent(BUFFER_IDS.WELCOME_SCREEN);
     if (connected) {
-      // Enable nvim navigation mode
       $nvimNavEnabled = true;
-      // Set initial cursor position to line 1 (first button)
-      await sendNvimCommand('1G', 'command'); // Go to line 1
+      setupNavigationStrategy();
     }
+  }
+
+  // Setup navigation strategy
+  function setupNavigationStrategy() {
+    const navigation = NavigationFactory.createNavigation(BUFFER_IDS.WELCOME_SCREEN);
+    navigationCleanup = navigation.handleNavigation(
+      () => {}, 
+      () => {}, 
+      selectCurrent
+    );
   }
 
   async function handleOpenProject() {
@@ -60,44 +67,13 @@
     // TODO: Implement new project creation
   }
 
-  // function handleRecentProjects() {
-  //   console.log('Showing recent projects...');
-  //   openRecentProjectsDialog();
-  // }
-
-  // function handleNewProject() {
-  //   console.log('Creating new project...');
-  //   // TODO: Implement new project creation
-  // }
-
   function handleRecentProjects() {
     console.log('Showing recent projects...');
     openRecentProjectsDialog();
   }
 
-  // Navigation via nvim j/k keys
-  async function handleNvimNavigation() {
-    if (!$nvimNavEnabled) return;
-    
-    // Listen for nvim navigation
-    document.addEventListener('keydown', async (e) => {
-      if (!$nvimNavEnabled) return;
-      
-      if (e.key === 'j') {
-        e.preventDefault();
-        await sendNvimCommand('j', 'input');
-      } else if (e.key === 'k') {
-        e.preventDefault();
-        await sendNvimCommand('k', 'input');
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        selectCurrent();
-      }
-    });
-  }
-
   function selectCurrent() {
-    switch(selectedIndex) {
+    switch($selectedIndex) {
       case 0:
         handleOpenProject();
         break;
@@ -111,23 +87,11 @@
   }
 
   onMount(async () => {
-    // Initialize nvim connection and navigation
     await initializeNvim();
-    
-    // Setup nvim navigation listeners
-    await handleNvimNavigation();
-
-    // Clear any old mocked data (one time cleanup)
-    const hasCleanedMockData = localStorage.getItem('forja-cleaned-mock-data');
-    if (!hasCleanedMockData) {
-      localStorage.removeItem('forja-recent-projects');
-      localStorage.setItem('forja-cleaned-mock-data', 'true');
-      recentProjects.set([]);
-    }
   });
 
   onDestroy(() => {
-    // Clean up nvim navigation listeners
+    navigationCleanup?.();
   });
 </script>
 
@@ -155,19 +119,19 @@
 
     <!-- Action buttons -->
     <section class="actions-section">
-      <button class="action-btn primary {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
+      <button class="action-btn primary {$selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
         <FolderOpen size="20" />
         <span>Open Project</span>
         <kbd class="shortcut">Space+O</kbd>
       </button>
 
-      <button class="action-btn secondary {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
+      <button class="action-btn secondary {$selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
         <Plus size="20" />
         <span>New Empty Project</span>
         <kbd class="shortcut">Space+N</kbd>
       </button>
 
-      <button class="action-btn secondary {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
+      <button class="action-btn secondary {$selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
         <Clock size="20" />
         <span>Recent Projects</span>
         <kbd class="shortcut">Space+R</kbd>

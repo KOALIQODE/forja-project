@@ -1,19 +1,19 @@
 /**
- * Nvim Embed Client - Singleton Pattern
- * Manages a single embedded Neovim instance for the entire application
+ * Nvim Embed Client - Singleton Pattern with Dynamic Buffer Management
+ * Manages a single embedded Neovim instance with multiple dynamic buffers
  */
 
 import { attach } from 'neovim';
-import { spawn } from 'child_process';
 import type { CursorPosition, NvimResponse } from './types';
+import { BufferManager } from './bufferManager';
 
 export class NvimEmbedClient {
   private static instance: NvimEmbedClient | null = null;
   private nvim: any = null;
   private nvimProcess: any = null;
   private isConnected = false;
-  private currentCursor: CursorPosition = { line: 1, col: 1 };
   private connectionPromise: Promise<void> | null = null;
+  private bufferManager = new BufferManager();
 
   private constructor() {
     // Private constructor for singleton pattern
@@ -48,6 +48,9 @@ export class NvimEmbedClient {
 
   private async _doConnect(): Promise<void> {
     try {
+      // Import child_process dynamically (server-side only)
+      const { spawn } = await import('node:child_process');
+      
       // Spawn nvim process with --embed flag
       this.nvimProcess = spawn('nvim', ['--embed'], {});
       
@@ -55,35 +58,70 @@ export class NvimEmbedClient {
       this.nvim = await attach({ proc: this.nvimProcess });
 
       this.isConnected = true;
-
-      // Initialize cursor position
-      await this.updateCursorPosition();
-
-      // Setup buffer with content for navigation
-      await this.nvim.command('enew'); // Create new empty buffer
-      
-      // Add content to buffer for navigation (3 lines for 3 buttons)
-      const bufferContent = [
-        'Open Project',
-        'New Empty Project', 
-        'Recent Projects'
-      ];
-      
-      const buffer = await this.nvim.buffer;
-      await buffer.setLines(bufferContent, { start: 0, end: -1 });
-      
-      // Ensure we're in normal mode
-      await this.nvim.input('<Esc>');
-      
-      // Go to first line and first column
-      await this.nvim.command('normal! gg0');
-      await this.updateCursorPosition();
       
     } catch (error) {
       console.error('Failed to connect to Neovim:', error);
       this.isConnected = false;
       this.connectionPromise = null;
       throw error;
+    }
+  }
+
+  /**
+   * Create or switch to a component buffer
+   */
+  async createComponentBuffer(componentType: string, options?: any): Promise<NvimResponse> {
+    await this.connect();
+
+    try {
+      const buffer = await this.bufferManager.createBuffer(componentType, this.nvim, options);
+      
+      return {
+        success: true,
+        cursor: buffer.cursorPosition,
+        result: {
+          bufferId: buffer.id,
+          maxLines: buffer.maxLines
+        }
+      };
+    } catch (error) {
+      console.error('Failed to create component buffer:', error);
+      return {
+        success: false,
+        cursor: { line: 1, col: 0 },
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  /**
+   * Switch to existing buffer
+   */
+  async switchBuffer(bufferId: string): Promise<NvimResponse> {
+    await this.connect();
+
+    try {
+      const buffer = await this.bufferManager.switchToBuffer(bufferId, this.nvim);
+      
+      if (!buffer) {
+        return {
+          success: false,
+          cursor: { line: 1, col: 0 },
+          error: `Buffer ${bufferId} not found`
+        };
+      }
+
+      return {
+        success: true,
+        cursor: buffer.cursorPosition
+      };
+    } catch (error) {
+      console.error('Failed to switch buffer:', error);
+      return {
+        success: false,
+        cursor: { line: 1, col: 0 },
+        error: error instanceof Error ? error.message : String(error)
+      };
     }
   }
 
@@ -107,6 +145,7 @@ export class NvimEmbedClient {
       this.nvimProcess = null;
       this.isConnected = false;
       this.connectionPromise = null;
+      this.bufferManager.clearAllBuffers();
     }
   }
 
@@ -118,80 +157,105 @@ export class NvimEmbedClient {
 
     try {
       const result = await this.nvim.command(command);
-      await this.updateCursorPosition();
+      const cursor = await this.updateAndGetCursorPosition();
 
       return {
         success: true,
         result,
-        cursor: this.currentCursor
+        cursor
       };
     } catch (error) {
       console.error('Neovim command error:', error);
       return {
         success: false,
-        cursor: this.currentCursor,
+        cursor: { line: 1, col: 0 },
         error: error instanceof Error ? error.message : String(error)
       };
     }
   }
 
   /**
-   * Send input keys to Neovim (for navigation)
+   * Send input keys to Neovim (for navigation) with dynamic bounds checking
    */
   async sendInput(keys: string): Promise<NvimResponse> {
     await this.connect();
 
     try {
-      // Handle navigation with bounds checking for welcome screen (3 lines)
+      const currentBuffer = this.bufferManager.getCurrentBuffer();
+      if (!currentBuffer) {
+        return {
+          success: false,
+          cursor: { line: 1, col: 0 },
+          error: 'No active buffer'
+        };
+      }
+
+      const bounds = this.bufferManager.getNavigationBounds(currentBuffer.id);
+      console.log('Current buffer:', currentBuffer.id, 'maxLines:', currentBuffer.maxLines);
+      console.log('Navigation bounds:', bounds);
+      console.log('Current position before move:', currentBuffer.cursorPosition);
+      
+      // Handle navigation with dynamic bounds checking
       if (keys === 'j') {
-        const currentLine = this.currentCursor.line;
-        if (currentLine < 3) {
+        const currentLine = currentBuffer.cursorPosition.line;
+        console.log(`j pressed: currentLine=${currentLine}, maxLine=${bounds.maxLine}`);
+        if (currentLine < bounds.maxLine) {
           await this.nvim.command('normal! j');
+        } else {
+          console.log('j blocked: at max line');
         }
       } else if (keys === 'k') {
-        const currentLine = this.currentCursor.line;
-        if (currentLine > 1) {
+        const currentLine = currentBuffer.cursorPosition.line;
+        console.log(`k pressed: currentLine=${currentLine}, minLine=${bounds.minLine}`);
+        if (currentLine > bounds.minLine) {
           await this.nvim.command('normal! k');
+        } else {
+          console.log('k blocked: at min line');
         }
       } else {
         // For other keys, use normal command
         await this.nvim.command(`normal! ${keys}`);
       }
       
-      await this.updateCursorPosition();
+      const cursor = await this.updateAndGetCursorPosition();
+      console.log('Cursor position after move:', cursor);
+      
+      // Update buffer manager with new cursor position
+      this.bufferManager.updateBufferCursor(currentBuffer.id, cursor);
 
       return {
         success: true,
-        cursor: this.currentCursor
+        cursor
       };
     } catch (error) {
       console.error('Neovim input error:', error);
       return {
         success: false,
-        cursor: this.currentCursor,
+        cursor: { line: 1, col: 0 },
         error: error instanceof Error ? error.message : String(error)
       };
     }
   }
 
   /**
-   * Update current cursor position
+   * Update and get current cursor position
    */
-  private async updateCursorPosition(): Promise<void> {
+  private async updateAndGetCursorPosition(): Promise<CursorPosition> {
     if (!this.nvim || !this.isConnected) {
-      return;
+      return { line: 1, col: 0 };
     }
 
     try {
       const window = await this.nvim.window;
       const cursor = await window.cursor;
       
-      this.currentCursor = {
+      return {
         line: cursor[0],
         col: cursor[1]
       };
     } catch (error) {
       console.warn('Failed to get cursor position:', error);
+      return { line: 1, col: 0 };
     }
   }
 
@@ -199,9 +263,7 @@ export class NvimEmbedClient {
    * Get current cursor position
    */
   async getCursorPosition(): Promise<CursorPosition> {
-    await this.connect();
-    await this.updateCursorPosition();
-    return { ...this.currentCursor };
+    return await this.updateAndGetCursorPosition();
   }
 
   /**
@@ -225,6 +287,30 @@ export class NvimEmbedClient {
       console.error('Failed to get buffer content:', error);
       return [];
     }
+  }
+
+  /**
+   * Get current buffer info
+   */
+  getCurrentBufferInfo(): any {
+    return this.bufferManager.getCurrentBuffer();
+  }
+
+  /**
+   * Get strategy for current buffer (for client-side navigation)
+   */
+  getBufferStrategy(): any {
+    const currentBuffer = this.bufferManager.getCurrentBuffer();
+    if (!currentBuffer) return null;
+    
+    return this.bufferManager.getStrategy(currentBuffer.id);
+  }
+
+  /**
+   * Get all buffer IDs
+   */
+  getAllBufferIds(): string[] {
+    return this.bufferManager.getBufferIds();
   }
 }
 

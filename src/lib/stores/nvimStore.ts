@@ -1,20 +1,25 @@
 /**
- * Nvim Store - Reactive state for Neovim integration
+ * Nvim Store - Reactive state for Neovim integration with dynamic buffers
  */
 
 import { writable, derived } from 'svelte/store';
 import type { CursorPosition } from '$lib/navigation/types';
+import { BUFFER_IDS, NVIM_MODES, type NvimMode } from '$lib/nvim/contentIds';
 
 // Connection state
 export const nvimConnected = writable<boolean>(false);
 export const nvimConnecting = writable<boolean>(false);
 export const nvimError = writable<string | null>(null);
 
+// Buffer state
+export const currentBufferId = writable<string | null>(null);
+export const maxLines = writable<number>(1);
+
 // Cursor position
 export const cursorPosition = writable<CursorPosition>({ line: 1, col: 1 });
 
 // Navigation mode
-export const nvimMode = writable<'normal' | 'insert' | 'visual'>('normal');
+export const nvimMode = writable<NvimMode>(NVIM_MODES.NORMAL);
 
 // Navigation enabled
 export const nvimNavEnabled = writable<boolean>(false);
@@ -35,14 +40,21 @@ export const cursorCSS = derived(cursorPosition, ($cursor) => ({
   left: `${$cursor.col * 10}px`           // Char width: 10px  
 }));
 
+// Selected index mapping (cursor line -> array index)
+export const selectedIndex = derived(cursorPosition, ($cursor) => $cursor.line - 1);
+
 // Actions
-export async function connectNvim(): Promise<boolean> {
+export async function connectNvimForComponent(componentType: string, options?: any): Promise<boolean> {
   nvimConnecting.set(true);
   nvimError.set(null);
 
   try {
     const response = await fetch('/api/nvim/connect', {
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ componentType, options })
     });
 
     const result = await response.json();
@@ -50,6 +62,10 @@ export async function connectNvim(): Promise<boolean> {
     if (result.success) {
       nvimConnected.set(true);
       cursorPosition.set(result.cursor);
+      currentBufferId.set(result.bufferId);
+      if (result.maxLines) {
+        maxLines.set(result.maxLines);
+      }
       return true;
     } else {
       nvimError.set(result.error || 'Connection failed');
@@ -63,6 +79,11 @@ export async function connectNvim(): Promise<boolean> {
   } finally {
     nvimConnecting.set(false);
   }
+}
+
+// Backward compatibility
+export async function connectNvim(): Promise<boolean> {
+  return connectNvimForComponent(BUFFER_IDS.DEFAULT);
 }
 
 export async function sendNvimCommand(command: string, type: 'command' | 'input' = 'command'): Promise<boolean> {
