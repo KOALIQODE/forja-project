@@ -57,6 +57,9 @@ export class NvimEmbedClient {
       // Attach to the spawned process
       this.nvim = await attach({ proc: this.nvimProcess });
 
+      // Configure Neovim options
+      await this.nvim.command('set noswapfile');
+
       this.isConnected = true;
       
     } catch (error) {

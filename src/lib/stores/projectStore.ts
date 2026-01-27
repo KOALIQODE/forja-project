@@ -43,7 +43,7 @@ function createRecentProjectsStore() {
             parsed[0].path
           ) {
             // Old format: array of objects with path property
-            console.log("Migrating old recent projects format");
+            // console.log("Migrating old recent projects format");
             const migrated = parsed
               .map((item: any) => item.path)
               .filter((path: any) => typeof path === "string");
@@ -80,7 +80,7 @@ function createRecentProjectsStore() {
         paths: projects,
       });
 
-      console.log(statuses);
+      // console.log(statuses);
       cache.set(key, shortened);
       shortenedPaths.set(shortened);
       gitStatuses.set(statuses);
@@ -109,7 +109,7 @@ function createRecentProjectsStore() {
 export const recentProjects = createRecentProjectsStore();
 
 export function openProject(projectPath: string) {
-  console.log("Opening project via store:", projectPath);
+  // console.log("Opening project via store:", projectPath);
   currentProject.set(projectPath);
 
   // Add to recent projects
@@ -118,10 +118,10 @@ export function openProject(projectPath: string) {
     return [projectPath, ...filtered].slice(0, 10); // Keep only last 10 projects
   });
 
-  console.log("Updated currentProject store to:", projectPath);
+  // console.log("Updated currentProject store to:", projectPath);
 }
 
 export function closeProject() {
-  console.log("Closing current project");
+  // console.log("Closing current project");
   currentProject.set(null);
 }
