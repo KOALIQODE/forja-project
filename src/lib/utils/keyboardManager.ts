@@ -60,6 +60,13 @@ export class KeyboardManager {
   }
 
   /**
+   * Get the current active context
+   */
+  getActiveContext(): string | null {
+    return this.activeContext;
+  }
+
+  /**
    * Enable/disable a specific context
    */
   toggleContext(contextName: string, enabled: boolean): void {

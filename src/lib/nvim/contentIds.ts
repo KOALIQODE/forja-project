@@ -16,6 +16,11 @@ export const BUFFER_IDS = {
   WELCOME_SCREEN: 'welcome_screen'
 } as const;
 
+// Dialog IDs
+export const DIALOG_IDS = {
+  RECENT_PROJECTS: 'recent_projects'
+} as const;
+
 // Welcome Screen Content IDs
 export const WELCOME_CONTENT = {
   OPEN_PROJECT: 'nav_open_project',
@@ -36,6 +41,9 @@ export type NvimMode = typeof NVIM_MODES[keyof typeof NVIM_MODES];
 
 // Type for buffer IDs (for type safety)
 export type BufferId = typeof BUFFER_IDS[keyof typeof BUFFER_IDS];
+
+// Type for dialog IDs (for type safety)
+export type DialogId = typeof DIALOG_IDS[keyof typeof DIALOG_IDS];
 
 // Type for content IDs (for type safety)
 export type ContentId = keyof typeof CONTENT_DISPLAY_MAP;

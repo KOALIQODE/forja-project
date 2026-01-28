@@ -1,33 +1,40 @@
 <script lang="ts">
   import RecentProjectsDialog from "../RecentProjectsDialog.svelte";
-  import { dialogState, closeRecentProjectsDialog } from "../../stores/dialogStore";
+  import { dialogState, closeDialog } from "../../stores/dialogStore";
   import { keyboardManager } from "../../utils/keyboardManager";
+  import { DIALOG_IDS } from "../../nvim/contentIds";
 
-  let showRecentProjects = false;
+  let currentDialog: any = null;
+  let previousContext: string | null = null;
 
   // Subscribe to dialog state
   dialogState.subscribe(state => {
-    showRecentProjects = state.recentProjectsOpen;
-    
-    // When dialog closes, restore welcome screen context
-    if (!state.recentProjectsOpen) {
-      setTimeout(() => {
-        keyboardManager.setActiveContext("welcome-screen");
-      }, 10);
+    if (state.activeDialog) {
+      currentDialog = state.activeDialog;
+      previousContext = state.activeDialog.previousContext || null;
+    } else {
+      // When dialog closes, restore previous context
+      if (previousContext) {
+        setTimeout(() => {
+          keyboardManager.setActiveContext(previousContext!);
+        }, 10);
+      }
+      currentDialog = null;
+      previousContext = null;
     }
   });
 
-  function closeRecentProjects() {
-    closeRecentProjectsDialog();
+  function handleClose() {
+    closeDialog();
   }
 </script>
 
-<RecentProjectsDialog 
-  isOpen={showRecentProjects} 
-  onClose={closeRecentProjects} 
-/>
-
-<RecentProjectsDialog 
-  isOpen={showRecentProjects} 
-  onClose={closeRecentProjects} 
-/>
+{#if currentDialog}
+  {#if currentDialog.id === DIALOG_IDS.RECENT_PROJECTS}
+    <RecentProjectsDialog 
+      isOpen={true} 
+      onClose={handleClose}
+      {...(currentDialog.props || {})}
+    />
+  {/if}
+{/if}

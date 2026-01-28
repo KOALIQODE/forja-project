@@ -5,6 +5,7 @@
 import { NavigationBuilder } from './baseNavigation';
 import type { NavigationStrategy } from './baseNavigation';
 import { openRecentProjectsDialog } from '$lib/stores/dialogStore';
+import { keyboardManager } from '$lib/utils/keyboardManager';
 
 export class WelcomeScreenNavigation implements NavigationStrategy {
   handleNavigation(onNavigateDown?: () => void, onNavigateUp?: () => void, onSelect?: () => void): () => void {
@@ -17,7 +18,9 @@ export class WelcomeScreenNavigation implements NavigationStrategy {
       .withCustomKeys({
         ' r': () => {
           console.log('Space+R pressed - Opening Recent Projects');
-          openRecentProjectsDialog();
+          // Pass current context to preserve it
+          const currentContext = keyboardManager.getActiveContext();
+          openRecentProjectsDialog(currentContext || undefined);
         },
         ' o': () => {
           console.log('Space+O pressed - Open Project');

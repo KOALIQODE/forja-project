@@ -3,6 +3,7 @@
   import { onMount, onDestroy } from "svelte";
   import { openProject } from "../stores/projectStore";
   import { openRecentProjectsDialog } from "../stores/dialogStore";
+  import { keyboardManager } from "../utils/keyboardManager";
   import { open } from "@tauri-apps/plugin-dialog";
   
   // Nvim integration imports
@@ -69,7 +70,9 @@
 
   function handleRecentProjects() {
     console.log('Showing recent projects...');
-    openRecentProjectsDialog();
+    // Pass current context to preserve it
+    const currentContext = keyboardManager.getActiveContext();
+    openRecentProjectsDialog(currentContext);
   }
 
   function selectCurrent() {
