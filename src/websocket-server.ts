@@ -4,9 +4,12 @@
  */
 
 import { WebSocketServer } from 'ws';
+import { createServer } from 'http';
+import { Socket } from 'net';
 
 const WS_PORT = 8081;
 let wsServer: WebSocketServer | null = null;
+let httpServer: any = null;
 
 // Import del singleton nvimClient
 let nvimClient: any = null;
@@ -19,13 +22,42 @@ async function getNvimClient() {
   return nvimClient;
 }
 
-export function startNvimWebSocketServer() {
+export function startWebSocketServer() {
   if (wsServer) {
     // console.log('WebSocket server already running');
     return;
   }
 
-  wsServer = new WebSocketServer({ port: WS_PORT });
+  // Crear servidor HTTP
+  httpServer = createServer();
+  
+  // Configurar SO_REUSEADDR en el servidor
+  httpServer.on('connection', (socket: Socket) => {
+    socket.setKeepAlive(true);
+    socket.setNoDelay(true);
+  });
+  
+  wsServer = new WebSocketServer({ 
+    server: httpServer
+  });
+  
+  // Habilitar reutilización de dirección y puerto
+  httpServer.listen({
+    port: WS_PORT,
+    host: '0.0.0.0'
+  }, () => {
+    // console.log(`Neovim WebSocket server started on port ${WS_PORT}`);
+  });
+
+  // Configurar para reutilizar el puerto cuando el servidor se cierre
+  httpServer.on('close', () => {
+    // Esto ayuda a liberar el puerto más rápidamente
+    setTimeout(() => {
+      if (httpServer && httpServer._handle) {
+        httpServer._handle.close();
+      }
+    }, 100);
+  });
   
   wsServer.on('connection', (ws) => {
     // console.log('Neovim WebSocket client connected');
@@ -100,10 +132,14 @@ export function startNvimWebSocketServer() {
   // console.log(`Neovim WebSocket server started on port ${WS_PORT}`);
 }
 
-export function stopNvimWebSocketServer() {
+export function stopWebSocketServer() {
   if (wsServer) {
     wsServer.close();
     wsServer = null;
-    console.log('Neovim WebSocket server stopped');
   }
+  if (httpServer) {
+    httpServer.close();
+    httpServer = null;
+  }
+  console.log('WebSocket server stopped');
 }
