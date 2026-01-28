@@ -2,17 +2,21 @@
  * Base Navigation Interfaces and Builder
  */
 
-import { sendNvimCommand } from '$lib/stores/nvimStore';
+import { sendNvimCommand } from "$lib/stores/nvimStore";
 
 export interface NavigationStrategy {
-  handleNavigation(onNavigateDown?: () => void, onNavigateUp?: () => void, onSelect?: () => void): () => void;
+  handleNavigation(
+    onNavigateDown?: () => void,
+    onNavigateUp?: () => void,
+    onSelect?: () => void,
+  ): () => void;
 }
 
 export interface NavigationOptions {
-  allowVertical?: boolean;      // j/k keys
-  allowHorizontal?: boolean;    // h/l keys  
-  allowEnter?: boolean;         // Enter key
-  allowEscape?: boolean;        // Escape key
+  allowVertical?: boolean; // j/k keys
+  allowHorizontal?: boolean; // h/l keys
+  allowEnter?: boolean; // Enter key
+  allowEscape?: boolean; // Escape key
   customKeys?: Record<string, () => void | Promise<void>>;
   onNavigateUp?: () => void | Promise<void>;
   onNavigateDown?: () => void | Promise<void>;
@@ -31,7 +35,7 @@ export class NavigationBuilder {
     allowHorizontal: false,
     allowEnter: true,
     allowEscape: false,
-    customKeys: {}
+    customKeys: {},
   };
 
   static create(): NavigationBuilder {
@@ -73,7 +77,9 @@ export class NavigationBuilder {
   /**
    * Add custom key handlers
    */
-  withCustomKeys(keys: Record<string, () => void | Promise<void>>): NavigationBuilder {
+  withCustomKeys(
+    keys: Record<string, () => void | Promise<void>>,
+  ): NavigationBuilder {
     this.options.customKeys = { ...this.options.customKeys, ...keys };
     return this;
   }
@@ -81,7 +87,10 @@ export class NavigationBuilder {
   /**
    * Add single custom key handler
    */
-  withCustomKey(key: string, handler: () => void | Promise<void>): NavigationBuilder {
+  withCustomKey(
+    key: string,
+    handler: () => void | Promise<void>,
+  ): NavigationBuilder {
     if (!this.options.customKeys) this.options.customKeys = {};
     this.options.customKeys[key] = handler;
     return this;
@@ -111,24 +120,26 @@ export class NavigationBuilder {
 
     const handleKeyDown = async (e: KeyboardEvent) => {
       // Skip if input is focused
-      if (document.activeElement?.tagName === 'INPUT' || 
-          document.activeElement?.tagName === 'TEXTAREA') {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA"
+      ) {
         return;
       }
 
       let handled = false;
 
       // Handle Space + key combinations
-      if (e.key === ' ' && !pendingSpaceCommand) {
+      if (e.key === " " && !pendingSpaceCommand) {
         e.preventDefault();
         pendingSpaceCommand = true;
-        
+
         // Set timeout to cancel space command after 2 seconds
         spaceTimeout = window.setTimeout(() => {
           pendingSpaceCommand = false;
           spaceTimeout = null;
         }, 2000);
-        
+
         handled = true;
         return;
       }
@@ -140,7 +151,7 @@ export class NavigationBuilder {
           spaceTimeout = null;
         }
         pendingSpaceCommand = false;
-        
+
         const spaceKey = ` ${e.key}`;
         if (this.options.customKeys && spaceKey in this.options.customKeys) {
           e.preventDefault();
@@ -152,14 +163,14 @@ export class NavigationBuilder {
 
       // Handle vertical navigation
       if (this.options.allowVertical) {
-        if (e.key === 'j') {
+        if (e.key === "j") {
           e.preventDefault();
-          await sendNvimCommand('j', 'input');
+          await sendNvimCommand("j", "input");
           await this.options.onNavigateDown?.();
           handled = true;
-        } else if (e.key === 'k') {
+        } else if (e.key === "k") {
           e.preventDefault();
-          await sendNvimCommand('k', 'input');
+          await sendNvimCommand("k", "input");
           await this.options.onNavigateUp?.();
           handled = true;
         }
@@ -167,28 +178,28 @@ export class NavigationBuilder {
 
       // Handle horizontal navigation
       if (this.options.allowHorizontal) {
-        if (e.key === 'h') {
+        if (e.key === "h") {
           e.preventDefault();
-          await sendNvimCommand('h', 'input');
+          await sendNvimCommand("h", "input");
           await this.options.onNavigateLeft?.();
           handled = true;
-        } else if (e.key === 'l') {
+        } else if (e.key === "l") {
           e.preventDefault();
-          await sendNvimCommand('l', 'input');
+          await sendNvimCommand("l", "input");
           await this.options.onNavigateRight?.();
           handled = true;
         }
       }
 
       // Handle Enter
-      if (this.options.allowEnter && e.key === 'Enter') {
+      if (this.options.allowEnter && e.key === "Enter") {
         e.preventDefault();
         await this.options.onSelect?.();
         handled = true;
       }
 
       // Handle Escape
-      if (this.options.allowEscape && e.key === 'Escape') {
+      if (this.options.allowEscape && e.key === "Escape") {
         e.preventDefault();
         await this.options.onCancel?.();
         handled = true;
@@ -202,11 +213,11 @@ export class NavigationBuilder {
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    
+    document.addEventListener("keydown", handleKeyDown);
+
     // Return cleanup function
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown);
       if (spaceTimeout) {
         clearTimeout(spaceTimeout);
       }

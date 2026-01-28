@@ -6,6 +6,7 @@ import { NavigationBuilder } from './baseNavigation';
 import type { NavigationStrategy } from './baseNavigation';
 import { openRecentProjectsDialog } from '$lib/stores/dialogStore';
 import { keyboardManager } from '$lib/utils/keyboardManager';
+import { sendNvimCommand } from '$lib/stores/nvimStore';
 
 export class WelcomeScreenNavigation implements NavigationStrategy {
   handleNavigation(onNavigateDown?: () => void, onNavigateUp?: () => void, onSelect?: () => void): () => void {
@@ -16,6 +17,13 @@ export class WelcomeScreenNavigation implements NavigationStrategy {
       .withEnter(true)         // Allow Enter
       .withEscape(false)       // No Escape needed
       .withCustomKeys({
+        '?': async () => {
+          console.log('? pressed - Showing shortcuts and sending to nvim');
+          // Send to nvim first
+          await sendNvimCommand('?', 'input');
+          // Then show shortcuts panel
+          keyboardManager.showShortcutsPanel();
+        },
         ' r': () => {
           console.log('Space+R pressed - Opening Recent Projects');
           // Pass current context to preserve it

@@ -104,14 +104,9 @@ export class KeyboardManager {
   private handleKeyDown(event: KeyboardEvent): void {
     const pressedKey = event.key;
     
-    // Handle help key (?) for showing shortcuts panel
-    if (pressedKey === '?') {
-      event.preventDefault();
-      this.onShowShortcuts?.();
-      console.log('Help key (?) pressed - showing shortcuts panel');
-      return;
-    }
-
+    // Note: Help key (?) is now handled by navigation strategies
+    // to ensure nvim gets the input first
+    
     const normalizedKey = pressedKey.toLowerCase();
     
     // Handle leader key activation
@@ -288,6 +283,13 @@ export class KeyboardManager {
     this.isLeaderPressed = false;
     this.clearLeaderTimeout();
     this.onHideShortcuts?.();
+  }
+
+  /**
+   * Manually show shortcuts panel
+   */
+  showShortcutsPanel(): void {
+    this.onShowShortcuts?.();
   }
 
   /**
