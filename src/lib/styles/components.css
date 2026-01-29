@@ -1,0 +1,108 @@
+/* === Common Component Styles === */
+
+/* Buttons */
+.btn-base {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-system);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-primary {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+}
+
+.btn-primary:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-secondary);
+}
+
+/* KBD Elements */
+.kbd-base {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-md);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.kbd-accent {
+  background: var(--bg-surface-focus);
+  color: var(--accent-green);
+  border: 1px solid var(--border-focus);
+}
+
+/* Focus States */
+.focus-outline {
+  outline: none;
+}
+
+.focus-ring {
+  box-shadow: var(--shadow-focus);
+}
+
+/* Layout Helpers */
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* Text Styles */
+.text-primary {
+  color: var(--text-primary);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-disabled {
+  color: var(--text-disabled);
+}
+
+.text-accent {
+  color: var(--text-accent);
+}
+
+/* Spacing Utilities */
+.gap-sm { gap: var(--gap-sm); }
+.gap-md { gap: var(--gap-md); }
+.gap-lg { gap: var(--gap-lg); }
+.gap-xl { gap: var(--gap-xl); }
+
+.p-sm { padding: var(--spacing-sm); }
+.p-md { padding: var(--spacing-md); }
+.p-lg { padding: var(--spacing-lg); }
+.p-xl { padding: var(--spacing-xl); }
+
+.m-sm { margin: var(--spacing-sm); }
+.m-md { margin: var(--spacing-md); }
+.m-lg { margin: var(--spacing-lg); }
+.m-xl { margin: var(--spacing-xl); }

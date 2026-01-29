@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { FolderOpen, Plus, Clock } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
   import { keyboardManager, createNavigationActions } from "../utils/keyboardManager.js";
@@ -10,7 +10,7 @@
   const version = "1.0.0-alpha";
   
   let selectedIndex = 0; // 0, 1, 2 para los tres botones
-  let welcomeContainer;
+  let welcomeContainer: HTMLElement;
 
   async function handleOpenProject() {
     try {
@@ -141,22 +141,22 @@
 
     <!-- Action buttons -->
     <section class="actions-section">
-      <button class="action-btn primary {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
+      <button class="action-btn {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
         <FolderOpen size="20" />
         <span>Open Project</span>
-        <kbd class="shortcut">Space+O</kbd>
+        <kbd class="shortcut">Space + O</kbd>
       </button>
 
-      <button class="action-btn secondary {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
+      <button class="action-btn {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
         <Plus size="20" />
         <span>New Empty Project</span>
-        <kbd class="shortcut">Space+N</kbd>
+        <kbd class="shortcut">Space + N</kbd>
       </button>
 
-      <button class="action-btn secondary {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
+      <button class="action-btn {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
         <Clock size="20" />
         <span>Recent Projects</span>
-        <kbd class="shortcut">Space+R</kbd>
+        <kbd class="shortcut">Space + R</kbd>
       </button>
     </section>
 
@@ -169,77 +169,75 @@
 
 <style>
   .welcome-screen {
-    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-    color: #e0e0e0;
+    background: var(--gradient-primary);
+    color: var(--text-secondary);
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: var(--font-family-system);
   }
 
   .welcome-container {
     max-width: 480px;
     width: 100%;
-    padding: 48px 32px;
+    padding: var(--spacing-6xl) var(--spacing-4xl);
     text-align: center;
   }
 
   .welcome-header {
-    margin-bottom: 32px;
+    margin-bottom: var(--spacing-4xl);
   }
 
   .app-title {
-    font-size: 48px;
-    font-weight: 300;
-    margin: 0 0 12px 0;
+    font-size: var(--font-size-5xl);
+    font-weight: var(--font-weight-light);
+    margin: 0 0 var(--spacing-lg) 0;
     letter-spacing: -0.02em;
     line-height: 1.1;
   }
 
   .title-main {
-    color: #ffffff;
-    font-weight: 600;
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
   }
 
   .title-sub {
-    color: #888888;
-    font-weight: 300;
-    margin-left: 8px;
+    color: var(--text-disabled);
+    font-weight: var(--font-weight-light);
   }
 
   .version {
-    color: #666666;
-    font-size: 14px;
-    font-weight: 500;
+    color: var(--git-muted);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-medium);
     margin: 0;
     opacity: 0.8;
   }
 
   .tagline-section {
-    margin-bottom: 40px;
+    margin-bottom: var(--spacing-5xl);
   }
 
   .tagline {
-    font-size: 24px;
-    font-weight: 400;
-    margin: 0 0 2px 0;
-    color: #cccccc;
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-normal);
+    margin: 0 0 var(--spacing-xs) 0;
+    color: var(--text-muted);
     line-height: 1.4;
   }
 
   .vim-highlight {
-    color: #4ade80;
-    font-weight: 600;
-    background: linear-gradient(45deg, #4ade80, #22c55e);
+    color: var(--accent-green);
+    font-weight: var(--font-weight-semibold);
+    background: var(--gradient-accent);
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
   .description {
-    font-size: 16px;
+    font-size: var(--font-size-xl);
     color: #999999;
     margin: 0;
     line-height: 1.5;
@@ -248,20 +246,20 @@
   .actions-section {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    margin-bottom: 32px;
+    gap: var(--gap-2xl);
+    margin-bottom: var(--spacing-4xl);
   }
 
   .action-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid #333333;
-    border-radius: 8px;
-    padding: 20px 24px;
-    color: #e0e0e0;
-    font-size: 14px;
-    font-weight: 500;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-2xl) var(--spacing-3xl);
+    color: var(--text-secondary);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all var(--transition-normal);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -277,41 +275,31 @@
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.05),
-      transparent
-    );
-    transition: left 0.5s ease;
+    background: var(--gradient-shimmer);
+    transition: left var(--transition-slow);
   }
 
   .action-btn:hover::before {
     left: 100%;
   }
 
-  .action-btn.primary {
-    border-color: #333333;
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .action-btn.primary:hover {
+  .action-btn:hover {
     border-color: #555555;
-    background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(255, 255, 255, 0.1);
-  }
-
-  .action-btn.secondary:hover {
-    border-color: #555555;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-surface-hover);
     transform: translateY(-1px);
   }
 
   .action-btn.keyboard-focused {
-    background: rgba(74, 222, 128, 0.15);
-    border-color: #4ade80;
-    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.3);
+    background: var(--bg-surface-focus);
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow-focus);
+  }
+
+  .action-btn.keyboard-focused:hover {
+    background: rgba(74, 222, 128, 0.2);
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow-focus);
+    transform: translateY(-1px);
   }
 
   .welcome-screen:focus {
@@ -320,16 +308,16 @@
 
   .action-btn span {
     flex: 1;
-    margin-left: 12px;
+    margin-left: var(--spacing-lg);
   }
 
   .shortcut {
     background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: "Courier New", monospace;
+    color: var(--text-muted);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    font-family: var(--font-family-mono);
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
@@ -338,37 +326,37 @@
   }
 
   .footer-text {
-    font-size: 14px;
-    color: #888888;
+    font-size: var(--font-size-lg);
+    color: var(--text-disabled);
     margin: 0;
   }
 
   .footer-text kbd {
     background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 12px;
-    font-family: "Courier New", monospace;
+    color: var(--text-muted);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    font-family: var(--font-family-mono);
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   /* Responsive */
   @media (max-width: 640px) {
     .welcome-container {
-      padding: 32px 24px;
+      padding: var(--spacing-4xl) var(--spacing-3xl);
     }
 
     .app-title {
-      font-size: 36px;
+      font-size: var(--font-size-4xl);
     }
 
     .tagline {
-      font-size: 20px;
+      font-size: var(--font-size-2xl);
     }
 
     .action-btn {
-      padding: 16px 20px;
+      padding: var(--spacing-xl) var(--spacing-2xl);
     }
   }
 

@@ -1,0 +1,101 @@
+:root {
+  /* === Colors === */
+  /* Text Colors */
+  --text-primary: #ffffff;
+  --text-secondary: #e0e0e0;
+  --text-muted: #cccccc;
+  --text-disabled: #888888;
+  --text-accent: #4ade80;
+  
+  /* Background Colors */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #141414;
+  --bg-tertiary: #1f1f1f;
+  --bg-surface: rgba(255, 255, 255, 0.05);
+  --bg-surface-hover: rgba(255, 255, 255, 0.1);
+  --bg-surface-focus: rgba(74, 222, 128, 0.15);
+  
+  /* Border Colors */
+  --border-primary: #333333;
+  --border-secondary: #404040;
+  --border-accent: #4ade80;
+  --border-focus: rgba(74, 222, 128, 0.3);
+  
+  /* Accent Colors */
+  --accent-green: #4ade80;
+  --accent-green-dark: #22c55e;
+  --accent-blue: #60a5fa;
+  --accent-blue-bg: rgba(59, 130, 246, 0.15);
+  --accent-blue-border: rgba(59, 130, 246, 0.3);
+  
+  /* Git Status Colors */
+  --git-text: #6b7280;
+  --git-branch: #888888;
+  --git-muted: #666666;
+  
+  /* === Gradients === */
+  --gradient-primary: linear-gradient(135deg, #141414 0%, #1f1f1f 100%);
+  --gradient-accent: linear-gradient(45deg, #4ade80, #22c55e);
+  --gradient-shimmer: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  
+  /* === Spacing === */
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-md: 8px;
+  --spacing-lg: 12px;
+  --spacing-xl: 16px;
+  --spacing-2xl: 20px;
+  --spacing-3xl: 24px;
+  --spacing-4xl: 32px;
+  --spacing-5xl: 40px;
+  --spacing-6xl: 48px;
+  
+  /* === Border Radius === */
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  
+  /* === Typography === */
+  --font-family-system: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  --font-family-mono: "Cascadia Code", monospace;
+  
+  --font-size-xs: 9px;
+  --font-size-sm: 10px;
+  --font-size-base: 11px;
+  --font-size-md: 12px;
+  --font-size-lg: 14px;
+  --font-size-xl: 16px;
+  --font-size-2xl: 20px;
+  --font-size-3xl: 24px;
+  --font-size-4xl: 36px;
+  --font-size-5xl: 48px;
+  
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  
+  /* === Layout === */
+  --titlebar-height: 40px;
+  --gap-xs: 2px;
+  --gap-sm: 4px;
+  --gap-md: 6px;
+  --gap-lg: 8px;
+  --gap-xl: 12px;
+  --gap-2xl: 16px;
+  
+  /* === Shadows === */
+  --shadow-sm: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 12px 48px rgba(0, 0, 0, 0.8);
+  --shadow-focus: 0 0 0 2px var(--border-focus);
+  
+  /* === Transitions === */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.5s ease;
+  
+  /* === Z-Index === */
+  --z-modal: 2000;
+  --z-overlay: 1000;
+}

@@ -1,14 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import {
-    Folder,
-    Clock,
-    X,
-    ChevronUp,
-    ChevronDown,
-    MoveUp,
-    MoveDown,
-  } from "@lucide/svelte";
+  import { FolderOpen, Clock, X } from "@lucide/svelte";
   import {
     recentProjects,
     openProject,
@@ -183,7 +175,7 @@
               onclick={() => handleProjectSelect(project)}
             >
               <div class="project-icon">
-                <Folder size={16} />
+                <FolderOpen size={16} />
               </div>
               <div class="project-info">
                 <div class="project-name">{getProjectName(project)}</div>
@@ -194,8 +186,14 @@
                   {#if git.is_repo}
                     <span class="branch">{git.branch}</span>
                     {#if git.has_upstream}
-                      <span><MoveUp size={12} /> {git.ahead}</span>
-                      <span><MoveDown size={12} /> {git.behind}</span>
+                      <span class="git-indicator">
+                        <kbd class="git-arrow">↑</kbd>
+                        <span class="git-count">{git.ahead}</span>
+                      </span>
+                      <span class="git-indicator">
+                        <kbd class="git-arrow">↓</kbd>
+                        <span class="git-count">{git.behind}</span>
+                      </span>
                     {:else}
                       <span class="git-no-upstream">Publish</span>
                     {/if}
@@ -211,7 +209,7 @@
 
       <div class="dialog-footer">
         <div class="shortcuts-info">
-          <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+          <!-- <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span> -->
           <span><kbd>Enter</kbd> Open</span>
           <span><kbd>D</kbd> Delete</span>
           <span><kbd>Esc</kbd> Close</span>
@@ -237,19 +235,19 @@
   }
 
   .dialog-container {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-    border: 1px solid #404040;
-    border-radius: 12px;
+    background: var(--gradient-primary);
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-sm);
     width: 600px;
     max-height: 70vh;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.8);
+    box-shadow: var(--shadow-md);
     outline: none;
-    color: #e0e0e0;
+    color: var(--text-secondary);
   }
 
   .dialog-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid #333333;
+    padding: var(--spacing-xl) var(--spacing-2xl);
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -258,32 +256,47 @@
   .header-title {
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: #ffffff;
+    gap: var(--gap-lg);
+    color: var(--text-primary);
+  }
+
+  .header-title :global(svg) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
   }
 
   .header-title h3 {
     margin: 0;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
   }
 
   .close-button {
     background: transparent;
     border: none;
-    color: #888888;
+    color: var(--text-disabled);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: all var(--transition-fast);
+  }
+
+  .close-button :global(svg) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
   }
 
   .close-button:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
   }
 
   .projects-list {
@@ -292,28 +305,29 @@
   }
 
   .empty-state {
-    padding: 40px 20px;
+    padding: var(--spacing-5xl) var(--spacing-2xl);
     text-align: center;
-    color: #888888;
+    color: var(--text-disabled);
   }
 
   .empty-state p {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--font-size-lg);
   }
 
   .project-item {
     width: 100%;
-    padding: 12px 20px;
+    padding: var(--spacing-lg) var(--spacing-2xl);
     background: transparent;
     border: none;
+    border-radius: var(--radius-md);
     text-align: left;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 12px;
-    transition: background 0.15s ease;
-    color: #e0e0e0;
+    gap: var(--gap-xl);
+    transition: background var(--transition-fast);
+    color: var(--text-secondary);
   }
 
   .project-item:hover,
@@ -339,82 +353,88 @@
   }
 
   .project-path {
-    font-size: 12px;
+    font-size: 10px;
     color: #888888;
-    font-family: "Courier New", monospace;
+    font-family: "Cascadia Code", monospace;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .dialog-footer {
-    padding: 12px 20px;
-    border-top: 1px solid #333333;
+    padding: var(--spacing-lg) var(--spacing-2xl);
+    border-top: 1px solid var(--border-primary);
     background: rgba(0, 0, 0, 0.2);
   }
 
   .shortcuts-info {
     display: flex;
-    gap: 16px;
-    font-size: 12px;
-    color: #888888;
+    gap: var(--gap-2xl);
+    font-size: var(--font-size-md);
+    color: var(--text-disabled);
   }
 
   .shortcuts-info kbd {
     background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-family: "Courier New", monospace;
+    color: var(--text-muted);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-base);
+    font-family: var(--font-family-mono);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    margin-right: 4px;
+    margin-right: var(--spacing-sm);
   }
-  /*:root {
-    --bg-hover: rgba(255, 255, 255, 0.04);
-    --bg-selected: rgba(0, 122, 204, 0.15);
-
-    --text-primary: #e5e7eb;
-    --text-secondary: #9ca3af;
-
-    --git-clean: #9ca3af;
-    --git-ahead: #22c55e;
-    --git-behind: #f59e0b;
-    --git-upstream: #38bdf8;
-    --git-muted: #6b7280;
-  }*/
   /* ===== Git ===== */
   .project-git-status {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 4px;
-    font-weight: 600;
-    font-size: 11px;
-    color: #6b7280;
+    gap: var(--gap-md);
+    margin-top: var(--spacing-xs);
+    font-size: var(--font-size-sm);
+    color: var(--git-text);
   }
 
-  /*.branch {
-    color: #9ca3af;
+  .branch {
+    color: var(--git-branch);
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-medium);
   }
 
-  .git-diffs {
-    color: #9ca3af;
+  .git-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    color: var(--git-text);
   }
 
-  .git-behind {
-    color: var(--git-behind);
+  .git-arrow {
+    color: var(--text-disabled);
+    padding: 1px var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    line-height: 1;
   }
 
-  .git-clean {
-    color: var(--git-clean);
+  .git-count {
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-sm);
   }
 
   .git-no-upstream {
-    color: var(--git-upstream);
+    background: var(--accent-blue-bg);
+    color: var(--accent-blue);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-mono);
+    border: 1px solid var(--accent-blue-border);
   }
 
   .git-not-repo {
     color: var(--git-muted);
-  }*/
+    font-size: var(--font-size-sm);
+  }
+
 </style>

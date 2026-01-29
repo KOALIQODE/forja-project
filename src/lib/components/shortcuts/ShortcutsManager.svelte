@@ -1,10 +1,10 @@
-<script>
+<script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { keyboardManager } from "../../utils/keyboardManager.js";
   import ShortcutsModal from "./ShortcutsModal.svelte";
   
   let showShortcuts = false;
-  let shortcuts = [];
+  let shortcuts: Array<{key: string, description: string}> = [];
 
   function showShortcutsPanel() {
     shortcuts = keyboardManager.getLeaderShortcuts();
