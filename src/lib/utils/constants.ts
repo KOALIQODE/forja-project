@@ -14,11 +14,29 @@ export const STORAGE_KEYS = {
   RECENT_PROJECTS: "forja-recent-projects",
 } as const;
 
+// === Keyboard Configuration ===
+export const KEYBOARD_CONFIG = {
+  LEADER_KEY: " ", // Space as leader key (configurable: could be " ", "AltLeft", "AltRight", "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight")
+  LEADER_KEY_DISPLAY: "Space", // How to display it in UI
+} as const;
+
+// Alternative leader key configurations (examples):
+// For Space as leader:
+// LEADER_KEY: " ", LEADER_KEY_DISPLAY: "Space"
+// For Alt Left as leader:
+// LEADER_KEY: "AltLeft", LEADER_KEY_DISPLAY: "Alt"  
+// For Alt Right as leader:
+// LEADER_KEY: "AltRight", LEADER_KEY_DISPLAY: "Alt"
+// For Ctrl Left as leader:
+// LEADER_KEY: "ControlLeft", LEADER_KEY_DISPLAY: "Ctrl"
+// For Shift Left as leader:
+// LEADER_KEY: "ShiftLeft", LEADER_KEY_DISPLAY: "Shift"
+
 // === Keyboard Shortcuts ===
 export const KEYBOARD_SHORTCUTS = {
-  OPEN_PROJECT: " o",      // Space + O
-  NEW_PROJECT: " n",       // Space + N
-  RECENT_PROJECTS: " r",   // Space + R
+  OPEN_PROJECT: `${KEYBOARD_CONFIG.LEADER_KEY}o`, // Leader + O
+  NEW_PROJECT: `${KEYBOARD_CONFIG.LEADER_KEY}n`, // Leader + N
+  RECENT_PROJECTS: `${KEYBOARD_CONFIG.LEADER_KEY}r`, // Leader + R
   ESCAPE: "Escape",
   HELP: "?",
   DELETE: "d",
@@ -30,25 +48,25 @@ export const UI_TEXT = {
   APP_SUBTITLE: "Editor",
   TAGLINE: "The essence of Vim in a native interface",
   DESCRIPTION: "Keyboard navigation, fast commands, efficient editing",
-  
+
   // Actions
   OPEN_PROJECT: "Open Project",
   NEW_EMPTY_PROJECT: "New Empty Project",
   RECENT_PROJECTS: "Recent Projects",
-  
+
   // Dialog titles
   RECENT_PROJECTS_TITLE: "Recent Projects",
-  
+
   // Status messages
   NO_RECENT_PROJECTS: "No recent projects found",
   PUBLISH: "Publish",
   NO_GIT: "No Git",
-  
+
   // Help text
   KEYBOARD_SHORTCUTS_HELP: "Press ? for keyboard shortcuts",
   KEYBOARD_SHORTCUTS_TITLE: "Keyboard Shortcuts",
   CLOSE_HINT: "to close",
-  
+
   // Navigation hints
   NAVIGATE: "Navigate",
   OPEN: "Open",
@@ -79,7 +97,7 @@ export const ANIMATION_DURATIONS = {
 // === Git Status Constants ===
 export const GIT_STATUS = {
   BRANCH: "branch",
-  AHEAD: "ahead", 
+  AHEAD: "ahead",
   BEHIND: "behind",
   PUBLISH: "Publish",
   NO_GIT: "No Git",
@@ -120,8 +138,12 @@ export const ERROR_MESSAGES = {
 } as const;
 
 // Type helpers for better TypeScript support
-export type KeyboardContexts = typeof KEYBOARD_CONTEXTS[keyof typeof KEYBOARD_CONTEXTS];
-export type StorageKeys = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS];
-export type KeyboardShortcuts = typeof KEYBOARD_SHORTCUTS[keyof typeof KEYBOARD_SHORTCUTS];
-export type UIText = typeof UI_TEXT[keyof typeof UI_TEXT];
-export type CSSClasses = typeof CSS_CLASSES[keyof typeof CSS_CLASSES];
+export type KeyboardContexts =
+  (typeof KEYBOARD_CONTEXTS)[keyof typeof KEYBOARD_CONTEXTS];
+export type StorageKeys = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
+export type KeyboardShortcuts =
+  (typeof KEYBOARD_SHORTCUTS)[keyof typeof KEYBOARD_SHORTCUTS];
+export type UIText = (typeof UI_TEXT)[keyof typeof UI_TEXT];
+export type CSSClasses = (typeof CSS_CLASSES)[keyof typeof CSS_CLASSES];
+export type KeyboardConfig =
+  (typeof KEYBOARD_CONFIG)[keyof typeof KEYBOARD_CONFIG];
