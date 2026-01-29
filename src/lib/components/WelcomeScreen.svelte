@@ -5,6 +5,13 @@
   import { openProject, recentProjects } from "../stores/projectStore.js";
   import { openRecentProjectsDialog } from "../stores/dialogStore.js";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { 
+    KEYBOARD_CONTEXTS, 
+    KEYBOARD_SHORTCUTS, 
+    UI_TEXT, 
+    STORAGE_KEYS, 
+    ERROR_MESSAGES 
+  } from "../utils/constants.js";
   
   // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
   const version = "1.0.0-alpha";
@@ -26,7 +33,7 @@
         openProject(selected);
       }
     } catch (error) {
-      console.error("Error opening folder dialog:", error);
+      console.error(ERROR_MESSAGES.FOLDER_DIALOG_FAILED, error);
     }
   }
 
@@ -75,40 +82,32 @@
     // Add leader key combinations
     const leaderActions = [
       {
-        key: ' o', // Space + O
+        key: KEYBOARD_SHORTCUTS.OPEN_PROJECT,
         handler: () => handleOpenProject(),
-        description: 'Open Project',
+        description: UI_TEXT.OPEN_PROJECT,
       },
       {
-        key: ' n', // Space + N  
+        key: KEYBOARD_SHORTCUTS.NEW_PROJECT,
         handler: () => handleNewProject(),
-        description: 'New Project',
+        description: UI_TEXT.NEW_EMPTY_PROJECT,
       },
       {
-        key: ' r', // Space + R
-        handler: () => handleRecentProjects(), 
-        description: 'Recent Projects',
+        key: KEYBOARD_SHORTCUTS.RECENT_PROJECTS,
+        handler: () => handleRecentProjects(),
+        description: UI_TEXT.RECENT_PROJECTS,
       },
     ];
 
-    keyboardManager.registerContext("welcome-screen", [
+    keyboardManager.registerContext(KEYBOARD_CONTEXTS.WELCOME_SCREEN, [
       ...navigationActions,
       ...leaderActions,
     ]);
-    keyboardManager.setActiveContext("welcome-screen");
+    keyboardManager.setActiveContext(KEYBOARD_CONTEXTS.WELCOME_SCREEN);
     keyboardManager.startListening();
 
     // Focus the container
     if (welcomeContainer) {
       welcomeContainer.focus();
-    }
-
-    // Clear any old mocked data (one time cleanup)
-    const hasCleanedMockData = localStorage.getItem('forja-cleaned-mock-data');
-    if (!hasCleanedMockData) {
-      localStorage.removeItem('forja-recent-projects');
-      localStorage.setItem('forja-cleaned-mock-data', 'true');
-      recentProjects.set([]);
     }
   });
 
@@ -123,8 +122,8 @@
     <!-- Header section -->
     <header class="welcome-header">
       <h1 class="app-title">
-        <span class="title-main">Forja Studio</span>
-        <span class="title-sub">Editor</span>
+        <span class="title-main">{UI_TEXT.APP_TITLE}</span>
+        <span class="title-sub">{UI_TEXT.APP_SUBTITLE}</span>
       </h1>
       <p class="version">v{version}</p>
     </header>
@@ -135,7 +134,7 @@
         The essence of <span class="vim-highlight">Vim</span> in a native interface
       </p>
       <p class="description">
-        Keyboard navigation, fast commands, efficient editing
+        {UI_TEXT.DESCRIPTION}
       </p>
     </section>
 
@@ -143,26 +142,26 @@
     <section class="actions-section">
       <button class="action-btn {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
         <FolderOpen size="20" />
-        <span>Open Project</span>
+        <span>{UI_TEXT.OPEN_PROJECT}</span>
         <kbd class="shortcut">Space + O</kbd>
       </button>
 
       <button class="action-btn {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
         <Plus size="20" />
-        <span>New Empty Project</span>
+        <span>{UI_TEXT.NEW_EMPTY_PROJECT}</span>
         <kbd class="shortcut">Space + N</kbd>
       </button>
 
       <button class="action-btn {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
         <Clock size="20" />
-        <span>Recent Projects</span>
+        <span>{UI_TEXT.RECENT_PROJECTS}</span>
         <kbd class="shortcut">Space + R</kbd>
       </button>
     </section>
 
     <!-- Footer -->
     <footer class="welcome-footer">
-      <p class="footer-text">Press <kbd>?</kbd> for keyboard shortcuts</p>
+      <p class="footer-text">{UI_TEXT.KEYBOARD_SHORTCUTS_HELP}</p>
     </footer>
   </div>
 </main>

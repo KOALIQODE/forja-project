@@ -1,5 +1,6 @@
 <script lang="ts">
   import { keyboardManager } from "../../utils/keyboardManager.js";
+  import { KEYBOARD_SHORTCUTS, UI_TEXT } from "../../utils/constants.js";
   
   export let visible = false;
   export let shortcuts: Array<{key: string, description: string}> = [];
@@ -20,7 +21,7 @@
   
   // Listen for 'Escape' key to close
   function handleKeyDown(event: KeyboardEvent) {
-    if (visible && event.key === 'Escape') {
+    if (visible && event.key === KEYBOARD_SHORTCUTS.ESCAPE) {
       event.preventDefault();
       event.stopPropagation();
       handleQuit();
@@ -33,8 +34,8 @@
 {#if visible}
   <div class="shortcuts-panel">
     <div class="panel-header">
-      <h3>Keyboard Shortcuts</h3>
-      <span class="close-hint">Press <kbd>Esc</kbd> to close</span>
+      <h3>{UI_TEXT.KEYBOARD_SHORTCUTS_TITLE}</h3>
+      <span class="close-hint">Press <kbd>Esc</kbd> {UI_TEXT.CLOSE_HINT}</span>
     </div>
     <div class="shortcuts-list">
       {#each shortcuts as shortcut}

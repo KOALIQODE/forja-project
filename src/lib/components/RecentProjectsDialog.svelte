@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { FolderOpen, Clock, X } from "@lucide/svelte";
+  import { FolderOpen, Clock, X, MoveUp, MoveDown } from "@lucide/svelte";
   import {
     recentProjects,
     openProject,
@@ -11,6 +11,11 @@
     keyboardManager,
     createNavigationActions,
   } from "../utils/keyboardManager.js";
+  import {
+    KEYBOARD_CONTEXTS,
+    UI_TEXT,
+    GIT_STATUS,
+  } from "../utils/constants.js";
 
   let {
     isOpen,
@@ -89,10 +94,10 @@
       });
 
       keyboardManager.registerContext(
-        "recent-projects-dialog",
+        KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG,
         navigationActions,
       );
-      keyboardManager.setActiveContext("recent-projects-dialog");
+      keyboardManager.setActiveContext(KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG);
 
       if (dialogElement) {
         dialogElement.focus();
@@ -125,10 +130,10 @@
       });
 
       keyboardManager.registerContext(
-        "recent-projects-dialog",
+        KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG,
         navigationActions,
       );
-      keyboardManager.setActiveContext("recent-projects-dialog");
+      keyboardManager.setActiveContext(KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG);
 
       setTimeout(() => {
         if (dialogElement) {
@@ -155,7 +160,7 @@
       <div class="dialog-header">
         <div class="header-title">
           <Clock size={16} />
-          <h3>Recent Projects</h3>
+          <h3>{UI_TEXT.RECENT_PROJECTS_TITLE}</h3>
         </div>
         <button class="close-button" onclick={onClose}>
           <X size={16} />
@@ -165,7 +170,7 @@
       <div class="projects-list">
         {#if $recentProjects.length === 0}
           <div class="empty-state">
-            <p>No recent projects found</p>
+            <p>{UI_TEXT.NO_RECENT_PROJECTS}</p>
           </div>
         {:else}
           {#each $recentProjects as project, index}
@@ -195,10 +200,10 @@
                         <span class="git-count">{git.behind}</span>
                       </span>
                     {:else}
-                      <span class="git-no-upstream">Publish</span>
+                      <span class="git-no-upstream">{UI_TEXT.PUBLISH}</span>
                     {/if}
                   {:else}
-                    <span class="git-not-repo">No Git</span>
+                    <span class="git-not-repo">{UI_TEXT.NO_GIT}</span>
                   {/if}
                 </div>
               {/if}
@@ -209,10 +214,10 @@
 
       <div class="dialog-footer">
         <div class="shortcuts-info">
-          <!-- <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span> -->
-          <span><kbd>Enter</kbd> Open</span>
-          <span><kbd>D</kbd> Delete</span>
-          <span><kbd>Esc</kbd> Close</span>
+          <!-- <span><kbd>↑</kbd><kbd>↓</kbd> {UI_TEXT.NAVIGATE}</span> -->
+          <span><kbd>Enter</kbd> {UI_TEXT.OPEN}</span>
+          <span><kbd>D</kbd> {UI_TEXT.DELETE}</span>
+          <span><kbd>Esc</kbd> {UI_TEXT.CLOSE}</span>
         </div>
       </div>
     </div>
