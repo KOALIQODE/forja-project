@@ -169,76 +169,75 @@
 
 <style>
   .welcome-screen {
-    background: linear-gradient(135deg, #141414 0%, #1f1f1f 100%);
-    color: #e0e0e0;
+    background: var(--gradient-primary);
+    color: var(--text-secondary);
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: var(--font-family-system);
   }
 
   .welcome-container {
     max-width: 480px;
     width: 100%;
-    padding: 48px 32px;
+    padding: var(--spacing-6xl) var(--spacing-4xl);
     text-align: center;
   }
 
   .welcome-header {
-    margin-bottom: 32px;
+    margin-bottom: var(--spacing-4xl);
   }
 
   .app-title {
-    font-size: 48px;
-    font-weight: 300;
-    margin: 0 0 12px 0;
+    font-size: var(--font-size-5xl);
+    font-weight: var(--font-weight-light);
+    margin: 0 0 var(--spacing-lg) 0;
     letter-spacing: -0.02em;
     line-height: 1.1;
   }
 
   .title-main {
-    color: #ffffff;
-    font-weight: 600;
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
   }
 
   .title-sub {
-    color: #888888;
-    font-weight: 300;
+    color: var(--text-disabled);
+    font-weight: var(--font-weight-light);
   }
 
   .version {
-    color: #666666;
-    font-size: 14px;
-    font-weight: 500;
+    color: var(--git-muted);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-medium);
     margin: 0;
     opacity: 0.8;
   }
 
   .tagline-section {
-    margin-bottom: 40px;
+    margin-bottom: var(--spacing-5xl);
   }
 
   .tagline {
-    font-size: 24px;
-    font-weight: 400;
-    margin: 0 0 2px 0;
-    color: #cccccc;
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-normal);
+    margin: 0 0 var(--spacing-xs) 0;
+    color: var(--text-muted);
     line-height: 1.4;
   }
 
   .vim-highlight {
-    color: #4ade80;
-    font-weight: 600;
-    background: linear-gradient(45deg, #4ade80, #22c55e);
+    color: var(--accent-green);
+    font-weight: var(--font-weight-semibold);
+    background: var(--gradient-accent);
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
   .description {
-    font-size: 16px;
+    font-size: var(--font-size-xl);
     color: #999999;
     margin: 0;
     line-height: 1.5;
@@ -247,20 +246,20 @@
   .actions-section {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    margin-bottom: 32px;
+    gap: var(--gap-2xl);
+    margin-bottom: var(--spacing-4xl);
   }
 
   .action-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid #333333;
-    border-radius: 4px;
-    padding: 20px 24px;
-    color: #e0e0e0;
-    font-size: 14px;
-    font-weight: 500;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-2xl) var(--spacing-3xl);
+    color: var(--text-secondary);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all var(--transition-normal);
     display: flex;
     align-items: center;
     justify-content: space-between;

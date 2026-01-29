@@ -235,19 +235,19 @@
   }
 
   .dialog-container {
-    background: linear-gradient(135deg, #141414 0%, #1f1f1f 100%);
-    border: 1px solid #404040;
-    border-radius: 3px;
+    background: var(--gradient-primary);
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-sm);
     width: 600px;
     max-height: 70vh;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.8);
+    box-shadow: var(--shadow-md);
     outline: none;
-    color: #e0e0e0;
+    color: var(--text-secondary);
   }
 
   .dialog-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid #333333;
+    padding: var(--spacing-xl) var(--spacing-2xl);
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -256,8 +256,8 @@
   .header-title {
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: #ffffff;
+    gap: var(--gap-lg);
+    color: var(--text-primary);
   }
 
   .header-title :global(svg) {
@@ -270,21 +270,21 @@
 
   .header-title h3 {
     margin: 0;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
   }
 
   .close-button {
     background: transparent;
     border: none;
-    color: #888888;
+    color: var(--text-disabled);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: all var(--transition-fast);
   }
 
   .close-button :global(svg) {

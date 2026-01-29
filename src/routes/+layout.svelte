@@ -1,5 +1,7 @@
 <script lang="ts">
   import { type Snippet } from "svelte";
+  import "../lib/styles/variables.css";
+  import "../lib/styles/components.css";
   import TitleBar from "../lib/components/TitleBar.svelte";
   import ShortcutsManager from "../lib/components/shortcuts/ShortcutsManager.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
@@ -24,7 +26,7 @@
   }
 
   .main-content {
-    height: calc(100vh - 40px);
+    height: calc(100vh - var(--titlebar-height));
     overflow: auto;
   }
 
@@ -36,19 +38,8 @@
   }
 
   :global(body) {
-    background-color: #0a0a0a;
-    font-family:
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI",
-      Roboto,
-      Oxygen,
-      Ubuntu,
-      Cantarell,
-      "Open Sans",
-      "Helvetica Neue",
-      sans-serif;
+    background-color: var(--bg-primary);
+    font-family: var(--font-family-system);
   }
 
   :global(main) {

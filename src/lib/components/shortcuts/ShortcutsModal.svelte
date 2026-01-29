@@ -50,19 +50,19 @@
 <style>
   .shortcuts-panel {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: linear-gradient(135deg, #141414 0%, #1f1f1f 100%);
-    border: 1px solid #404040;
-    border-radius: 3px;
-    padding: 16px;
+    bottom: var(--spacing-2xl);
+    right: var(--spacing-2xl);
+    background: var(--gradient-primary);
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-xl);
     max-width: 320px;
     min-width: 280px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--shadow-sm);
     backdrop-filter: blur(10px);
-    z-index: 1000;
-    color: #e0e0e0;
-    animation: slideIn 0.2s ease-out;
+    z-index: var(--z-overlay);
+    color: var(--text-secondary);
+    animation: slideIn var(--transition-normal);
   }
 
   @keyframes slideIn {
@@ -87,23 +87,23 @@
 
   .panel-header h3 {
     margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: #ffffff;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 
   .close-hint {
-    font-size: 11px;
-    color: #888888;
+    font-size: var(--font-size-base);
+    color: var(--text-disabled);
   }
 
   .close-hint kbd {
     background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 2px 4px;
-    border-radius: 4px;
-    font-size: 10px;
-    font-family: "Cascadia Code", monospace;
+    color: var(--text-muted);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-mono);
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 

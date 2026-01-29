@@ -81,10 +81,10 @@
 
 <style>
   .titlebar {
-    background: linear-gradient(135deg, #141414 0%, #1f1f1f 100%);
-    border-bottom: 1px solid #404040;
-    color: #e0e0e0;
-    height: 40px;
+    background: var(--gradient-primary);
+    border-bottom: 1px solid var(--border-secondary);
+    color: var(--text-secondary);
+    height: var(--titlebar-height);
     display: flex;
     align-items: center;
     justify-content: space-between;
