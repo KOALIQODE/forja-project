@@ -1,34 +1,63 @@
-<script>
+<script lang="ts">
   import RecentProjectsDialog from "../RecentProjectsDialog.svelte";
-  import { dialogState, closeRecentProjectsDialog } from "../../stores/dialogStore.js";
+  import { dialogState, dialogActions } from "../../stores/dialogStore.js";
   import { keyboardManager } from "../../utils/keyboardManager.js";
-  import { KEYBOARD_CONTEXTS, ANIMATION_DURATIONS, DIALOG_STATE_KEYS } from "../../utils/constants.js";
+  import { 
+    ANIMATION_DURATIONS, 
+    DIALOG_STATE_KEYS,
+    KEYBOARD_SHORTCUTS,
+    UI_TEXT
+  } from "../../utils/constants.js";
+  import { onMount } from "svelte";
 
-  let showRecentProjects = false;
+  // Dialog state reactivity - properly typed
+  let dialogStates: Record<string, boolean> = {};
+  
+  onMount(() => {
+    // Register global dialog actions dynamically
+    const globalDialogActions = [
+      {
+        key: KEYBOARD_SHORTCUTS.RECENT_PROJECTS,
+        handler: () => dialogActions.open(DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN),
+        description: UI_TEXT.RECENT_PROJECTS,
+      },
+      {
+        key: KEYBOARD_SHORTCUTS.HELP,
+        handler: () => keyboardManager.showShortcutsPanel(),
+        description: UI_TEXT.KEYBOARD_SHORTCUTS_HELP,
+      },
+    ];
 
-  // Subscribe to dialog state
-  dialogState.subscribe(state => {
-    showRecentProjects = state[DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN];
-    
-    // When dialog closes, restore welcome screen context
-    if (!state[DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN]) {
-      setTimeout(() => {
-        keyboardManager.setActiveContext(KEYBOARD_CONTEXTS.WELCOME_SCREEN);
-      }, ANIMATION_DURATIONS.CONTEXT_RESTORE_DELAY);
-    }
+    keyboardManager.addGlobalActions(globalDialogActions);
   });
 
-  function closeRecentProjects() {
-    closeRecentProjectsDialog();
+  // Subscribe to dialog state changes
+  dialogState.subscribe(state => {
+    const previousDialogStates = { ...dialogStates };
+    dialogStates = { ...state };
+    
+    // Check if any dialog was closed and restore context
+    Object.keys(previousDialogStates).forEach((dialogKey: string) => {
+      if (previousDialogStates[dialogKey] && !state[dialogKey as keyof typeof state]) {
+        setTimeout(() => {
+          keyboardManager.restorePreviousContext();
+        }, ANIMATION_DURATIONS.CONTEXT_RESTORE_DELAY);
+      }
+    });
+  });
+
+  // Generic close handler
+  function closeDialog(dialogKey: string) {
+    dialogActions.close(dialogKey as any);
   }
 </script>
 
-<RecentProjectsDialog 
-  isOpen={showRecentProjects} 
-  onClose={closeRecentProjects} 
-/>
+<!-- Recent Projects Dialog -->
+{#if dialogStates[DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN]}
+  <RecentProjectsDialog 
+    isOpen={dialogStates[DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN]} 
+    onClose={() => closeDialog(DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN)} 
+  />
+{/if}
 
-<RecentProjectsDialog 
-  isOpen={showRecentProjects} 
-  onClose={closeRecentProjects} 
-/>
+<!-- Future dialogs can be added here dynamically -->

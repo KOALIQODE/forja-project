@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { FolderOpen, Clock, X, MoveUp, MoveDown } from "@lucide/svelte";
+  import { FolderOpen, Clock, X } from "@lucide/svelte";
   import {
     recentProjects,
     openProject,
@@ -14,7 +14,7 @@
   import {
     KEYBOARD_CONTEXTS,
     UI_TEXT,
-    GIT_STATUS,
+    KEYBOARD_SHORTCUTS,
   } from "../utils/constants.js";
 
   let {
@@ -88,7 +88,7 @@
 
       // Add delete action
       navigationActions.push({
-        key: "d",
+        key: KEYBOARD_SHORTCUTS.DELETE,
         handler: deleteCurrentProject,
         description: "Delete project from recent list",
       });
@@ -124,7 +124,7 @@
 
       // Add delete action
       navigationActions.push({
-        key: "d",
+        key: KEYBOARD_SHORTCUTS.DELETE,
         handler: deleteCurrentProject,
         description: "Delete project from recent list",
       });
@@ -145,15 +145,10 @@
 </script>
 
 {#if isOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="dialog-backdrop" onclick={onClose}>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="dialog-backdrop">
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div
       class="dialog-container"
-      onclick={(e) => e.stopPropagation()}
       bind:this={dialogElement}
       tabindex="0"
     >

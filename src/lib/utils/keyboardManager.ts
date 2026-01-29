@@ -20,6 +20,7 @@ export interface KeyboardContext {
 export class KeyboardManager {
   private contexts: Map<string, KeyboardContext> = new Map();
   private activeContext: string | null = null;
+  private previousContext: string | null = null;
   private globalActions: KeyboardAction[] = [];
   private isListening = false;
   private leaderKey = ' '; // Space as leader key
@@ -56,7 +57,42 @@ export class KeyboardManager {
    * Set the active context
    */
   setActiveContext(contextName: string): void {
-    this.activeContext = contextName;
+    if (this.activeContext !== contextName) {
+      this.previousContext = this.activeContext;
+      this.activeContext = contextName;
+    }
+  }
+
+  /**
+   * Restore to the previous context
+   */
+  restorePreviousContext(): void {
+    if (this.previousContext) {
+      const temp = this.previousContext;
+      this.previousContext = this.activeContext;
+      this.activeContext = temp;
+    }
+  }
+
+  /**
+   * Save the current context as previous context
+   */
+  saveContext(): void {
+    this.previousContext = this.activeContext;
+  }
+
+  /**
+   * Get the current active context
+   */
+  getActiveContext(): string | null {
+    return this.activeContext;
+  }
+
+  /**
+   * Get the previous context
+   */
+  getPreviousContext(): string | null {
+    return this.previousContext;
   }
 
   /**
@@ -120,6 +156,18 @@ export class KeyboardManager {
     if (this.isLeaderPressed) {
       this.clearLeaderTimeout();
       this.isLeaderPressed = false;
+      
+      // Look for leader combinations in global actions first
+      const globalLeaderActions = this.globalActions.filter(action => {
+        const keys = Array.isArray(action.key) ? action.key : [action.key];
+        return keys.some(key => key.toLowerCase() === `${this.leaderKey}${normalizedKey}`);
+      });
+      
+      if (globalLeaderActions.length > 0) {
+        event.preventDefault();
+        globalLeaderActions[0].handler(event);
+        return;
+      }
       
       // Look for leader combinations in active context
       if (this.activeContext) {
@@ -284,15 +332,20 @@ export class KeyboardManager {
   }
 
   /**
-   * Get leader shortcuts for current context
+   * Manually show shortcuts panel
+   */
+  showShortcutsPanel(): void {
+    this.onShowShortcuts?.();
+  }
+
+  /**
+   * Get leader shortcuts for current context and global actions
    */
   getLeaderShortcuts(): Array<{key: string, description: string}> {
-    if (!this.activeContext) return [];
+    const shortcuts: Array<{key: string, description: string}> = [];
     
-    const context = this.contexts.get(this.activeContext);
-    if (!context) return [];
-    
-    return context.actions
+    // Add global leader shortcuts first
+    const globalLeaderShortcuts = this.globalActions
       .filter(action => {
         const keys = Array.isArray(action.key) ? action.key : [action.key];
         return keys.some(key => key.toLowerCase().startsWith(this.leaderKey));
@@ -305,6 +358,32 @@ export class KeyboardManager {
           description: action.description || 'No description'
         };
       });
+    
+    shortcuts.push(...globalLeaderShortcuts);
+    
+    // Add context-specific leader shortcuts
+    if (this.activeContext) {
+      const context = this.contexts.get(this.activeContext);
+      if (context) {
+        const contextLeaderShortcuts = context.actions
+          .filter(action => {
+            const keys = Array.isArray(action.key) ? action.key : [action.key];
+            return keys.some(key => key.toLowerCase().startsWith(this.leaderKey));
+          })
+          .map(action => {
+            const keys = Array.isArray(action.key) ? action.key : [action.key];
+            const leaderKey = keys.find(key => key.toLowerCase().startsWith(this.leaderKey));
+            return {
+              key: leaderKey?.replace(' ', 'Space+') || '',
+              description: action.description || 'No description'
+            };
+          });
+        
+        shortcuts.push(...contextLeaderShortcuts);
+      }
+    }
+    
+    return shortcuts;
   }
 }
 

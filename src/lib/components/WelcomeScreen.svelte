@@ -49,12 +49,10 @@
 
   function moveUp() {
     selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : 2;
-    console.log("Moving up, selectedIndex:", selectedIndex);
   }
 
   function moveDown() {
     selectedIndex = (selectedIndex + 1) % 3;
-    console.log("Moving down, selectedIndex:", selectedIndex);
   }
 
   function selectCurrent() {
@@ -90,11 +88,6 @@
         key: KEYBOARD_SHORTCUTS.NEW_PROJECT,
         handler: () => handleNewProject(),
         description: UI_TEXT.NEW_EMPTY_PROJECT,
-      },
-      {
-        key: KEYBOARD_SHORTCUTS.RECENT_PROJECTS,
-        handler: () => handleRecentProjects(),
-        description: UI_TEXT.RECENT_PROJECTS,
       },
     ];
 
@@ -328,16 +321,6 @@
     font-size: var(--font-size-lg);
     color: var(--text-disabled);
     margin: 0;
-  }
-
-  .footer-text kbd {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-muted);
-    padding: var(--spacing-xs) var(--spacing-md);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-md);
-    font-family: var(--font-family-mono);
-    border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   /* Responsive */
