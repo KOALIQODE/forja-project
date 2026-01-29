@@ -275,13 +275,8 @@
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.05),
-      transparent
-    );
-    transition: left 0.5s ease;
+    background: var(--gradient-shimmer);
+    transition: left var(--transition-slow);
   }
 
   .action-btn:hover::before {
@@ -290,20 +285,20 @@
 
   .action-btn:hover {
     border-color: #555555;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-surface-hover);
     transform: translateY(-1px);
   }
 
   .action-btn.keyboard-focused {
-    background: rgba(74, 222, 128, 0.15);
-    border-color: #4ade80;
-    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.3);
+    background: var(--bg-surface-focus);
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow-focus);
   }
 
   .action-btn.keyboard-focused:hover {
     background: rgba(74, 222, 128, 0.2);
-    border-color: #4ade80;
-    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.3);
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow-focus);
     transform: translateY(-1px);
   }
 
@@ -313,16 +308,16 @@
 
   .action-btn span {
     flex: 1;
-    margin-left: 12px;
+    margin-left: var(--spacing-lg);
   }
 
   .shortcut {
     background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 4px 8px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-family: "Cascadia Code", monospace;
+    color: var(--text-muted);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    font-family: var(--font-family-mono);
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
@@ -331,37 +326,37 @@
   }
 
   .footer-text {
-    font-size: 14px;
-    color: #888888;
+    font-size: var(--font-size-lg);
+    color: var(--text-disabled);
     margin: 0;
   }
 
   .footer-text kbd {
     background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 12px;
-    font-family: "Cascadia Code", monospace;
+    color: var(--text-muted);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    font-family: var(--font-family-mono);
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   /* Responsive */
   @media (max-width: 640px) {
     .welcome-container {
-      padding: 32px 24px;
+      padding: var(--spacing-4xl) var(--spacing-3xl);
     }
 
     .app-title {
-      font-size: 36px;
+      font-size: var(--font-size-4xl);
     }
 
     .tagline {
-      font-size: 20px;
+      font-size: var(--font-size-2xl);
     }
 
     .action-btn {
-      padding: 16px 20px;
+      padding: var(--spacing-xl) var(--spacing-2xl);
     }
   }
 

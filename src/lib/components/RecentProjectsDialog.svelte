@@ -295,8 +295,8 @@
   }
 
   .close-button:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
   }
 
   .projects-list {
@@ -305,29 +305,29 @@
   }
 
   .empty-state {
-    padding: 40px 20px;
+    padding: var(--spacing-5xl) var(--spacing-2xl);
     text-align: center;
-    color: #888888;
+    color: var(--text-disabled);
   }
 
   .empty-state p {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--font-size-lg);
   }
 
   .project-item {
     width: 100%;
-    padding: 12px 20px;
+    padding: var(--spacing-lg) var(--spacing-2xl);
     background: transparent;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     text-align: left;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 12px;
-    transition: background 0.15s ease;
-    color: #e0e0e0;
+    gap: var(--gap-xl);
+    transition: background var(--transition-fast);
+    color: var(--text-secondary);
   }
 
   .project-item:hover,
@@ -362,79 +362,79 @@
   }
 
   .dialog-footer {
-    padding: 12px 20px;
-    border-top: 1px solid #333333;
+    padding: var(--spacing-lg) var(--spacing-2xl);
+    border-top: 1px solid var(--border-primary);
     background: rgba(0, 0, 0, 0.2);
   }
 
   .shortcuts-info {
     display: flex;
-    gap: 16px;
-    font-size: 12px;
-    color: #888888;
+    gap: var(--gap-2xl);
+    font-size: var(--font-size-md);
+    color: var(--text-disabled);
   }
 
   .shortcuts-info kbd {
     background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-family: "Cascadia Code", monospace;
+    color: var(--text-muted);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-base);
+    font-family: var(--font-family-mono);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    margin-right: 4px;
+    margin-right: var(--spacing-sm);
   }
   /* ===== Git ===== */
   .project-git-status {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 2px;
-    font-size: 10px;
-    color: #6b7280;
+    gap: var(--gap-md);
+    margin-top: var(--spacing-xs);
+    font-size: var(--font-size-sm);
+    color: var(--git-text);
   }
 
   .branch {
-    color: #888888;
-    font-family: "Cascadia Code", monospace;
-    font-weight: 500;
+    color: var(--git-branch);
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-medium);
   }
 
   .git-indicator {
     display: flex;
     align-items: center;
-    gap: 2px;
-    color: #6b7280;
+    gap: var(--spacing-xs);
+    color: var(--git-text);
   }
 
   .git-arrow {
-    color: #888888;
-    padding: 1px 3px;
-    font-size: 9px;
-    font-family: "Cascadia Code", monospace;
+    color: var(--text-disabled);
+    padding: 1px var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
     line-height: 1;
   }
 
   .git-count {
-    font-family: "Cascadia Code", monospace;
-    font-weight: 500;
-    font-size: 10px;
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-sm);
   }
 
   .git-no-upstream {
-    background: rgba(59, 130, 246, 0.15);
-    color: #60a5fa;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 9px;
-    font-weight: 500;
-    font-family: "Cascadia Code", monospace;
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: var(--accent-blue-bg);
+    color: var(--accent-blue);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-mono);
+    border: 1px solid var(--accent-blue-border);
   }
 
   .git-not-repo {
-    color: #666666;
-    font-size: 10px;
+    color: var(--git-muted);
+    font-size: var(--font-size-sm);
   }
 
 </style>

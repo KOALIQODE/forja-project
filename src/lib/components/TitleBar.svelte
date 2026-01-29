@@ -119,32 +119,32 @@
   .actions {
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding-right: 12px;
+    gap: var(--spacing-xs);
+    padding-right: var(--spacing-lg);
   }
 
   .action-btn {
     background: transparent;
     border: none;
     color: #b0b0b0;
-    padding: 8px;
-    border-radius: 4px;
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: all var(--transition-fast);
   }
 
   .action-btn:hover {
     background: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
+    color: var(--text-primary);
   }
 
   .window-controls {
     display: flex;
     align-items: center;
-    height: 40px;
+    height: var(--titlebar-height);
   }
 
   .control-btn {
@@ -157,7 +157,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all var(--transition-fast);
   }
 
   .control-btn.minimize:hover {

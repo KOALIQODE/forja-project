@@ -110,33 +110,33 @@
   .shortcuts-list {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--spacing-xs);
   }
 
   .shortcut-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 0;
+    padding: var(--spacing-sm) 0;
   }
 
   .shortcut-key {
-    background: rgba(74, 222, 128, 0.15);
-    color: #4ade80;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 10px;
-    font-weight: 500;
-    font-family: "Cascadia Code", monospace;
-    border: 1px solid rgba(74, 222, 128, 0.3);
+    background: var(--bg-surface-focus);
+    color: var(--accent-green);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-mono);
+    border: 1px solid var(--border-focus);
     min-width: auto;
   }
 
   .shortcut-description {
-    color: #cccccc;
-    font-size: 12px;
-    font-weight: 400;
-    margin-right: 12px;
+    color: var(--text-muted);
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-normal);
+    margin-right: var(--spacing-lg);
     flex: 1;
   }
 </style>
