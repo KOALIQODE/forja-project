@@ -1,14 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import {
-    Folder,
-    Clock,
-    X,
-    ChevronUp,
-    ChevronDown,
-    MoveUp,
-    MoveDown,
-  } from "@lucide/svelte";
+  import { FolderOpen, Clock, X } from "@lucide/svelte";
   import {
     recentProjects,
     openProject,
@@ -183,7 +175,7 @@
               onclick={() => handleProjectSelect(project)}
             >
               <div class="project-icon">
-                <Folder size={16} />
+                <FolderOpen size={16} />
               </div>
               <div class="project-info">
                 <div class="project-name">{getProjectName(project)}</div>
@@ -194,8 +186,14 @@
                   {#if git.is_repo}
                     <span class="branch">{git.branch}</span>
                     {#if git.has_upstream}
-                      <span><MoveUp size={12} /> {git.ahead}</span>
-                      <span><MoveDown size={12} /> {git.behind}</span>
+                      <span class="git-indicator">
+                        <kbd class="git-arrow">↑</kbd>
+                        <span class="git-count">{git.ahead}</span>
+                      </span>
+                      <span class="git-indicator">
+                        <kbd class="git-arrow">↓</kbd>
+                        <span class="git-count">{git.behind}</span>
+                      </span>
                     {:else}
                       <span class="git-no-upstream">Publish</span>
                     {/if}
@@ -211,7 +209,7 @@
 
       <div class="dialog-footer">
         <div class="shortcuts-info">
-          <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+          <!-- <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span> -->
           <span><kbd>Enter</kbd> Open</span>
           <span><kbd>D</kbd> Delete</span>
           <span><kbd>Esc</kbd> Close</span>
@@ -237,9 +235,9 @@
   }
 
   .dialog-container {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    background: linear-gradient(135deg, #141414 0%, #1f1f1f 100%);
     border: 1px solid #404040;
-    border-radius: 12px;
+    border-radius: 3px;
     width: 600px;
     max-height: 70vh;
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.8);
@@ -262,6 +260,14 @@
     color: #ffffff;
   }
 
+  .header-title :global(svg) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
   .header-title h3 {
     margin: 0;
     font-size: 16px;
@@ -279,6 +285,13 @@
     align-items: center;
     justify-content: center;
     transition: all 0.15s ease;
+  }
+
+  .close-button :global(svg) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
   }
 
   .close-button:hover {
@@ -307,6 +320,7 @@
     padding: 12px 20px;
     background: transparent;
     border: none;
+    border-radius: 4px;
     text-align: left;
     cursor: pointer;
     display: flex;
@@ -339,9 +353,9 @@
   }
 
   .project-path {
-    font-size: 12px;
+    font-size: 10px;
     color: #888888;
-    font-family: "Courier New", monospace;
+    font-family: "Cascadia Code", monospace;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -366,55 +380,61 @@
     padding: 2px 6px;
     border-radius: 3px;
     font-size: 11px;
-    font-family: "Courier New", monospace;
+    font-family: "Cascadia Code", monospace;
     border: 1px solid rgba(255, 255, 255, 0.2);
     margin-right: 4px;
   }
-  /*:root {
-    --bg-hover: rgba(255, 255, 255, 0.04);
-    --bg-selected: rgba(0, 122, 204, 0.15);
-
-    --text-primary: #e5e7eb;
-    --text-secondary: #9ca3af;
-
-    --git-clean: #9ca3af;
-    --git-ahead: #22c55e;
-    --git-behind: #f59e0b;
-    --git-upstream: #38bdf8;
-    --git-muted: #6b7280;
-  }*/
   /* ===== Git ===== */
   .project-git-status {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 4px;
-    font-weight: 600;
-    font-size: 11px;
+    gap: 6px;
+    margin-top: 2px;
+    font-size: 10px;
     color: #6b7280;
   }
 
-  /*.branch {
-    color: #9ca3af;
+  .branch {
+    color: #888888;
+    font-family: "Cascadia Code", monospace;
+    font-weight: 500;
   }
 
-  .git-diffs {
-    color: #9ca3af;
+  .git-indicator {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    color: #6b7280;
   }
 
-  .git-behind {
-    color: var(--git-behind);
+  .git-arrow {
+    color: #888888;
+    padding: 1px 3px;
+    font-size: 9px;
+    font-family: "Cascadia Code", monospace;
+    line-height: 1;
   }
 
-  .git-clean {
-    color: var(--git-clean);
+  .git-count {
+    font-family: "Cascadia Code", monospace;
+    font-weight: 500;
+    font-size: 10px;
   }
 
   .git-no-upstream {
-    color: var(--git-upstream);
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 500;
+    font-family: "Cascadia Code", monospace;
+    border: 1px solid rgba(59, 130, 246, 0.3);
   }
 
   .git-not-repo {
-    color: var(--git-muted);
-  }*/
+    color: #666666;
+    font-size: 10px;
+  }
+
 </style>

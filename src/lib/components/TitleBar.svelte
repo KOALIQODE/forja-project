@@ -81,7 +81,7 @@
 
 <style>
   .titlebar {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    background: linear-gradient(135deg, #141414 0%, #1f1f1f 100%);
     border-bottom: 1px solid #404040;
     color: #e0e0e0;
     height: 40px;

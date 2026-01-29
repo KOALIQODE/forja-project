@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { FolderOpen, Plus, Clock } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
   import { keyboardManager, createNavigationActions } from "../utils/keyboardManager.js";
@@ -10,7 +10,7 @@
   const version = "1.0.0-alpha";
   
   let selectedIndex = 0; // 0, 1, 2 para los tres botones
-  let welcomeContainer;
+  let welcomeContainer: HTMLElement;
 
   async function handleOpenProject() {
     try {
@@ -141,22 +141,22 @@
 
     <!-- Action buttons -->
     <section class="actions-section">
-      <button class="action-btn primary {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
+      <button class="action-btn {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
         <FolderOpen size="20" />
         <span>Open Project</span>
-        <kbd class="shortcut">Space+O</kbd>
+        <kbd class="shortcut">Space + O</kbd>
       </button>
 
-      <button class="action-btn secondary {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
+      <button class="action-btn {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
         <Plus size="20" />
         <span>New Empty Project</span>
-        <kbd class="shortcut">Space+N</kbd>
+        <kbd class="shortcut">Space + N</kbd>
       </button>
 
-      <button class="action-btn secondary {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
+      <button class="action-btn {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
         <Clock size="20" />
         <span>Recent Projects</span>
-        <kbd class="shortcut">Space+R</kbd>
+        <kbd class="shortcut">Space + R</kbd>
       </button>
     </section>
 
@@ -169,7 +169,7 @@
 
 <style>
   .welcome-screen {
-    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+    background: linear-gradient(135deg, #141414 0%, #1f1f1f 100%);
     color: #e0e0e0;
     height: 100%;
     display: flex;
@@ -206,7 +206,6 @@
   .title-sub {
     color: #888888;
     font-weight: 300;
-    margin-left: 8px;
   }
 
   .version {
@@ -255,7 +254,7 @@
   .action-btn {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid #333333;
-    border-radius: 8px;
+    border-radius: 4px;
     padding: 20px 24px;
     color: #e0e0e0;
     font-size: 14px;
@@ -290,19 +289,7 @@
     left: 100%;
   }
 
-  .action-btn.primary {
-    border-color: #333333;
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .action-btn.primary:hover {
-    border-color: #555555;
-    background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(255, 255, 255, 0.1);
-  }
-
-  .action-btn.secondary:hover {
+  .action-btn:hover {
     border-color: #555555;
     background: rgba(255, 255, 255, 0.1);
     transform: translateY(-1px);
@@ -312,6 +299,13 @@
     background: rgba(74, 222, 128, 0.15);
     border-color: #4ade80;
     box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.3);
+  }
+
+  .action-btn.keyboard-focused:hover {
+    background: rgba(74, 222, 128, 0.2);
+    border-color: #4ade80;
+    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.3);
+    transform: translateY(-1px);
   }
 
   .welcome-screen:focus {
@@ -327,9 +321,9 @@
     background: rgba(255, 255, 255, 0.1);
     color: #cccccc;
     padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: "Courier New", monospace;
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: "Cascadia Code", monospace;
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
@@ -349,7 +343,7 @@
     padding: 2px 6px;
     border-radius: 3px;
     font-size: 12px;
-    font-family: "Courier New", monospace;
+    font-family: "Cascadia Code", monospace;
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
