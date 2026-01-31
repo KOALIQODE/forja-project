@@ -3,7 +3,7 @@
  * Optimized system for managing keyboard shortcuts and navigation
  */
 
-import { KEYBOARD_CONFIG } from './constants.js';
+import { KEYBOARD_CONFIG, getLeaderKeyShortcuts } from './constants.js';
 
 export interface KeyboardAction {
   key: string | string[];
@@ -17,18 +17,6 @@ export interface KeyboardContext {
   name: string;
   actions: KeyboardAction[];
   enabled: boolean;
-}
-
-/**
- * Helper function to format leader key for display
- */
-function formatLeaderKeyForDisplay(leaderKey: string): string {
-  if (leaderKey === ' ') return 'Space+';
-  if (leaderKey === 'AltLeft' || leaderKey === 'AltRight') return 'Alt+';
-  if (leaderKey === 'ControlLeft' || leaderKey === 'ControlRight') return 'Ctrl+';
-  if (leaderKey === 'ShiftLeft' || leaderKey === 'ShiftRight') return 'Shift+';
-  if (leaderKey === 'MetaLeft' || leaderKey === 'MetaRight') return 'Meta+';
-  return `${leaderKey}+`;
 }
 
 export class KeyboardManager {
@@ -146,13 +134,6 @@ export class KeyboardManager {
    */
   private handleKeyDown(event: KeyboardEvent): void {
     const pressedKey = this.getKeyIdentifier(event);
-    
-    // Handle help key (?) for showing shortcuts panel
-    if (pressedKey === '?') {
-      event.preventDefault();
-      this.onShowShortcuts?.();
-      return;
-    }
 
     const normalizedKey = pressedKey.toLowerCase();
     
@@ -380,27 +361,6 @@ export class KeyboardManager {
         case 'ControlRight': return 'ControlRight';
         case 'ShiftLeft': return 'ShiftLeft';
         case 'ShiftRight': return 'ShiftRight';
-        case 'MetaLeft': return 'MetaLeft';
-        case 'MetaRight': return 'MetaRight';
-        case 'CapsLock': return 'CapsLock';
-        case 'Tab': return 'Tab';
-        case 'Escape': return 'Escape';
-        case 'Enter': return 'Enter';
-        case 'Backspace': return 'Backspace';
-        case 'Delete': return 'Delete';
-        case 'ArrowUp': return 'ArrowUp';
-        case 'ArrowDown': return 'ArrowDown';
-        case 'ArrowLeft': return 'ArrowLeft';
-        case 'ArrowRight': return 'ArrowRight';
-        case 'Home': return 'Home';
-        case 'End': return 'End';
-        case 'PageUp': return 'PageUp';
-        case 'PageDown': return 'PageDown';
-        case 'Insert': return 'Insert';
-        // Function keys
-        case 'F1': case 'F2': case 'F3': case 'F4': case 'F5': case 'F6':
-        case 'F7': case 'F8': case 'F9': case 'F10': case 'F11': case 'F12':
-          return event.code;
         // For other non-printable keys, fall back to event.key
         default:
           return event.key;
@@ -433,81 +393,17 @@ export class KeyboardManager {
    * Get leader shortcuts for current context and global actions
    */
   getLeaderShortcuts(): Array<{key: string, description: string}> {
-    const shortcuts: Array<{key: string, description: string}> = [];
+    const categorizedShortcuts = getLeaderKeyShortcuts();
+    const flatShortcuts: Array<{key: string, description: string}> = [];
     
-    // Add global leader shortcuts first
-    const globalLeaderShortcuts = this.globalActions
-      .filter(action => {
-        const keys = Array.isArray(action.key) ? action.key : [action.key];
-        return keys.some(key => key.toLowerCase().startsWith(this.leaderKey));
-      })
-      .map(action => {
-        const keys = Array.isArray(action.key) ? action.key : [action.key];
-        const leaderKey = keys.find(key => key.toLowerCase().startsWith(this.leaderKey));
-        return {
-          key: leaderKey ? leaderKey.replace(this.leaderKey, formatLeaderKeyForDisplay(this.leaderKey)) : '',
-          description: action.description || 'No description'
-        };
-      });
+    // Flatten the categorized shortcuts for display
+    categorizedShortcuts.forEach(category => {
+      flatShortcuts.push(...category.shortcuts);
+    });
     
-    shortcuts.push(...globalLeaderShortcuts);
-    
-    // Add context-specific leader shortcuts
-    if (this.activeContext) {
-      const context = this.contexts.get(this.activeContext);
-      if (context) {
-        const contextLeaderShortcuts = context.actions
-          .filter(action => {
-            const keys = Array.isArray(action.key) ? action.key : [action.key];
-            return keys.some(key => key.toLowerCase().startsWith(this.leaderKey));
-          })
-          .map(action => {
-            const keys = Array.isArray(action.key) ? action.key : [action.key];
-            const leaderKey = keys.find(key => key.toLowerCase().startsWith(this.leaderKey));
-            return {
-              key: leaderKey ? leaderKey.replace(this.leaderKey, formatLeaderKeyForDisplay(this.leaderKey)) : '',
-              description: action.description || 'No description'
-            };
-          });
-        
-        shortcuts.push(...contextLeaderShortcuts);
-      }
-    }
-    
-    return shortcuts;
+    return flatShortcuts;
   }
 }
 
 // Singleton instance
 export const keyboardManager = new KeyboardManager();
-
-// Helper function to create navigation actions
-export function createNavigationActions(options: {
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onSelect: () => void;
-  onCancel?: () => void;
-}): KeyboardAction[] {
-  return [
-    {
-      key: ['j', 'arrowdown'],
-      handler: options.onMoveDown,
-      description: 'Move down',
-    },
-    {
-      key: ['k', 'arrowup'],
-      handler: options.onMoveUp,
-      description: 'Move up',
-    },
-    {
-      key: 'enter',
-      handler: options.onSelect,
-      description: 'Select item',
-    },
-    ...(options.onCancel ? [{
-      key: 'escape',
-      handler: options.onCancel,
-      description: 'Cancel',
-    }] : []),
-  ];
-}

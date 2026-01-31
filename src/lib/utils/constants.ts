@@ -32,14 +32,91 @@ export const KEYBOARD_CONFIG = {
 // For Shift Left as leader:
 // LEADER_KEY: "ShiftLeft", LEADER_KEY_DISPLAY: "Shift"
 
-// === Keyboard Shortcuts ===
+// === Keyboard Shortcuts - Scalable Structure ===
 export const KEYBOARD_SHORTCUTS = {
-  OPEN_PROJECT: `${KEYBOARD_CONFIG.LEADER_KEY}o`, // Leader + O
-  NEW_PROJECT: `${KEYBOARD_CONFIG.LEADER_KEY}n`, // Leader + N
-  RECENT_PROJECTS: `${KEYBOARD_CONFIG.LEADER_KEY}r`, // Leader + R
-  ESCAPE: "Escape",
-  HELP: "?",
-  DELETE: "d",
+  // UI Actions - Main interface shortcuts
+  UI: {
+    OPEN_PROJECT: { 
+      key: `${KEYBOARD_CONFIG.LEADER_KEY}o`, 
+      description: "Open Project",
+      isLeaderKey: true 
+    },
+    NEW_PROJECT: { 
+      key: `${KEYBOARD_CONFIG.LEADER_KEY}n`, 
+      description: "New Empty Project",
+      isLeaderKey: true 
+    },
+    RECENT_PROJECTS: { 
+      key: `${KEYBOARD_CONFIG.LEADER_KEY}r`, 
+      description: "Recent Projects",
+      isLeaderKey: true 
+    },
+  },
+  
+  // Navigation - General navigation shortcuts
+  NAVIGATION: {
+    ESCAPE: { 
+      key: "Escape", 
+      description: "Cancel",
+      isLeaderKey: false 
+    },
+    HELP: { 
+      key: "?", 
+      description: "Show keyboard shortcuts",
+      isLeaderKey: false 
+    },
+    DELETE: { 
+      key: "d", 
+      description: "Delete",
+      isLeaderKey: false 
+    },
+  },
+
+  // Future categories can be added here:
+  // EDITOR: { ... },
+  // TERMINAL: { ... },
+  // DEBUG: { ... },
+} as const;
+
+// Helper function to get all shortcuts by category
+export function getShortcutsByCategory(category?: keyof typeof KEYBOARD_SHORTCUTS) {
+  if (category) {
+    return KEYBOARD_SHORTCUTS[category];
+  }
+  return KEYBOARD_SHORTCUTS;
+}
+
+// Helper function to get only leader key shortcuts for shortcut panel
+export function getLeaderKeyShortcuts(): Array<{category: string, shortcuts: Array<{key: string, description: string}>}> {
+  const result: Array<{category: string, shortcuts: Array<{key: string, description: string}>}> = [];
+  
+  Object.entries(KEYBOARD_SHORTCUTS).forEach(([categoryName, shortcuts]) => {
+    const leaderShortcuts = Object.values(shortcuts)
+      .filter(shortcut => shortcut.isLeaderKey)
+      .map(shortcut => ({
+        key: shortcut.key.replace(KEYBOARD_CONFIG.LEADER_KEY, KEYBOARD_CONFIG.LEADER_KEY_DISPLAY + '+'),
+        description: shortcut.description
+      }));
+    
+    if (leaderShortcuts.length > 0) {
+      result.push({
+        category: categoryName,
+        shortcuts: leaderShortcuts
+      });
+    }
+  });
+  
+  return result;
+}
+
+// Legacy compatibility - flat access (for existing code)
+export const SHORTCUTS_FLAT = {
+  OPEN_PROJECT: KEYBOARD_SHORTCUTS.UI.OPEN_PROJECT.key,
+  NEW_PROJECT: KEYBOARD_SHORTCUTS.UI.NEW_PROJECT.key,
+  RECENT_PROJECTS: KEYBOARD_SHORTCUTS.UI.RECENT_PROJECTS.key,
+  ESCAPE: KEYBOARD_SHORTCUTS.NAVIGATION.ESCAPE.key,
+  HELP: KEYBOARD_SHORTCUTS.NAVIGATION.HELP.key,
+  DELETE: KEYBOARD_SHORTCUTS.NAVIGATION.DELETE.key,
 } as const;
 
 // === UI Text Constants ===

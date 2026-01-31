@@ -7,14 +7,11 @@
     shortenedPaths,
     gitStatuses,
   } from "../stores/projectStore.js";
-  import {
-    keyboardManager,
-    createNavigationActions,
-  } from "../utils/keyboardManager.js";
+  import { useNavigation } from "../utils/NavigationController.js";
   import {
     KEYBOARD_CONTEXTS,
     UI_TEXT,
-    KEYBOARD_SHORTCUTS,
+    SHORTCUTS_FLAT,
   } from "../utils/constants.js";
 
   let {
@@ -27,32 +24,19 @@
 
   let selectedIndex = $state(0);
   let dialogElement = $state<HTMLElement>();
+  let navigation: ReturnType<typeof useNavigation> | undefined;
 
   function getDisplayPath(index: number): string {
     return $shortenedPaths[index] || $recentProjects[index] || "";
   }
 
-  function handleProjectSelect(projectPath: string) {
+  function openSelectedProject(index: number, projectPath: string) {
     openProject(projectPath);
     onClose();
   }
 
   function getProjectName(path: string): string {
     return path.split(/[/\\]/).pop() || "Unknown Project";
-  }
-
-  function moveUp() {
-    selectedIndex = Math.max(selectedIndex - 1, 0);
-  }
-
-  function moveDown() {
-    selectedIndex = Math.min(selectedIndex + 1, $recentProjects.length - 1);
-  }
-
-  function selectCurrent() {
-    if ($recentProjects[selectedIndex]) {
-      handleProjectSelect($recentProjects[selectedIndex]);
-    }
   }
 
   function closeDialog() {
@@ -67,9 +51,13 @@
         return newProjects;
       });
 
-      // Adjust selectedIndex if needed
-      if (selectedIndex >= $recentProjects.length - 1) {
-        selectedIndex = Math.max(0, $recentProjects.length - 2);
+      // Update navigation with new items and adjust selectedIndex if needed
+      const newProjectsArray = $recentProjects;
+      navigation?.updateItems(newProjectsArray);
+      
+      if (selectedIndex >= newProjectsArray.length && newProjectsArray.length > 0) {
+        selectedIndex = newProjectsArray.length - 1;
+        navigation?.updateSelectedIndex(selectedIndex);
       }
     }
   }
@@ -78,69 +66,38 @@
     if (isOpen) {
       selectedIndex = 0;
 
-      // Register keyboard context for dialog
-      const navigationActions = createNavigationActions({
-        onMoveUp: moveUp,
-        onMoveDown: moveDown,
-        onSelect: selectCurrent,
+      // Setup navigation controller
+      navigation = useNavigation({
+        contextName: KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG,
+        items: $recentProjects,
+        selectedIndex,
+        onSelect: openSelectedProject,
         onCancel: closeDialog,
+        additionalActions: [
+          {
+            key: SHORTCUTS_FLAT.DELETE,
+            handler: deleteCurrentProject,
+            description: "Delete project from recent list",
+          },
+        ],
+        autoFocus: true,
+        element: dialogElement,
       });
 
-      // Add delete action
-      navigationActions.push({
-        key: KEYBOARD_SHORTCUTS.DELETE,
-        handler: deleteCurrentProject,
-        description: "Delete project from recent list",
-      });
+      navigation.activate();
 
-      keyboardManager.registerContext(
-        KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG,
-        navigationActions,
-      );
-      keyboardManager.setActiveContext(KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG);
-
+      // Listen for navigation changes
       if (dialogElement) {
-        dialogElement.focus();
+        dialogElement.addEventListener('navigation-change', (event: Event) => {
+          const customEvent = event as CustomEvent;
+          selectedIndex = customEvent.detail.selectedIndex;
+        });
       }
     }
   });
 
   onDestroy(() => {
-    // Context will be restored by DialogManager
-  });
-
-  // Watch for isOpen changes
-  $effect(() => {
-    if (isOpen) {
-      selectedIndex = 0;
-
-      // Register keyboard context for dialog
-      const navigationActions = createNavigationActions({
-        onMoveUp: moveUp,
-        onMoveDown: moveDown,
-        onSelect: selectCurrent,
-        onCancel: closeDialog,
-      });
-
-      // Add delete action
-      navigationActions.push({
-        key: KEYBOARD_SHORTCUTS.DELETE,
-        handler: deleteCurrentProject,
-        description: "Delete project from recent list",
-      });
-
-      keyboardManager.registerContext(
-        KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG,
-        navigationActions,
-      );
-      keyboardManager.setActiveContext(KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG);
-
-      setTimeout(() => {
-        if (dialogElement) {
-          dialogElement.focus();
-        }
-      }, 0);
-    }
+    navigation?.destroy();
   });
 </script>
 
@@ -172,7 +129,7 @@
             {@const git = $gitStatuses[index]}
             <button
               class="project-item {selectedIndex === index ? 'selected' : ''}"
-              onclick={() => handleProjectSelect(project)}
+              onclick={() => openSelectedProject(index, project)}
             >
               <div class="project-icon">
                 <FolderOpen size={16} />

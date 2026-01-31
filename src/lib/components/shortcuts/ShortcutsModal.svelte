@@ -1,6 +1,6 @@
 <script lang="ts">
   import { keyboardManager } from "../../utils/keyboardManager.js";
-  import { KEYBOARD_SHORTCUTS, UI_TEXT } from "../../utils/constants.js";
+  import { SHORTCUTS_FLAT, UI_TEXT } from "../../utils/constants.js";
   
   export let visible = false;
   export let shortcuts: Array<{key: string, description: string}> = [];
@@ -19,23 +19,35 @@
     keyboardManager.hideShortcutsPanel();
   }
   
+  function handleShow() {
+    keyboardManager.showShortcutsPanel();
+  }
+  
   // Listen for 'Escape' key to close
-  function handleKeyDown(event: KeyboardEvent) {
-    if (visible && event.key === KEYBOARD_SHORTCUTS.ESCAPE) {
+  function handleManagePanel(event: KeyboardEvent) {
+    if (visible && event.key === SHORTCUTS_FLAT.HELP) {
       event.preventDefault();
       event.stopPropagation();
       handleQuit();
+      return;
+    }
+    
+    if (!visible && event.key === SHORTCUTS_FLAT.HELP) {
+      event.preventDefault();
+      event.stopPropagation();
+      handleShow();
+      return;
     }
   }
 </script>
 
-<svelte:window on:keydown={handleKeyDown} />
+<svelte:window on:keydown={handleManagePanel} />
 
 {#if visible}
   <div class="shortcuts-panel">
     <div class="panel-header">
       <h3>{UI_TEXT.KEYBOARD_SHORTCUTS_TITLE}</h3>
-      <span class="close-hint">Press <kbd>Esc</kbd> {UI_TEXT.CLOSE_HINT}</span>
+      <span class="close-hint">Press <kbd>?</kbd> {UI_TEXT.CLOSE_HINT}</span>
     </div>
     <div class="shortcuts-list">
       {#each shortcuts as shortcut}

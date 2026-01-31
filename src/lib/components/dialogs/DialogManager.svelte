@@ -5,31 +5,26 @@
   import { 
     ANIMATION_DURATIONS, 
     DIALOG_STATE_KEYS,
-    KEYBOARD_SHORTCUTS,
+    SHORTCUTS_FLAT,
     UI_TEXT
   } from "../../utils/constants.js";
-  import { onMount } from "svelte";
+  // import { onMount } from "svelte";
 
   // Dialog state reactivity - properly typed
   let dialogStates: Record<string, boolean> = {};
   
-  onMount(() => {
-    // Register global dialog actions dynamically
-    const globalDialogActions = [
-      {
-        key: KEYBOARD_SHORTCUTS.RECENT_PROJECTS,
-        handler: () => dialogActions.open(DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN),
-        description: UI_TEXT.RECENT_PROJECTS,
-      },
-      {
-        key: KEYBOARD_SHORTCUTS.HELP,
-        handler: () => keyboardManager.showShortcutsPanel(),
-        description: UI_TEXT.KEYBOARD_SHORTCUTS_HELP,
-      },
-    ];
+  // onMount(() => {
+  //   // Register global dialog actions dynamically
+  //   // const globalDialogActions = [
+  //   //   {
+  //   //     key: SHORTCUTS_FLAT.RECENT_PROJECTS,
+  //   //     handler: () => dialogActions.open(DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN),
+  //   //     description: UI_TEXT.RECENT_PROJECTS,
+  //   //   },
+  //   // ];
 
-    keyboardManager.addGlobalActions(globalDialogActions);
-  });
+  //   // keyboardManager.addGlobalActions(globalDialogActions);
+  // });
 
   // Subscribe to dialog state changes
   dialogState.subscribe(state => {
@@ -59,5 +54,3 @@
     onClose={() => closeDialog(DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN)} 
   />
 {/if}
-
-<!-- Future dialogs can be added here dynamically -->

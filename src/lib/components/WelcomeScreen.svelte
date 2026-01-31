@@ -1,23 +1,32 @@
 <script lang="ts">
   import { FolderOpen, Plus, Clock } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
-  import { keyboardManager, createNavigationActions } from "../utils/keyboardManager.js";
+  import { keyboardManager } from "../utils/keyboardManager.js";
+  import { useNavigation } from "../utils/NavigationController.js";
   import { openProject, recentProjects } from "../stores/projectStore.js";
   import { openRecentProjectsDialog } from "../stores/dialogStore.js";
   import { open } from "@tauri-apps/plugin-dialog";
   import { 
     KEYBOARD_CONTEXTS, 
-    KEYBOARD_SHORTCUTS, 
+    SHORTCUTS_FLAT,
+    KEYBOARD_CONFIG,
     UI_TEXT, 
-    STORAGE_KEYS, 
     ERROR_MESSAGES 
   } from "../utils/constants.js";
   
   // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
   const version = "1.0.0-alpha";
+
+  // Button configurations for UI rendering
+  const buttons = [
+    { icon: FolderOpen, title: UI_TEXT.OPEN_PROJECT, shortcut: `${KEYBOARD_CONFIG.LEADER_KEY_DISPLAY} + O` },
+    { icon: Plus, title: UI_TEXT.NEW_EMPTY_PROJECT, shortcut: `${KEYBOARD_CONFIG.LEADER_KEY_DISPLAY} + N` },
+    { icon: Clock, title: UI_TEXT.RECENT_PROJECTS, shortcut: `${KEYBOARD_CONFIG.LEADER_KEY_DISPLAY} + R` },
+  ];
   
-  let selectedIndex = 0; // 0, 1, 2 para los tres botones
+  let selectedIndex = $state(0);
   let welcomeContainer: HTMLElement;
+  let navigation: ReturnType<typeof useNavigation> | undefined;
 
   async function handleOpenProject() {
     try {
@@ -47,16 +56,8 @@
     openRecentProjectsDialog();
   }
 
-  function moveUp() {
-    selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : 2;
-  }
-
-  function moveDown() {
-    selectedIndex = (selectedIndex + 1) % 3;
-  }
-
-  function selectCurrent() {
-    switch(selectedIndex) {
+  function selectAction(index: number) {
+    switch(index) {
       case 0:
         handleOpenProject();
         break;
@@ -70,41 +71,49 @@
   }
 
   onMount(() => {
-    // Register keyboard navigation for welcome screen
-    const navigationActions = createNavigationActions({
-      onMoveUp: moveUp,
-      onMoveDown: moveDown,
-      onSelect: selectCurrent,
+    // Setup navigation controller with dummy items for navigation
+    navigation = useNavigation({
+      contextName: KEYBOARD_CONTEXTS.WELCOME_SCREEN,
+      items: buttons, // Use buttons as navigation items
+      selectedIndex,
+      onSelect: (index: number) => selectAction(index),
+      additionalActions: [
+        {
+          key: SHORTCUTS_FLAT.OPEN_PROJECT,
+          handler: () => handleOpenProject(),
+          description: UI_TEXT.OPEN_PROJECT,
+          // moveLeft: () => navigation?.moveLeft(),
+          // moveRight: true,
+        },
+        // {
+        //   key: SHORTCUTS_FLAT.NEW_PROJECT,
+        //   handler: () => handleNewProject(),
+        //   description: UI_TEXT.NEW_EMPTY_PROJECT,
+        // },
+        {
+          key: SHORTCUTS_FLAT.RECENT_PROJECTS,
+          handler: () => handleRecentProjects(),
+          description: UI_TEXT.RECENT_PROJECTS,
+        },
+      ],
+      autoFocus: true,
+      element: welcomeContainer,
     });
 
-    // Add leader key combinations
-    const leaderActions = [
-      {
-        key: KEYBOARD_SHORTCUTS.OPEN_PROJECT,
-        handler: () => handleOpenProject(),
-        description: UI_TEXT.OPEN_PROJECT,
-      },
-      {
-        key: KEYBOARD_SHORTCUTS.NEW_PROJECT,
-        handler: () => handleNewProject(),
-        description: UI_TEXT.NEW_EMPTY_PROJECT,
-      },
-    ];
-
-    keyboardManager.registerContext(KEYBOARD_CONTEXTS.WELCOME_SCREEN, [
-      ...navigationActions,
-      ...leaderActions,
-    ]);
-    keyboardManager.setActiveContext(KEYBOARD_CONTEXTS.WELCOME_SCREEN);
+    navigation.activate();
     keyboardManager.startListening();
 
-    // Focus the container
+    // Listen for navigation changes
     if (welcomeContainer) {
-      welcomeContainer.focus();
+      welcomeContainer.addEventListener('navigation-change', (event: Event) => {
+        const customEvent = event as CustomEvent;
+        selectedIndex = customEvent.detail.selectedIndex;
+      });
     }
   });
 
   onDestroy(() => {
+    navigation?.destroy();
     keyboardManager.stopListening();
   });
 </script>
@@ -133,23 +142,16 @@
 
     <!-- Action buttons -->
     <section class="actions-section">
-      <button class="action-btn {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
-        <FolderOpen size="20" />
-        <span>{UI_TEXT.OPEN_PROJECT}</span>
-        <kbd class="shortcut">Space + O</kbd>
-      </button>
-
-      <button class="action-btn {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
-        <Plus size="20" />
-        <span>{UI_TEXT.NEW_EMPTY_PROJECT}</span>
-        <kbd class="shortcut">Space + N</kbd>
-      </button>
-
-      <button class="action-btn {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
-        <Clock size="20" />
-        <span>{UI_TEXT.RECENT_PROJECTS}</span>
-        <kbd class="shortcut">Space + R</kbd>
-      </button>
+      {#each buttons as button, index}
+        <button 
+          class="action-btn {selectedIndex === index ? 'keyboard-focused' : ''}" 
+          onclick={() => selectAction(index)}
+        >
+          <button.icon size="20" />
+          <span>{button.title}</span>
+          <kbd class="shortcut">{button.shortcut}</kbd>
+        </button>
+      {/each}
     </section>
 
     <!-- Footer -->
