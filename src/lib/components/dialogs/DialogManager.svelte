@@ -5,27 +5,11 @@
   import { 
     ANIMATION_DURATIONS, 
     DIALOG_STATE_KEYS,
-    SHORTCUTS_FLAT,
-    UI_TEXT
   } from "../../utils/constants.js";
-  // import { onMount } from "svelte";
 
   // Dialog state reactivity - properly typed
   let dialogStates: Record<string, boolean> = {};
   
-  // onMount(() => {
-  //   // Register global dialog actions dynamically
-  //   // const globalDialogActions = [
-  //   //   {
-  //   //     key: SHORTCUTS_FLAT.RECENT_PROJECTS,
-  //   //     handler: () => dialogActions.open(DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN),
-  //   //     description: UI_TEXT.RECENT_PROJECTS,
-  //   //   },
-  //   // ];
-
-  //   // keyboardManager.addGlobalActions(globalDialogActions);
-  // });
-
   // Subscribe to dialog state changes
   dialogState.subscribe(state => {
     const previousDialogStates = { ...dialogStates };

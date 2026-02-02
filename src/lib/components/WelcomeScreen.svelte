@@ -11,7 +11,7 @@
     SHORTCUTS_FLAT,
     KEYBOARD_CONFIG,
     UI_TEXT, 
-    ERROR_MESSAGES 
+    ERROR_MESSAGES,
   } from "../utils/constants.js";
   
   // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
@@ -82,8 +82,6 @@
           key: SHORTCUTS_FLAT.OPEN_PROJECT,
           handler: () => handleOpenProject(),
           description: UI_TEXT.OPEN_PROJECT,
-          // moveLeft: () => navigation?.moveLeft(),
-          // moveRight: true,
         },
         // {
         //   key: SHORTCUTS_FLAT.NEW_PROJECT,

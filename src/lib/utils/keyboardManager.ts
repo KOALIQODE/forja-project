@@ -252,7 +252,7 @@ export class KeyboardManager {
         return normalizedKey === pressedKey;
       });
 
-      if (matchesKey) {
+      if (matchesKey && typeof action.handler === 'function') {
         if (action.preventDefault !== false) {
           event.preventDefault();
         }
