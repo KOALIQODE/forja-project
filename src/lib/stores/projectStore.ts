@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { writable } from "svelte/store";
+import { STORAGE_KEYS, ERROR_MESSAGES } from "../utils/constants.js";
 
 export interface GitStatus {
   path: string;
@@ -17,21 +18,19 @@ const cache = new Map<string, string[]>();
 
 // Recent projects with localStorage persistence
 function createRecentProjectsStore() {
-  const STORAGE_KEY = "forja-recent-projects";
-
   // Save to localStorage
   function saveRecentProjects(projects: string[]) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+      localStorage.setItem(STORAGE_KEYS.RECENT_PROJECTS, JSON.stringify(projects));
     } catch (error) {
-      console.error("Error saving recent projects:", error);
+      console.error(ERROR_MESSAGES.RECENT_PROJECTS_SAVE_FAILED, error);
     }
   }
 
   // Load from localStorage
   function loadRecentProjects(): string[] {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_KEYS.RECENT_PROJECTS);
       if (saved) {
         const parsed = JSON.parse(saved);
 

@@ -1,33 +1,40 @@
-<script>
+<script lang="ts">
   import RecentProjectsDialog from "../RecentProjectsDialog.svelte";
-  import { dialogState, closeRecentProjectsDialog } from "../../stores/dialogStore.js";
+  import { dialogState, dialogActions } from "../../stores/dialogStore.js";
   import { keyboardManager } from "../../utils/keyboardManager.js";
+  import { 
+    ANIMATION_DURATIONS, 
+    DIALOG_STATE_KEYS,
+  } from "../../utils/constants.js";
 
-  let showRecentProjects = false;
-
-  // Subscribe to dialog state
+  // Dialog state reactivity - properly typed
+  let dialogStates: Record<string, boolean> = {};
+  
+  // Subscribe to dialog state changes
   dialogState.subscribe(state => {
-    showRecentProjects = state.recentProjectsOpen;
+    const previousDialogStates = { ...dialogStates };
+    dialogStates = { ...state };
     
-    // When dialog closes, restore welcome screen context
-    if (!state.recentProjectsOpen) {
-      setTimeout(() => {
-        keyboardManager.setActiveContext("welcome-screen");
-      }, 10);
-    }
+    // Check if any dialog was closed and restore context
+    Object.keys(previousDialogStates).forEach((dialogKey: string) => {
+      if (previousDialogStates[dialogKey] && !state[dialogKey as keyof typeof state]) {
+        setTimeout(() => {
+          keyboardManager.restorePreviousContext();
+        }, ANIMATION_DURATIONS.CONTEXT_RESTORE_DELAY);
+      }
+    });
   });
 
-  function closeRecentProjects() {
-    closeRecentProjectsDialog();
+  // Generic close handler
+  function closeDialog(dialogKey: string) {
+    dialogActions.close(dialogKey as any);
   }
 </script>
 
-<RecentProjectsDialog 
-  isOpen={showRecentProjects} 
-  onClose={closeRecentProjects} 
-/>
-
-<RecentProjectsDialog 
-  isOpen={showRecentProjects} 
-  onClose={closeRecentProjects} 
-/>
+<!-- Recent Projects Dialog -->
+{#if dialogStates[DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN]}
+  <RecentProjectsDialog 
+    isOpen={dialogStates[DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN]} 
+    onClose={() => closeDialog(DIALOG_STATE_KEYS.RECENT_PROJECTS_OPEN)} 
+  />
+{/if}

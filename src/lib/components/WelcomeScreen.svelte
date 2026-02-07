@@ -1,16 +1,32 @@
 <script lang="ts">
   import { FolderOpen, Plus, Clock } from "@lucide/svelte";
   import { onMount, onDestroy } from "svelte";
-  import { keyboardManager, createNavigationActions } from "../utils/keyboardManager.js";
+  import { keyboardManager } from "../utils/keyboardManager.js";
+  import { useNavigation } from "../utils/NavigationController.js";
   import { openProject, recentProjects } from "../stores/projectStore.js";
   import { openRecentProjectsDialog } from "../stores/dialogStore.js";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { 
+    KEYBOARD_CONTEXTS, 
+    SHORTCUTS_FLAT,
+    KEYBOARD_CONFIG,
+    UI_TEXT, 
+    ERROR_MESSAGES,
+  } from "../utils/constants.js";
   
   // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
   const version = "1.0.0-alpha";
+
+  // Button configurations for UI rendering
+  const buttons = [
+    { icon: FolderOpen, title: UI_TEXT.OPEN_PROJECT, shortcut: `${KEYBOARD_CONFIG.LEADER_KEY_DISPLAY} + O` },
+    { icon: Plus, title: UI_TEXT.NEW_EMPTY_PROJECT, shortcut: `${KEYBOARD_CONFIG.LEADER_KEY_DISPLAY} + N` },
+    { icon: Clock, title: UI_TEXT.RECENT_PROJECTS, shortcut: `${KEYBOARD_CONFIG.LEADER_KEY_DISPLAY} + R` },
+  ];
   
-  let selectedIndex = 0; // 0, 1, 2 para los tres botones
+  let selectedIndex = $state(0);
   let welcomeContainer: HTMLElement;
+  let navigation: ReturnType<typeof useNavigation> | undefined;
 
   async function handleOpenProject() {
     try {
@@ -26,7 +42,7 @@
         openProject(selected);
       }
     } catch (error) {
-      console.error("Error opening folder dialog:", error);
+      console.error(ERROR_MESSAGES.FOLDER_DIALOG_FAILED, error);
     }
   }
 
@@ -40,18 +56,8 @@
     openRecentProjectsDialog();
   }
 
-  function moveUp() {
-    selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : 2;
-    console.log("Moving up, selectedIndex:", selectedIndex);
-  }
-
-  function moveDown() {
-    selectedIndex = (selectedIndex + 1) % 3;
-    console.log("Moving down, selectedIndex:", selectedIndex);
-  }
-
-  function selectCurrent() {
-    switch(selectedIndex) {
+  function selectAction(index: number) {
+    switch(index) {
       case 0:
         handleOpenProject();
         break;
@@ -65,54 +71,47 @@
   }
 
   onMount(() => {
-    // Register keyboard navigation for welcome screen
-    const navigationActions = createNavigationActions({
-      onMoveUp: moveUp,
-      onMoveDown: moveDown,
-      onSelect: selectCurrent,
+    // Setup navigation controller with dummy items for navigation
+    navigation = useNavigation({
+      contextName: KEYBOARD_CONTEXTS.WELCOME_SCREEN,
+      items: buttons, // Use buttons as navigation items
+      selectedIndex,
+      onSelect: (index: number) => selectAction(index),
+      additionalActions: [
+        {
+          key: SHORTCUTS_FLAT.OPEN_PROJECT,
+          handler: () => handleOpenProject(),
+          description: UI_TEXT.OPEN_PROJECT,
+        },
+        // {
+        //   key: SHORTCUTS_FLAT.NEW_PROJECT,
+        //   handler: () => handleNewProject(),
+        //   description: UI_TEXT.NEW_EMPTY_PROJECT,
+        // },
+        {
+          key: SHORTCUTS_FLAT.RECENT_PROJECTS,
+          handler: () => handleRecentProjects(),
+          description: UI_TEXT.RECENT_PROJECTS,
+        },
+      ],
+      autoFocus: true,
+      element: welcomeContainer,
     });
 
-    // Add leader key combinations
-    const leaderActions = [
-      {
-        key: ' o', // Space + O
-        handler: () => handleOpenProject(),
-        description: 'Open Project',
-      },
-      {
-        key: ' n', // Space + N  
-        handler: () => handleNewProject(),
-        description: 'New Project',
-      },
-      {
-        key: ' r', // Space + R
-        handler: () => handleRecentProjects(), 
-        description: 'Recent Projects',
-      },
-    ];
-
-    keyboardManager.registerContext("welcome-screen", [
-      ...navigationActions,
-      ...leaderActions,
-    ]);
-    keyboardManager.setActiveContext("welcome-screen");
+    navigation.activate();
     keyboardManager.startListening();
 
-    // Focus the container
+    // Listen for navigation changes
     if (welcomeContainer) {
-      welcomeContainer.focus();
-    }
-
-    // Clear any old mocked data (one time cleanup)
-    const hasCleanedMockData = localStorage.getItem('forja-cleaned-mock-data');
-    if (!hasCleanedMockData) {
-      localStorage.removeItem('forja-recent-projects');
-      localStorage.setItem('forja-cleaned-mock-data', 'true');
-      recentProjects.set([]);
+      welcomeContainer.addEventListener('navigation-change', (event: Event) => {
+        const customEvent = event as CustomEvent;
+        selectedIndex = customEvent.detail.selectedIndex;
+      });
     }
   });
 
   onDestroy(() => {
+    navigation?.destroy();
     keyboardManager.stopListening();
   });
 </script>
@@ -123,8 +122,8 @@
     <!-- Header section -->
     <header class="welcome-header">
       <h1 class="app-title">
-        <span class="title-main">Forja Studio</span>
-        <span class="title-sub">Editor</span>
+        <span class="title-main">{UI_TEXT.APP_TITLE}</span>
+        <span class="title-sub">{UI_TEXT.APP_SUBTITLE}</span>
       </h1>
       <p class="version">v{version}</p>
     </header>
@@ -135,34 +134,27 @@
         The essence of <span class="vim-highlight">Vim</span> in a native interface
       </p>
       <p class="description">
-        Keyboard navigation, fast commands, efficient editing
+        {UI_TEXT.DESCRIPTION}
       </p>
     </section>
 
     <!-- Action buttons -->
     <section class="actions-section">
-      <button class="action-btn {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
-        <FolderOpen size="20" />
-        <span>Open Project</span>
-        <kbd class="shortcut">Space + O</kbd>
-      </button>
-
-      <button class="action-btn {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
-        <Plus size="20" />
-        <span>New Empty Project</span>
-        <kbd class="shortcut">Space + N</kbd>
-      </button>
-
-      <button class="action-btn {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
-        <Clock size="20" />
-        <span>Recent Projects</span>
-        <kbd class="shortcut">Space + R</kbd>
-      </button>
+      {#each buttons as button, index}
+        <button 
+          class="action-btn {selectedIndex === index ? 'keyboard-focused' : ''}" 
+          onclick={() => selectAction(index)}
+        >
+          <button.icon size="20" />
+          <span>{button.title}</span>
+          <kbd class="shortcut">{button.shortcut}</kbd>
+        </button>
+      {/each}
     </section>
 
     <!-- Footer -->
     <footer class="welcome-footer">
-      <p class="footer-text">Press <kbd>?</kbd> for keyboard shortcuts</p>
+      <p class="footer-text">{UI_TEXT.KEYBOARD_SHORTCUTS_HELP}</p>
     </footer>
   </div>
 </main>
@@ -329,16 +321,6 @@
     font-size: var(--font-size-lg);
     color: var(--text-disabled);
     margin: 0;
-  }
-
-  .footer-text kbd {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-muted);
-    padding: var(--spacing-xs) var(--spacing-md);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-md);
-    font-family: var(--font-family-mono);
-    border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   /* Responsive */

@@ -3,6 +3,8 @@
  * Optimized system for managing keyboard shortcuts and navigation
  */
 
+import { KEYBOARD_CONFIG, getLeaderKeyShortcuts } from './constants.js';
+
 export interface KeyboardAction {
   key: string | string[];
   handler: (event: KeyboardEvent) => void;
@@ -20,9 +22,10 @@ export interface KeyboardContext {
 export class KeyboardManager {
   private contexts: Map<string, KeyboardContext> = new Map();
   private activeContext: string | null = null;
+  private previousContext: string | null = null;
   private globalActions: KeyboardAction[] = [];
   private isListening = false;
-  private leaderKey = ' '; // Space as leader key
+  private leaderKey: string = KEYBOARD_CONFIG.LEADER_KEY; // Configurable leader key
   private isLeaderPressed = false;
   private leaderTimeout: number | null = null;
   private leaderTimeoutDuration = 1000; // 1 second
@@ -56,7 +59,42 @@ export class KeyboardManager {
    * Set the active context
    */
   setActiveContext(contextName: string): void {
-    this.activeContext = contextName;
+    if (this.activeContext !== contextName) {
+      this.previousContext = this.activeContext;
+      this.activeContext = contextName;
+    }
+  }
+
+  /**
+   * Restore to the previous context
+   */
+  restorePreviousContext(): void {
+    if (this.previousContext) {
+      const temp = this.previousContext;
+      this.previousContext = this.activeContext;
+      this.activeContext = temp;
+    }
+  }
+
+  /**
+   * Save the current context as previous context
+   */
+  saveContext(): void {
+    this.previousContext = this.activeContext;
+  }
+
+  /**
+   * Get the current active context
+   */
+  getActiveContext(): string | null {
+    return this.activeContext;
+  }
+
+  /**
+   * Get the previous context
+   */
+  getPreviousContext(): string | null {
+    return this.previousContext;
   }
 
   /**
@@ -95,24 +133,15 @@ export class KeyboardManager {
    * Handle keydown events
    */
   private handleKeyDown(event: KeyboardEvent): void {
-    const pressedKey = event.key;
-    
-    // Handle help key (?) for showing shortcuts panel
-    if (pressedKey === '?') {
-      event.preventDefault();
-      this.onShowShortcuts?.();
-      console.log('Help key (?) pressed - showing shortcuts panel');
-      return;
-    }
+    const pressedKey = this.getKeyIdentifier(event);
 
     const normalizedKey = pressedKey.toLowerCase();
     
     // Handle leader key activation
-    if (normalizedKey === this.leaderKey && !this.isLeaderPressed) {
+    if (pressedKey === this.leaderKey && !this.isLeaderPressed) {
       event.preventDefault();
       this.isLeaderPressed = true;
       this.startLeaderTimeout();
-      console.log('Leader key activated - waiting for next key...');
       return;
     }
 
@@ -121,13 +150,37 @@ export class KeyboardManager {
       this.clearLeaderTimeout();
       this.isLeaderPressed = false;
       
+      // Look for leader combinations in global actions first
+      const globalLeaderActions = this.globalActions.filter(action => {
+        const keys = Array.isArray(action.key) ? action.key : [action.key];
+        return keys.some(key => {
+          // Handle concatenated leader combinations like "AltLefto"
+          const keyLower = key.toLowerCase();
+          const leaderLower = this.leaderKey.toLowerCase();
+          return keyLower === `${leaderLower}${normalizedKey}` || 
+                 keyLower === `${leaderLower}+${normalizedKey}`;
+        });
+      });
+      
+      if (globalLeaderActions.length > 0) {
+        event.preventDefault();
+        globalLeaderActions[0].handler(event);
+        return;
+      }
+      
       // Look for leader combinations in active context
       if (this.activeContext) {
         const context = this.contexts.get(this.activeContext);
         if (context && context.enabled) {
           const leaderActions = context.actions.filter(action => {
             const keys = Array.isArray(action.key) ? action.key : [action.key];
-            return keys.some(key => key.toLowerCase() === `${this.leaderKey}${normalizedKey}`);
+            return keys.some(key => {
+              // Handle concatenated leader combinations like "AltLefto"
+              const keyLower = key.toLowerCase();
+              const leaderLower = this.leaderKey.toLowerCase();
+              return keyLower === `${leaderLower}${normalizedKey}` || 
+                     keyLower === `${leaderLower}+${normalizedKey}`;
+            });
           });
           
           if (leaderActions.length > 0) {
@@ -138,7 +191,6 @@ export class KeyboardManager {
         }
       }
       
-      console.log('No leader combination found for:', `${this.leaderKey}${normalizedKey}`);
       return;
     }
     
@@ -172,7 +224,6 @@ export class KeyboardManager {
     this.leaderTimeout = window.setTimeout(() => {
       this.isLeaderPressed = false;
       // Don't hide shortcuts panel on timeout - let user close with 'q'
-      console.log('Leader key timeout - returning to normal mode');
     }, this.leaderTimeoutDuration);
   }
 
@@ -195,13 +246,13 @@ export class KeyboardManager {
       const matchesKey = keys.some(key => {
         const normalizedKey = key.toLowerCase();
         // Skip leader combinations in normal execution
-        if (normalizedKey.startsWith(this.leaderKey)) {
+        if (normalizedKey.startsWith(this.leaderKey.toLowerCase()) || normalizedKey.includes('+')) {
           return false;
         }
         return normalizedKey === pressedKey;
       });
 
-      if (matchesKey) {
+      if (matchesKey && typeof action.handler === 'function') {
         if (action.preventDefault !== false) {
           event.preventDefault();
         }
@@ -284,60 +335,75 @@ export class KeyboardManager {
   }
 
   /**
-   * Get leader shortcuts for current context
+   * Manually show shortcuts panel
+   */
+  showShortcutsPanel(): void {
+    this.onShowShortcuts?.();
+  }
+
+  /**
+   * Get the correct key identifier from event, handling non-printable keys
+   */
+  private getKeyIdentifier(event: KeyboardEvent): string {
+    // Special case for Space - always use the character, not the code
+    if (event.code === 'Space') {
+      return ' ';
+    }
+    
+    // For non-printable keys (modifier keys, function keys, etc.), use event.code
+    // event.code provides consistent physical key location regardless of keyboard layout
+    if (event.code && this.isNonPrintableKey(event.code)) {
+      // Map common non-printable key codes to consistent identifiers
+      switch (event.code) {
+        case 'AltLeft': return 'AltLeft';
+        case 'AltRight': return 'AltRight';
+        case 'ControlLeft': return 'ControlLeft';
+        case 'ControlRight': return 'ControlRight';
+        case 'ShiftLeft': return 'ShiftLeft';
+        case 'ShiftRight': return 'ShiftRight';
+        // For other non-printable keys, fall back to event.key
+        default:
+          return event.key;
+      }
+    }
+    
+    // For printable keys (letters, numbers, symbols), use event.key
+    // This provides the actual character that would be typed
+    return event.key;
+  }
+
+  /**
+   * Check if a key code represents a non-printable key
+   */
+  private isNonPrintableKey(code: string): boolean {
+    // List of non-printable key prefixes and exact matches
+    const nonPrintablePrefixes = ['Alt', 'Control', 'Shift', 'Meta', 'Caps', 'F'];
+    const nonPrintableKeys = [
+      'Tab', 'Escape', 'Enter', 'Space', 'Backspace', 'Delete',
+      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+      'Home', 'End', 'PageUp', 'PageDown', 'Insert',
+      'NumLock', 'ScrollLock', 'Pause', 'ContextMenu'
+    ];
+    
+    return nonPrintablePrefixes.some(prefix => code.startsWith(prefix)) ||
+           nonPrintableKeys.includes(code);
+  }
+
+  /**
+   * Get leader shortcuts for current context and global actions
    */
   getLeaderShortcuts(): Array<{key: string, description: string}> {
-    if (!this.activeContext) return [];
+    const categorizedShortcuts = getLeaderKeyShortcuts();
+    const flatShortcuts: Array<{key: string, description: string}> = [];
     
-    const context = this.contexts.get(this.activeContext);
-    if (!context) return [];
+    // Flatten the categorized shortcuts for display
+    categorizedShortcuts.forEach(category => {
+      flatShortcuts.push(...category.shortcuts);
+    });
     
-    return context.actions
-      .filter(action => {
-        const keys = Array.isArray(action.key) ? action.key : [action.key];
-        return keys.some(key => key.toLowerCase().startsWith(this.leaderKey));
-      })
-      .map(action => {
-        const keys = Array.isArray(action.key) ? action.key : [action.key];
-        const leaderKey = keys.find(key => key.toLowerCase().startsWith(this.leaderKey));
-        return {
-          key: leaderKey?.replace(' ', 'Space+') || '',
-          description: action.description || 'No description'
-        };
-      });
+    return flatShortcuts;
   }
 }
 
 // Singleton instance
 export const keyboardManager = new KeyboardManager();
-
-// Helper function to create navigation actions
-export function createNavigationActions(options: {
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onSelect: () => void;
-  onCancel?: () => void;
-}): KeyboardAction[] {
-  return [
-    {
-      key: ['j', 'arrowdown'],
-      handler: options.onMoveDown,
-      description: 'Move down',
-    },
-    {
-      key: ['k', 'arrowup'],
-      handler: options.onMoveUp,
-      description: 'Move up',
-    },
-    {
-      key: 'enter',
-      handler: options.onSelect,
-      description: 'Select item',
-    },
-    ...(options.onCancel ? [{
-      key: 'escape',
-      handler: options.onCancel,
-      description: 'Cancel',
-    }] : []),
-  ];
-}

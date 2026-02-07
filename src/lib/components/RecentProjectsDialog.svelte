@@ -7,10 +7,12 @@
     shortenedPaths,
     gitStatuses,
   } from "../stores/projectStore.js";
+  import { useNavigation } from "../utils/NavigationController.js";
   import {
-    keyboardManager,
-    createNavigationActions,
-  } from "../utils/keyboardManager.js";
+    KEYBOARD_CONTEXTS,
+    UI_TEXT,
+    SHORTCUTS_FLAT,
+  } from "../utils/constants.js";
 
   let {
     isOpen,
@@ -22,32 +24,19 @@
 
   let selectedIndex = $state(0);
   let dialogElement = $state<HTMLElement>();
+  let navigation: ReturnType<typeof useNavigation> | undefined;
 
   function getDisplayPath(index: number): string {
     return $shortenedPaths[index] || $recentProjects[index] || "";
   }
 
-  function handleProjectSelect(projectPath: string) {
+  function openSelectedProject(index: number, projectPath: string) {
     openProject(projectPath);
     onClose();
   }
 
   function getProjectName(path: string): string {
     return path.split(/[/\\]/).pop() || "Unknown Project";
-  }
-
-  function moveUp() {
-    selectedIndex = Math.max(selectedIndex - 1, 0);
-  }
-
-  function moveDown() {
-    selectedIndex = Math.min(selectedIndex + 1, $recentProjects.length - 1);
-  }
-
-  function selectCurrent() {
-    if ($recentProjects[selectedIndex]) {
-      handleProjectSelect($recentProjects[selectedIndex]);
-    }
   }
 
   function closeDialog() {
@@ -62,9 +51,13 @@
         return newProjects;
       });
 
-      // Adjust selectedIndex if needed
-      if (selectedIndex >= $recentProjects.length - 1) {
-        selectedIndex = Math.max(0, $recentProjects.length - 2);
+      // Update navigation with new items and adjust selectedIndex if needed
+      const newProjectsArray = $recentProjects;
+      navigation?.updateItems(newProjectsArray);
+      
+      if (selectedIndex >= newProjectsArray.length && newProjectsArray.length > 0) {
+        selectedIndex = newProjectsArray.length - 1;
+        navigation?.updateSelectedIndex(selectedIndex);
       }
     }
   }
@@ -73,89 +66,53 @@
     if (isOpen) {
       selectedIndex = 0;
 
-      // Register keyboard context for dialog
-      const navigationActions = createNavigationActions({
-        onMoveUp: moveUp,
-        onMoveDown: moveDown,
-        onSelect: selectCurrent,
+      // Setup navigation controller
+      navigation = useNavigation({
+        contextName: KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG,
+        items: $recentProjects,
+        selectedIndex,
+        onSelect: openSelectedProject,
         onCancel: closeDialog,
+        additionalActions: [
+          {
+            key: SHORTCUTS_FLAT.DELETE,
+            handler: deleteCurrentProject,
+            description: "Delete project from recent list",
+          },
+        ],
+        autoFocus: true,
+        element: dialogElement,
       });
 
-      // Add delete action
-      navigationActions.push({
-        key: "d",
-        handler: deleteCurrentProject,
-        description: "Delete project from recent list",
-      });
+      navigation.activate();
 
-      keyboardManager.registerContext(
-        "recent-projects-dialog",
-        navigationActions,
-      );
-      keyboardManager.setActiveContext("recent-projects-dialog");
-
+      // Listen for navigation changes
       if (dialogElement) {
-        dialogElement.focus();
+        dialogElement.addEventListener('navigation-change', (event: Event) => {
+          const customEvent = event as CustomEvent;
+          selectedIndex = customEvent.detail.selectedIndex;
+        });
       }
     }
   });
 
   onDestroy(() => {
-    // Context will be restored by DialogManager
-  });
-
-  // Watch for isOpen changes
-  $effect(() => {
-    if (isOpen) {
-      selectedIndex = 0;
-
-      // Register keyboard context for dialog
-      const navigationActions = createNavigationActions({
-        onMoveUp: moveUp,
-        onMoveDown: moveDown,
-        onSelect: selectCurrent,
-        onCancel: closeDialog,
-      });
-
-      // Add delete action
-      navigationActions.push({
-        key: "d",
-        handler: deleteCurrentProject,
-        description: "Delete project from recent list",
-      });
-
-      keyboardManager.registerContext(
-        "recent-projects-dialog",
-        navigationActions,
-      );
-      keyboardManager.setActiveContext("recent-projects-dialog");
-
-      setTimeout(() => {
-        if (dialogElement) {
-          dialogElement.focus();
-        }
-      }, 0);
-    }
+    navigation?.destroy();
   });
 </script>
 
 {#if isOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="dialog-backdrop" onclick={onClose}>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="dialog-backdrop">
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div
       class="dialog-container"
-      onclick={(e) => e.stopPropagation()}
       bind:this={dialogElement}
       tabindex="0"
     >
       <div class="dialog-header">
         <div class="header-title">
           <Clock size={16} />
-          <h3>Recent Projects</h3>
+          <h3>{UI_TEXT.RECENT_PROJECTS_TITLE}</h3>
         </div>
         <button class="close-button" onclick={onClose}>
           <X size={16} />
@@ -165,14 +122,14 @@
       <div class="projects-list">
         {#if $recentProjects.length === 0}
           <div class="empty-state">
-            <p>No recent projects found</p>
+            <p>{UI_TEXT.NO_RECENT_PROJECTS}</p>
           </div>
         {:else}
           {#each $recentProjects as project, index}
             {@const git = $gitStatuses[index]}
             <button
               class="project-item {selectedIndex === index ? 'selected' : ''}"
-              onclick={() => handleProjectSelect(project)}
+              onclick={() => openSelectedProject(index, project)}
             >
               <div class="project-icon">
                 <FolderOpen size={16} />
@@ -195,10 +152,10 @@
                         <span class="git-count">{git.behind}</span>
                       </span>
                     {:else}
-                      <span class="git-no-upstream">Publish</span>
+                      <span class="git-no-upstream">{UI_TEXT.PUBLISH}</span>
                     {/if}
                   {:else}
-                    <span class="git-not-repo">No Git</span>
+                    <span class="git-not-repo">{UI_TEXT.NO_GIT}</span>
                   {/if}
                 </div>
               {/if}
@@ -209,10 +166,10 @@
 
       <div class="dialog-footer">
         <div class="shortcuts-info">
-          <!-- <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span> -->
-          <span><kbd>Enter</kbd> Open</span>
-          <span><kbd>D</kbd> Delete</span>
-          <span><kbd>Esc</kbd> Close</span>
+          <!-- <span><kbd>↑</kbd><kbd>↓</kbd> {UI_TEXT.NAVIGATE}</span> -->
+          <span><kbd>Enter</kbd> {UI_TEXT.OPEN}</span>
+          <span><kbd>D</kbd> {UI_TEXT.DELETE}</span>
+          <span><kbd>Esc</kbd> {UI_TEXT.CLOSE}</span>
         </div>
       </div>
     </div>
@@ -336,7 +293,7 @@
   }
 
   .project-icon {
-    color: #4ade80;
+    color: var(--text-accent);
     flex-shrink: 0;
   }
 
