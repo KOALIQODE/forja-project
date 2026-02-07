@@ -293,7 +293,7 @@
   }
 
   .project-icon {
-    color: #4ade80;
+    color: var(--text-accent);
     flex-shrink: 0;
   }
 
