@@ -1,13 +1,20 @@
 <script lang="ts">
-  import { keyboardManager } from "../../utils/keyboardManager";
+  import { keyboardManager, formatShortcutKey } from "../../utils/keyboardManager";
+  import { UI_TEXT, SHORTCUTS_FLAT } from "../../utils/constants.js";
   
-  export let visible = false;
-  export let shortcuts: Array<{key: string, description: string}> = [];
+  let { visible = false, shortcuts = [] }: { 
+    visible: boolean, 
+    shortcuts: Array<{key: string, description: string}> 
+  } = $props();
   
   function handleQuit() {
     keyboardManager.hideShortcutsPanel();
   }
   
+  function handleShow() {
+    keyboardManager.showShortcutsPanel();
+  }
+
   // Listen for 'q' key to close
   function handleKeyDown(event: KeyboardEvent) {
     if (visible && event.key.toLowerCase() === 'q') {
@@ -26,7 +33,7 @@
   }
 </script>
 
-<svelte:window on:keydown={handleManagePanel} />
+<svelte:window onkeydown={handleKeyDown} />
 
 {#if visible}
   <div class="shortcuts-panel">
@@ -48,19 +55,19 @@
 <style>
   .shortcuts-panel {
     position: fixed;
-    bottom: var(--spacing-2xl);
-    right: var(--spacing-2xl);
-    background: var(--gradient-primary);
-    border: 1px solid var(--border-secondary);
-    border-radius: var(--radius-sm);
-    padding: var(--spacing-xl);
+    bottom: 24px;
+    right: 24px;
+    background: rgba(15, 15, 15, 0.9);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 16px;
     max-width: 320px;
     min-width: 280px;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     backdrop-filter: blur(10px);
-    z-index: var(--z-overlay);
-    color: var(--text-secondary);
-    animation: slideIn var(--transition-normal);
+    z-index: 1000;
+    color: #ccc;
+    animation: slideIn 0.2s ease-out;
   }
 
   @keyframes slideIn {
@@ -80,61 +87,61 @@
     align-items: center;
     margin-bottom: 12px;
     padding-bottom: 8px;
-    border-bottom: 1px solid #333333;
+    border-bottom: 1px solid #333;
   }
 
   .panel-header h3 {
     margin: 0;
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    color: #eee;
   }
 
   .close-hint {
-    font-size: var(--font-size-base);
-    color: var(--text-disabled);
+    font-size: 11px;
+    color: #666;
   }
 
   .close-hint kbd {
     background: rgba(255, 255, 255, 0.1);
-    color: var(--text-muted);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    font-family: var(--font-family-mono);
+    color: #888;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: monospace;
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   .shortcuts-list {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-xs);
+    gap: 4px;
   }
 
   .shortcut-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--spacing-sm) 0;
+    padding: 4px 0;
   }
 
   .shortcut-key {
-    background: var(--bg-surface-focus);
-    color: var(--accent-green);
-    padding: var(--spacing-xs) var(--spacing-md);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    font-family: var(--font-family-mono);
-    border: 1px solid var(--border-focus);
+    background: rgba(255, 255, 255, 0.05);
+    color: #4ade80;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: monospace;
+    border: 1px solid rgba(74, 222, 128, 0.2);
     min-width: auto;
   }
 
   .shortcut-description {
-    color: var(--text-muted);
-    font-size: var(--font-size-md);
-    font-weight: var(--font-weight-normal);
-    margin-right: var(--spacing-lg);
+    color: #888;
+    font-size: 12px;
+    font-weight: 400;
+    margin-right: 16px;
     flex: 1;
   }
 </style>

@@ -100,9 +100,9 @@ export class KeyboardManager {
   /**
    * Get the current active context
    */
-  getActiveContext(): string | null {
-    return this.activeContext;
-  }
+  // getActiveContext(): string | null {
+  //   return this.activeContext;
+  // }
 
   /**
    * Enable/disable a specific context
@@ -369,3 +369,44 @@ export class KeyboardManager {
 
 // Singleton instance
 export const keyboardManager = new KeyboardManager();
+
+// Helper function to create navigation actions
+export function createNavigationActions(options: {
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onSelect: () => void;
+  onCancel?: () => void;
+}): KeyboardAction[] {
+  return [
+    {
+      key: ['j', 'arrowdown'],
+      handler: options.onMoveDown,
+      description: 'Move down',
+    },
+    {
+      key: ['k', 'arrowup'],
+      handler: options.onMoveUp,
+      description: 'Move up',
+    },
+    {
+      key: 'enter',
+      handler: options.onSelect,
+      description: 'Select item',
+    },
+    ...(options.onCancel ? [{
+      key: 'escape',
+      handler: options.onCancel,
+      description: 'Cancel',
+    }] : []),
+  ];
+}
+
+/**
+ * Format shortcut key for display
+ */
+export function formatShortcutKey(key: string | string[]): string {
+  if (Array.isArray(key)) {
+    return key[0].toUpperCase();
+  }
+  return key.toUpperCase();
+}

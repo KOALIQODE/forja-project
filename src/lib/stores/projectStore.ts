@@ -11,7 +11,25 @@ export interface GitStatus {
   has_upstream: boolean;
 }
 
-export const currentProject = writable<string | null>(null);
+// Key for localStorage persistence
+const CURRENT_PROJECT_KEY = "forja-current-project";
+
+// Get initial value from localStorage
+const initialProject = typeof localStorage !== 'undefined' ? localStorage.getItem(CURRENT_PROJECT_KEY) : null;
+
+export const currentProject = writable<string | null>(initialProject);
+
+// Subscribe to changes to save to localStorage
+if (typeof localStorage !== 'undefined') {
+  currentProject.subscribe(value => {
+    if (value) {
+      localStorage.setItem(CURRENT_PROJECT_KEY, value);
+    } else {
+      localStorage.removeItem(CURRENT_PROJECT_KEY);
+    }
+  });
+}
+
 export const shortenedPaths = writable<string[]>([]);
 export const gitStatuses = writable<GitStatus[]>([]);
 const cache = new Map<string, string[]>();

@@ -1,6 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod commands;
-use commands::{git, path};
+use commands::{git, path, fs_explorer};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -11,6 +11,8 @@ pub fn run() {
             path::get_shortened_paths,
             path::read_file,
             path::list_directory,
+            fs_explorer::explore_directory,
+            fs_explorer::search_files,
             git::git_status_batch
         ])
         .run(tauri::generate_context!())

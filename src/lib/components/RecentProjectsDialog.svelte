@@ -11,6 +11,13 @@
     keyboardManager,
     createNavigationActions,
   } from "../utils/keyboardManager";
+  import { useNavigation } from "../utils/NavigationController";
+  import {
+    KEYBOARD_CONTEXTS,
+    SHORTCUTS_FLAT,
+    UI_TEXT,
+    GIT_STATUS,
+  } from "../utils/constants.js";
 
   let {
     isOpen,

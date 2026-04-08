@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type Snippet } from "svelte";
+  import type { Snippet } from "svelte";
   import { steppedGradient } from "../lib/utils/backgroundLayer"
   import TitleBar from "../lib/components/TitleBar.svelte";
   import ShortcutsManager from "../lib/components/shortcuts/ShortcutsManager.svelte";
@@ -17,7 +17,7 @@
   let gradient = $derived(steppedGradient(steps, angle, from, to));
 </script>
 
-<div class="flex h-screen flex-col overflow-hidden" style="background: {gradient};">
+<div class="flex h-screen flex-col overflow-hidden font-sans" style="background: {gradient};">
   <TitleBar/>
   <main class="flex-1 overflow-hidden relative">
     {@render children()}
@@ -33,9 +33,7 @@
     padding: 0;
     height: 100%;
     overflow: hidden;
-  }
-
-  :global(body) {
+    /* Usamos el nombre exacto que proporciona Fontsource Variable */
     font-family: 'Montserrat Variable', sans-serif;
   }
 </style>
