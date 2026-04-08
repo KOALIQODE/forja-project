@@ -5,6 +5,13 @@
   import { openRecentProjectsDialog } from "../stores/dialogStore";
   import { keyboardManager } from "../utils/keyboardManager";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { 
+    KEYBOARD_CONTEXTS, 
+    SHORTCUTS_FLAT,
+    KEYBOARD_CONFIG,
+    UI_TEXT, 
+    ERROR_MESSAGES,
+  } from "../utils/constants.js";
   
   // Nvim integration imports
   import { 
@@ -59,7 +66,7 @@
         openProject(selected);
       }
     } catch (error) {
-      console.error("Error opening folder dialog:", error);
+      console.error(ERROR_MESSAGES.FOLDER_DIALOG_FAILED, error);
     }
   }
 
@@ -104,8 +111,8 @@
     <!-- Header section -->
     <header class="welcome-header">
       <h1 class="app-title">
-        <span class="title-main">Forja Studio</span>
-        <span class="title-sub">Editor</span>
+        <span class="title-main">{UI_TEXT.APP_TITLE}</span>
+        <span class="title-sub">{UI_TEXT.APP_SUBTITLE}</span>
       </h1>
       <p class="version">v{version}</p>
     </header>
@@ -116,7 +123,7 @@
         The essence of <span class="vim-highlight">Vim</span> in a native interface
       </p>
       <p class="description">
-        Keyboard navigation, fast commands, efficient editing
+        {UI_TEXT.DESCRIPTION}
       </p>
     </section>
 
@@ -143,7 +150,7 @@
 
     <!-- Footer -->
     <footer class="welcome-footer">
-      <p class="footer-text">Press <kbd>?</kbd> for keyboard shortcuts</p>
+      <p class="footer-text">{UI_TEXT.KEYBOARD_SHORTCUTS_HELP}</p>
     </footer>
   </div>
 </main>
@@ -163,25 +170,25 @@
   .welcome-container {
     max-width: 480px;
     width: 100%;
-    padding: 48px 32px;
+    padding: var(--spacing-6xl) var(--spacing-4xl);
     text-align: center;
   }
 
   .welcome-header {
-    margin-bottom: 32px;
+    margin-bottom: var(--spacing-4xl);
   }
 
   .app-title {
-    font-size: 48px;
-    font-weight: 300;
-    margin: 0 0 12px 0;
+    font-size: var(--font-size-5xl);
+    font-weight: var(--font-weight-light);
+    margin: 0 0 var(--spacing-lg) 0;
     letter-spacing: -0.02em;
     line-height: 1.1;
   }
 
   .title-main {
-    color: #ffffff;
-    font-weight: 600;
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
   }
 
   .title-sub {
@@ -190,36 +197,36 @@
   }
 
   .version {
-    color: #666666;
-    font-size: 14px;
-    font-weight: 500;
+    color: var(--git-muted);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-medium);
     margin: 0;
     opacity: 0.8;
   }
 
   .tagline-section {
-    margin-bottom: 40px;
+    margin-bottom: var(--spacing-5xl);
   }
 
   .tagline {
-    font-size: 24px;
-    font-weight: 400;
-    margin: 0 0 2px 0;
-    color: #cccccc;
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-normal);
+    margin: 0 0 var(--spacing-xs) 0;
+    color: var(--text-muted);
     line-height: 1.4;
   }
 
   .vim-highlight {
-    color: #4ade80;
-    font-weight: 600;
-    background: linear-gradient(45deg, #4ade80, #22c55e);
+    color: var(--accent-green);
+    font-weight: var(--font-weight-semibold);
+    background: var(--gradient-accent);
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
   .description {
-    font-size: 16px;
+    font-size: var(--font-size-xl);
     color: #999999;
     margin: 0;
     line-height: 1.5;
@@ -228,18 +235,18 @@
   .actions-section {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    margin-bottom: 32px;
+    gap: var(--gap-2xl);
+    margin-bottom: var(--spacing-4xl);
   }
 
   .action-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid #333333;
-    border-radius: 8px;
-    padding: 20px 24px;
-    color: #e0e0e0;
-    font-size: 14px;
-    font-weight: 500;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-2xl) var(--spacing-3xl);
+    color: var(--text-secondary);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-medium);
     cursor: pointer;
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
@@ -257,34 +264,17 @@
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.05),
-      transparent
-    );
-    transition: left 0.5s ease;
+    background: var(--gradient-shimmer);
+    transition: left var(--transition-slow);
   }
 
   .action-btn:hover::before {
     left: 100%;
   }
 
-  .action-btn.primary {
-    border-color: #333333;
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .action-btn.primary:hover {
+  .action-btn:hover {
     border-color: #555555;
-    background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(255, 255, 255, 0.1);
-  }
-
-  .action-btn.secondary:hover {
-    border-color: #555555;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-surface-hover);
     transform: translateY(-1px);
   }
 
@@ -314,16 +304,16 @@
 
   .action-btn span {
     flex: 1;
-    margin-left: 12px;
+    margin-left: var(--spacing-lg);
   }
 
   .shortcut {
     background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: "Courier New", monospace;
+    color: var(--text-muted);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    font-family: var(--font-family-mono);
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
@@ -332,37 +322,27 @@
   }
 
   .footer-text {
-    font-size: 14px;
-    color: #888888;
+    font-size: var(--font-size-lg);
+    color: var(--text-disabled);
     margin: 0;
-  }
-
-  .footer-text kbd {
-    background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 12px;
-    font-family: "Courier New", monospace;
-    border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   /* Responsive */
   @media (max-width: 640px) {
     .welcome-container {
-      padding: 32px 24px;
+      padding: var(--spacing-4xl) var(--spacing-3xl);
     }
 
     .app-title {
-      font-size: 36px;
+      font-size: var(--font-size-4xl);
     }
 
     .tagline {
-      font-size: 20px;
+      font-size: var(--font-size-2xl);
     }
 
     .action-btn {
-      padding: 16px 20px;
+      padding: var(--spacing-xl) var(--spacing-2xl);
     }
   }
 

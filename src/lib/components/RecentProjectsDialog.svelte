@@ -1,14 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import {
-    Folder,
-    Clock,
-    X,
-    ChevronUp,
-    ChevronDown,
-    MoveUp,
-    MoveDown,
-  } from "@lucide/svelte";
+  import { FolderOpen, Clock, X } from "@lucide/svelte";
   import {
     recentProjects,
     openProject,
@@ -30,32 +22,19 @@
 
   let selectedIndex = $state(0);
   let dialogElement = $state<HTMLElement>();
+  let navigation: ReturnType<typeof useNavigation> | undefined;
 
   function getDisplayPath(index: number): string {
     return $shortenedPaths[index] || $recentProjects[index] || "";
   }
 
-  function handleProjectSelect(projectPath: string) {
+  function openSelectedProject(index: number, projectPath: string) {
     openProject(projectPath);
     onClose();
   }
 
   function getProjectName(path: string): string {
     return path.split(/[/\\]/).pop() || "Unknown Project";
-  }
-
-  function moveUp() {
-    selectedIndex = Math.max(selectedIndex - 1, 0);
-  }
-
-  function moveDown() {
-    selectedIndex = Math.min(selectedIndex + 1, $recentProjects.length - 1);
-  }
-
-  function selectCurrent() {
-    if ($recentProjects[selectedIndex]) {
-      handleProjectSelect($recentProjects[selectedIndex]);
-    }
   }
 
   function closeDialog() {
@@ -70,9 +49,13 @@
         return newProjects;
       });
 
-      // Adjust selectedIndex if needed
-      if (selectedIndex >= $recentProjects.length - 1) {
-        selectedIndex = Math.max(0, $recentProjects.length - 2);
+      // Update navigation with new items and adjust selectedIndex if needed
+      const newProjectsArray = $recentProjects;
+      navigation?.updateItems(newProjectsArray);
+      
+      if (selectedIndex >= newProjectsArray.length && newProjectsArray.length > 0) {
+        selectedIndex = newProjectsArray.length - 1;
+        navigation?.updateSelectedIndex(selectedIndex);
       }
     }
   }
@@ -81,89 +64,53 @@
     if (isOpen) {
       selectedIndex = 0;
 
-      // Register keyboard context for dialog
-      const navigationActions = createNavigationActions({
-        onMoveUp: moveUp,
-        onMoveDown: moveDown,
-        onSelect: selectCurrent,
+      // Setup navigation controller
+      navigation = useNavigation({
+        contextName: KEYBOARD_CONTEXTS.RECENT_PROJECTS_DIALOG,
+        items: $recentProjects,
+        selectedIndex,
+        onSelect: openSelectedProject,
         onCancel: closeDialog,
+        additionalActions: [
+          {
+            key: SHORTCUTS_FLAT.DELETE,
+            handler: deleteCurrentProject,
+            description: "Delete project from recent list",
+          },
+        ],
+        autoFocus: true,
+        element: dialogElement,
       });
 
-      // Add delete action
-      navigationActions.push({
-        key: "d",
-        handler: deleteCurrentProject,
-        description: "Delete project from recent list",
-      });
+      navigation.activate();
 
-      keyboardManager.registerContext(
-        "recent-projects-dialog",
-        navigationActions,
-      );
-      keyboardManager.setActiveContext("recent-projects-dialog");
-
+      // Listen for navigation changes
       if (dialogElement) {
-        dialogElement.focus();
+        dialogElement.addEventListener('navigation-change', (event: Event) => {
+          const customEvent = event as CustomEvent;
+          selectedIndex = customEvent.detail.selectedIndex;
+        });
       }
     }
   });
 
   onDestroy(() => {
-    // Context will be restored by DialogManager
-  });
-
-  // Watch for isOpen changes
-  $effect(() => {
-    if (isOpen) {
-      selectedIndex = 0;
-
-      // Register keyboard context for dialog
-      const navigationActions = createNavigationActions({
-        onMoveUp: moveUp,
-        onMoveDown: moveDown,
-        onSelect: selectCurrent,
-        onCancel: closeDialog,
-      });
-
-      // Add delete action
-      navigationActions.push({
-        key: "d",
-        handler: deleteCurrentProject,
-        description: "Delete project from recent list",
-      });
-
-      keyboardManager.registerContext(
-        "recent-projects-dialog",
-        navigationActions,
-      );
-      keyboardManager.setActiveContext("recent-projects-dialog");
-
-      setTimeout(() => {
-        if (dialogElement) {
-          dialogElement.focus();
-        }
-      }, 0);
-    }
+    navigation?.destroy();
   });
 </script>
 
 {#if isOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="dialog-backdrop" onclick={onClose}>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="dialog-backdrop">
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div
       class="dialog-container"
-      onclick={(e) => e.stopPropagation()}
       bind:this={dialogElement}
       tabindex="0"
     >
       <div class="dialog-header">
         <div class="header-title">
           <Clock size={16} />
-          <h3>Recent Projects</h3>
+          <h3>{UI_TEXT.RECENT_PROJECTS_TITLE}</h3>
         </div>
         <button class="close-button" onclick={onClose}>
           <X size={16} />
@@ -173,17 +120,17 @@
       <div class="projects-list">
         {#if $recentProjects.length === 0}
           <div class="empty-state">
-            <p>No recent projects found</p>
+            <p>{UI_TEXT.NO_RECENT_PROJECTS}</p>
           </div>
         {:else}
           {#each $recentProjects as project, index}
             {@const git = $gitStatuses[index]}
             <button
               class="project-item {selectedIndex === index ? 'selected' : ''}"
-              onclick={() => handleProjectSelect(project)}
+              onclick={() => openSelectedProject(index, project)}
             >
               <div class="project-icon">
-                <Folder size={16} />
+                <FolderOpen size={16} />
               </div>
               <div class="project-info">
                 <div class="project-name">{getProjectName(project)}</div>
@@ -194,13 +141,19 @@
                   {#if git.is_repo}
                     <span class="branch">{git.branch}</span>
                     {#if git.has_upstream}
-                      <span><MoveUp size={12} /> {git.ahead}</span>
-                      <span><MoveDown size={12} /> {git.behind}</span>
+                      <span class="git-indicator">
+                        <kbd class="git-arrow">↑</kbd>
+                        <span class="git-count">{git.ahead}</span>
+                      </span>
+                      <span class="git-indicator">
+                        <kbd class="git-arrow">↓</kbd>
+                        <span class="git-count">{git.behind}</span>
+                      </span>
                     {:else}
-                      <span class="git-no-upstream">Publish</span>
+                      <span class="git-no-upstream">{UI_TEXT.PUBLISH}</span>
                     {/if}
                   {:else}
-                    <span class="git-not-repo">No Git</span>
+                    <span class="git-not-repo">{UI_TEXT.NO_GIT}</span>
                   {/if}
                 </div>
               {/if}
@@ -211,10 +164,10 @@
 
       <div class="dialog-footer">
         <div class="shortcuts-info">
-          <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-          <span><kbd>Enter</kbd> Open</span>
-          <span><kbd>D</kbd> Delete</span>
-          <span><kbd>Esc</kbd> Close</span>
+          <!-- <span><kbd>↑</kbd><kbd>↓</kbd> {UI_TEXT.NAVIGATE}</span> -->
+          <span><kbd>Enter</kbd> {UI_TEXT.OPEN}</span>
+          <span><kbd>D</kbd> {UI_TEXT.DELETE}</span>
+          <span><kbd>Esc</kbd> {UI_TEXT.CLOSE}</span>
         </div>
       </div>
     </div>
@@ -237,19 +190,19 @@
   }
 
   .dialog-container {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-    border: 1px solid #404040;
-    border-radius: 12px;
+    background: var(--gradient-primary);
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-sm);
     width: 600px;
     max-height: 70vh;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.8);
+    box-shadow: var(--shadow-md);
     outline: none;
-    color: #e0e0e0;
+    color: var(--text-secondary);
   }
 
   .dialog-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid #333333;
+    padding: var(--spacing-xl) var(--spacing-2xl);
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -258,32 +211,47 @@
   .header-title {
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: #ffffff;
+    gap: var(--gap-lg);
+    color: var(--text-primary);
+  }
+
+  .header-title :global(svg) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
   }
 
   .header-title h3 {
     margin: 0;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
   }
 
   .close-button {
     background: transparent;
     border: none;
-    color: #888888;
+    color: var(--text-disabled);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: all var(--transition-fast);
+  }
+
+  .close-button :global(svg) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
   }
 
   .close-button:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
   }
 
   .projects-list {
@@ -292,28 +260,29 @@
   }
 
   .empty-state {
-    padding: 40px 20px;
+    padding: var(--spacing-5xl) var(--spacing-2xl);
     text-align: center;
-    color: #888888;
+    color: var(--text-disabled);
   }
 
   .empty-state p {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--font-size-lg);
   }
 
   .project-item {
     width: 100%;
-    padding: 12px 20px;
+    padding: var(--spacing-lg) var(--spacing-2xl);
     background: transparent;
     border: none;
+    border-radius: var(--radius-md);
     text-align: left;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 12px;
-    transition: background 0.15s ease;
-    color: #e0e0e0;
+    gap: var(--gap-xl);
+    transition: background var(--transition-fast);
+    color: var(--text-secondary);
   }
 
   .project-item:hover,
@@ -322,7 +291,7 @@
   }
 
   .project-icon {
-    color: #4ade80;
+    color: var(--text-accent);
     flex-shrink: 0;
   }
 
@@ -339,82 +308,88 @@
   }
 
   .project-path {
-    font-size: 12px;
+    font-size: 10px;
     color: #888888;
-    font-family: "Courier New", monospace;
+    font-family: "Cascadia Code", monospace;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .dialog-footer {
-    padding: 12px 20px;
-    border-top: 1px solid #333333;
+    padding: var(--spacing-lg) var(--spacing-2xl);
+    border-top: 1px solid var(--border-primary);
     background: rgba(0, 0, 0, 0.2);
   }
 
   .shortcuts-info {
     display: flex;
-    gap: 16px;
-    font-size: 12px;
-    color: #888888;
+    gap: var(--gap-2xl);
+    font-size: var(--font-size-md);
+    color: var(--text-disabled);
   }
 
   .shortcuts-info kbd {
     background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-family: "Courier New", monospace;
+    color: var(--text-muted);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-base);
+    font-family: var(--font-family-mono);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    margin-right: 4px;
+    margin-right: var(--spacing-sm);
   }
-  /*:root {
-    --bg-hover: rgba(255, 255, 255, 0.04);
-    --bg-selected: rgba(0, 122, 204, 0.15);
-
-    --text-primary: #e5e7eb;
-    --text-secondary: #9ca3af;
-
-    --git-clean: #9ca3af;
-    --git-ahead: #22c55e;
-    --git-behind: #f59e0b;
-    --git-upstream: #38bdf8;
-    --git-muted: #6b7280;
-  }*/
   /* ===== Git ===== */
   .project-git-status {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 4px;
-    font-weight: 600;
-    font-size: 11px;
-    color: #6b7280;
+    gap: var(--gap-md);
+    margin-top: var(--spacing-xs);
+    font-size: var(--font-size-sm);
+    color: var(--git-text);
   }
 
-  /*.branch {
-    color: #9ca3af;
+  .branch {
+    color: var(--git-branch);
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-medium);
   }
 
-  .git-diffs {
-    color: #9ca3af;
+  .git-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    color: var(--git-text);
   }
 
-  .git-behind {
-    color: var(--git-behind);
+  .git-arrow {
+    color: var(--text-disabled);
+    padding: 1px var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    line-height: 1;
   }
 
-  .git-clean {
-    color: var(--git-clean);
+  .git-count {
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-sm);
   }
 
   .git-no-upstream {
-    color: var(--git-upstream);
+    background: var(--accent-blue-bg);
+    color: var(--accent-blue);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-mono);
+    border: 1px solid var(--accent-blue-border);
   }
 
   .git-not-repo {
     color: var(--git-muted);
-  }*/
+    font-size: var(--font-size-sm);
+  }
+
 </style>
