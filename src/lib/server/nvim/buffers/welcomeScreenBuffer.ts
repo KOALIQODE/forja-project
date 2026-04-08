@@ -17,7 +17,8 @@ export class WelcomeScreenBufferStrategy implements BufferStrategy {
       ],
       mode: NVIM_MODES.NORMAL,
       cursorPosition: { line: 1, col: 0 },
-      maxLines: 3
+      maxLines: 3,
+      isVirtual: false // Inicialmente se crea como activo
     };
   }
 

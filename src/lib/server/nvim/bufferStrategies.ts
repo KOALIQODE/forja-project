@@ -7,6 +7,7 @@ import type { BufferStrategy } from './buffers/baseBuffer';
 
 // Import individual buffer strategies
 import { WelcomeScreenBufferStrategy } from './buffers/welcomeScreenBuffer';
+import { FileBufferStrategy } from './buffers/fileBuffer';
 
 // Re-export types and interfaces for backward compatibility
 export type { NvimBuffer, BufferStrategy } from './buffers/baseBuffer';
@@ -16,11 +17,17 @@ export type { NvimBuffer, BufferStrategy } from './buffers/baseBuffer';
  */
 export class BufferFactory {
   static createStrategy(type: string, options?: any): BufferStrategy {
-    switch (type) {
-      case BUFFER_IDS.WELCOME_SCREEN:
-        return new WelcomeScreenBufferStrategy();
-      default:
-        throw new Error(`Unknown buffer type: ${type}`);
+    // Si el tipo no coincide con un buffer especial, asumimos que es una ruta de archivo
+    if (type === BUFFER_IDS.WELCOME_SCREEN) {
+      return new WelcomeScreenBufferStrategy();
     }
+    
+    // Si tenemos una ruta y contenido, creamos un buffer de archivo real
+    if (options?.filePath && options?.content !== undefined) {
+      return new FileBufferStrategy(options.filePath, options.content);
+    }
+
+    // Por defecto, si el ID parece una ruta, lo tratamos como archivo (aunque esté vacío inicialmente)
+    return new FileBufferStrategy(type, options?.content || "");
   }
 }

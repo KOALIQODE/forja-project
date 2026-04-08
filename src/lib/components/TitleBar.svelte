@@ -24,12 +24,13 @@
   function handleClose() {
     appWindow.close();
   }
+
 </script>
 
-<header class="titlebar">
+<header class="titlebar" data-tauri-drag-region>
   <!-- Left section - Logo/Brand -->
   <div class="titlebar-left">
-    <div class="logo"></div>
+    <!-- <div class="logo"></div> -->
   </div>
 
   <!-- Right section - Actions & Controls -->
@@ -61,18 +62,18 @@
       <button
         class="control-btn minimize"
         title="Minimize"
-        on:click={handleMinimize}
+        onclick={handleMinimize}
       >
         <Minus size="14" />
       </button>
       <button
         class="control-btn maximize"
         title="Maximize"
-        on:click={handleMaximize}
+        onclick={handleMaximize}
       >
         <Square size="12" />
       </button>
-      <button class="control-btn close" title="Close" on:click={handleClose}>
+      <button class="control-btn close" title="Close" onclick={handleClose}>
         <X size="14" />
       </button>
     </div>
@@ -81,7 +82,8 @@
 
 <style>
   .titlebar {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      background: transparent;
+    /*background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);*/
     border-bottom: 1px solid #404040;
     color: #e0e0e0;
     height: 40px;
@@ -90,7 +92,7 @@
     justify-content: space-between;
     padding: 0;
     user-select: none;
-    -webkit-app-region: drag;
+    /*-webkit-app-region: drag;*/
   }
 
   .titlebar-left {
@@ -113,7 +115,7 @@
   .titlebar-right {
     display: flex;
     align-items: center;
-    -webkit-app-region: no-drag;
+    /*-webkit-app-region: no-drag;*/
   }
 
   .actions {

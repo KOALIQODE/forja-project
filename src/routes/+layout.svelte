@@ -1,14 +1,25 @@
 <script lang="ts">
   import { type Snippet } from "svelte";
+  import { steppedGradient } from "../lib/utils/backgroundLayer"
   import TitleBar from "../lib/components/TitleBar.svelte";
   import ShortcutsManager from "../lib/components/shortcuts/ShortcutsManager.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
+  import "../app.css";
+  import '@fontsource-variable/montserrat/wght.css';
+
   let { children }: { children: Snippet } = $props();
+
+  let steps = $state(15);
+  let angle = $state(135);
+  let from  = $state('#0a0a0a');
+  let to    = $state('#1a1a1a');
+  
+  let gradient = $derived(steppedGradient(steps, angle, from, to));
 </script>
 
-<div class="app-container">
-  <TitleBar />
-  <main class="main-content">
+<div class="flex h-screen flex-col overflow-hidden" style="background: {gradient};">
+  <TitleBar/>
+  <main class="flex-1 overflow-hidden relative">
     {@render children()}
   </main>
 </div>
@@ -17,17 +28,6 @@
 <DialogManager />
 
 <style>
-  .app-container {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .main-content {
-    height: calc(100vh - 40px);
-    overflow: auto;
-  }
-
   :global(html, body) {
     margin: 0;
     padding: 0;
@@ -36,22 +36,6 @@
   }
 
   :global(body) {
-    background-color: #0a0a0a;
-    font-family:
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI",
-      Roboto,
-      Oxygen,
-      Ubuntu,
-      Cantarell,
-      "Open Sans",
-      "Helvetica Neue",
-      sans-serif;
-  }
-
-  :global(main) {
-    height: 100%;
+    font-family: 'Montserrat Variable', sans-serif;
   }
 </style>

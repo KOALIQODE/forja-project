@@ -1,6 +1,9 @@
 /**
- * Nvim Embed Client - Singleton Pattern with Dynamic Buffer Management
- * Manages a single embedded Neovim instance with multiple dynamic buffers
+ * NvimEmbedClient - Singleton Pattern with Dynamic Buffer Management
+ * 
+ * Este cliente es el responsable de gestionar el ciclo de vida de la instancia
+ * de Neovim embebida. Actúa como el puente principal entre las peticiones del 
+ * usuario y el motor de Neovim.
  */
 
 import { attach } from 'neovim';
@@ -15,12 +18,16 @@ export class NvimEmbedClient {
   private connectionPromise: Promise<void> | null = null;
   private bufferManager = new BufferManager();
 
+  /**
+   * Constructor privado para asegurar el patrón Singleton.
+   */
   private constructor() {
     // Private constructor for singleton pattern
   }
 
   /**
-   * Get the singleton instance
+   * Obtiene la instancia única (Singleton) del cliente.
+   * @returns {NvimEmbedClient} La instancia del cliente.
    */
   static getInstance(): NvimEmbedClient {
     if (!NvimEmbedClient.instance) {
@@ -30,7 +37,9 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Connect to embedded Neovim instance
+   * Inicia la conexión con el proceso embebido de Neovim si no está ya conectado.
+   * Maneja internamente la sincronización si hay múltiples llamadas simultáneas.
+   * @returns {Promise<void>}
    */
   async connect(): Promise<void> {
     if (this.isConnected) {
@@ -46,6 +55,11 @@ export class NvimEmbedClient {
     await this.connectionPromise;
   }
 
+  /**
+   * Lógica interna para spawnear el proceso nvim y adjuntar el cliente RPC.
+   * @private
+   * @throws {Error} Si Neovim no está instalado o falla la conexión.
+   */
   private async _doConnect(): Promise<void> {
     try {
       // Import child_process dynamically (server-side only)
@@ -54,8 +68,21 @@ export class NvimEmbedClient {
       // Spawn nvim process with --embed flag
       this.nvimProcess = spawn('nvim', ['--embed'], {});
       
+      // Handle early process errors (like ENOENT)
+      this.nvimProcess.on('error', (err: any) => {
+        console.error('Neovim process error:', err);
+        if (err.code === 'ENOENT') {
+          console.error('CRITICAL ERROR: Neovim ("nvim") binary NOT FOUND in PATH.');
+          console.error('Please install Neovim and ensure it is available in your system PATH.');
+        }
+      });
+      
       // Attach to the spawned process
-      this.nvim = await attach({ proc: this.nvimProcess });
+      try {
+        this.nvim = await attach({ proc: this.nvimProcess });
+      } catch (attachError: any) {
+        throw new Error(`Failed to attach to Neovim: ${attachError.message || String(attachError)}`);
+      }
 
       // Configure Neovim options
       await this.nvim.command('set noswapfile');
@@ -71,7 +98,10 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Create or switch to a component buffer
+   * Crea o cambia a un buffer asociado a un componente específico.
+   * @param {string} componentType El tipo de componente (ej. 'welcome', 'editor').
+   * @param {any} [options] Opciones adicionales para la creación del buffer.
+   * @returns {Promise<NvimResponse>} Resultado de la operación con la posición del cursor inicial.
    */
   async createComponentBuffer(componentType: string, options?: any): Promise<NvimResponse> {
     await this.connect();
@@ -98,7 +128,9 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Switch to existing buffer
+   * Cambia el buffer activo actual en Neovim.
+   * @param {string} bufferId ID del buffer al que se desea cambiar.
+   * @returns {Promise<NvimResponse>}
    */
   async switchBuffer(bufferId: string): Promise<NvimResponse> {
     await this.connect();
@@ -129,7 +161,8 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Disconnect from Neovim
+   * Cierra la conexión con Neovim y termina el proceso.
+   * @returns {Promise<void>}
    */
   async disconnect(): Promise<void> {
     if (this.nvim && this.isConnected) {
@@ -153,7 +186,9 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Execute a Neovim command
+   * Ejecuta un comando arbitrario de Neovim (modo Ex).
+   * @param {string} command Comando a ejecutar (ej. 'set number').
+   * @returns {Promise<NvimResponse>}
    */
   async executeCommand(command: string): Promise<NvimResponse> {
     await this.connect();
@@ -178,53 +213,33 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Send input keys to Neovim (for navigation) with dynamic bounds checking
+   * Envía teclas de entrada (input) directamente a Neovim.
+   * Al usar nvim.input, permitimos que Neovim gestione el movimiento, 
+   * los modos y los límites de forma nativa y ultra rápida.
+   * @param {string} keys Teclas a enviar (ej. 'j', '5w', '<Esc>').
+   * @returns {Promise<NvimResponse>}
    */
   async sendInput(keys: string): Promise<NvimResponse> {
     await this.connect();
 
     try {
-      const currentBuffer = this.bufferManager.getCurrentBuffer();
-      if (!currentBuffer) {
-        return {
-          success: false,
-          cursor: { line: 1, col: 0 },
-          error: 'No active buffer'
-        };
-      }
+      // Traducir teclas especiales si es necesario
+      let inputKeys = keys;
+      if (keys === 'Escape') inputKeys = '<Esc>';
+      if (keys === 'Enter') inputKeys = '<CR>';
+      if (keys === 'Backspace') inputKeys = '<BS>';
 
-      const bounds = this.bufferManager.getNavigationBounds(currentBuffer.id);
-      console.log('Current buffer:', currentBuffer.id, 'maxLines:', currentBuffer.maxLines);
-      console.log('Navigation bounds:', bounds);
-      console.log('Current position before move:', currentBuffer.cursorPosition);
+      // Enviar directamente al motor de Neovim
+      await this.nvim.input(inputKeys);
       
-      // Handle navigation with dynamic bounds checking
-      if (keys === 'j') {
-        const currentLine = currentBuffer.cursorPosition.line;
-        console.log(`j pressed: currentLine=${currentLine}, maxLine=${bounds.maxLine}`);
-        if (currentLine < bounds.maxLine) {
-          await this.nvim.command('normal! j');
-        } else {
-          console.log('j blocked: at max line');
-        }
-      } else if (keys === 'k') {
-        const currentLine = currentBuffer.cursorPosition.line;
-        console.log(`k pressed: currentLine=${currentLine}, minLine=${bounds.minLine}`);
-        if (currentLine > bounds.minLine) {
-          await this.nvim.command('normal! k');
-        } else {
-          console.log('k blocked: at min line');
-        }
-      } else {
-        // For other keys, use normal command
-        await this.nvim.command(`normal! ${keys}`);
-      }
-      
+      // Esperar un instante mínimo para que Neovim procese el cambio
+      // y luego sincronizar la posición del cursor
       const cursor = await this.updateAndGetCursorPosition();
-      console.log('Cursor position after move:', cursor);
       
-      // Update buffer manager with new cursor position
-      this.bufferManager.updateBufferCursor(currentBuffer.id, cursor);
+      const currentBuffer = this.bufferManager.getCurrentBuffer();
+      if (currentBuffer) {
+        this.bufferManager.updateBufferCursor(currentBuffer.id, cursor);
+      }
 
       return {
         success: true,
@@ -241,7 +256,9 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Update and get current cursor position
+   * Actualiza internamente y retorna la posición actual del cursor en la ventana activa.
+   * @private
+   * @returns {Promise<CursorPosition>}
    */
   private async updateAndGetCursorPosition(): Promise<CursorPosition> {
     if (!this.nvim || !this.isConnected) {
@@ -263,21 +280,25 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Get current cursor position
+   * Retorna la posición actual del cursor.
+   * @returns {Promise<CursorPosition>}
    */
   async getCursorPosition(): Promise<CursorPosition> {
     return await this.updateAndGetCursorPosition();
   }
 
   /**
-   * Check if connected
+   * Verifica si el cliente está conectado a un proceso de Neovim.
+   * @returns {boolean}
    */
   isClientConnected(): boolean {
     return this.isConnected;
   }
 
   /**
-   * Get buffer content (for debugging)
+   * Obtiene el contenido completo del buffer actual como un array de strings.
+   * Útil para depuración y sincronización inicial.
+   * @returns {Promise<string[]>}
    */
   async getBufferContent(): Promise<string[]> {
     await this.connect();
@@ -293,14 +314,16 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Get current buffer info
+   * Obtiene la información del buffer activo gestionado por el BufferManager.
+   * @returns {any}
    */
   getCurrentBufferInfo(): any {
     return this.bufferManager.getCurrentBuffer();
   }
 
   /**
-   * Get strategy for current buffer (for client-side navigation)
+   * Obtiene la estrategia de navegación aplicada al buffer actual.
+   * @returns {any | null}
    */
   getBufferStrategy(): any {
     const currentBuffer = this.bufferManager.getCurrentBuffer();
@@ -310,7 +333,8 @@ export class NvimEmbedClient {
   }
 
   /**
-   * Get all buffer IDs
+   * Retorna una lista con todos los IDs de buffers gestionados.
+   * @returns {string[]}
    */
   getAllBufferIds(): string[] {
     return this.bufferManager.getBufferIds();

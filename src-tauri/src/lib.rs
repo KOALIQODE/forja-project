@@ -9,6 +9,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             path::get_shortened_paths,
+            path::read_file,
+            path::list_directory,
             git::git_status_batch
         ])
         .run(tauri::generate_context!())

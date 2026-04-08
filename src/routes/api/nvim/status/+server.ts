@@ -22,6 +22,7 @@ export const GET: RequestHandler = async () => {
       success: true,
       connected,
       cursor,
+      content: bufferContent,
       bufferLines: bufferContent.length,
       timestamp: Date.now()
     });

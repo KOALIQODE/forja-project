@@ -29,22 +29,33 @@ async function killPortProcess(port: number): Promise<void> {
     const { exec } = await import('child_process');
     const util = await import('util');
     const execAsync = util.promisify(exec);
+    const platform = process.platform;
     
-    // Find process using the port
-    const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
-    const lines = stdout.trim().split('\n');
-    
-    for (const line of lines) {
-      const parts = line.trim().split(/\s+/);
-      const pid = parts[parts.length - 1];
+    if (platform === 'win32') {
+      // Find process using the port on Windows
+      const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
+      const lines = stdout.trim().split('\n');
       
-      if (pid && /^\d+$/.test(pid)) {
-        try {
-          await execAsync(`taskkill /F /PID ${pid}`);
-          console.log(`Killed process ${pid} using port ${port}`);
-        } catch (killError) {
-          // Ignore kill errors, process might have already exited
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        const pid = parts[parts.length - 1];
+        
+        if (pid && /^\d+$/.test(pid)) {
+          try {
+            await execAsync(`taskkill /F /PID ${pid}`);
+            console.log(`Killed process ${pid} using port ${port}`);
+          } catch (killError) {
+            // Ignore kill errors, process might have already exited
+          }
         }
+      }
+    } else {
+      // Linux/macOS command to kill process using the port
+      try {
+        await execAsync(`lsof -ti:${port} | xargs kill -9`);
+        console.log(`Killed processes using port ${port}`);
+      } catch (killError) {
+        // If lsof fails or returns empty, assume no process is using the port
       }
     }
   } catch (error) {

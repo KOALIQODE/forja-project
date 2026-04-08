@@ -150,14 +150,14 @@
 
 <style>
   .welcome-screen {
-    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+    /*background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);*/
     color: #e0e0e0;
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    /*font-family:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;*/
   }
 
   .welcome-container {
@@ -241,7 +241,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -289,9 +289,23 @@
   }
 
   .action-btn.keyboard-focused {
-    background: rgba(74, 222, 128, 0.15);
+    background: rgba(74, 222, 128, 0.08);
     border-color: #4ade80;
-    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.3);
+    color: #ffffff;
+    transform: translateX(8px);
+    box-shadow: 0 0 25px rgba(74, 222, 128, 0.15);
+    z-index: 10;
+  }
+
+  .action-btn.keyboard-focused::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #4ade80;
+    box-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
   }
 
   .welcome-screen:focus {

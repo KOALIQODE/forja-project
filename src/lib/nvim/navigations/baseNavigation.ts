@@ -161,48 +161,42 @@ export class NavigationBuilder {
         }
       }
 
-      // Handle vertical navigation
+      // Handle Escape
+      if (e.key === "Escape") {
+        e.preventDefault();
+        await sendNvimCommand("Escape", "input");
+        await this.options.onCancel?.();
+        return;
+      }
+
+      // Handle vertical navigation (only if not handled by custom keys)
       if (this.options.allowVertical) {
-        if (e.key === "j") {
+        if (e.key === "j" || e.key === "k") {
           e.preventDefault();
-          await sendNvimCommand("j", "input");
-          await this.options.onNavigateDown?.();
-          handled = true;
-        } else if (e.key === "k") {
-          e.preventDefault();
-          await sendNvimCommand("k", "input");
-          await this.options.onNavigateUp?.();
-          handled = true;
+          await sendNvimCommand(e.key, "input");
+          if (e.key === "j") await this.options.onNavigateDown?.();
+          else await this.options.onNavigateUp?.();
+          return;
         }
       }
 
       // Handle horizontal navigation
       if (this.options.allowHorizontal) {
-        if (e.key === "h") {
+        if (e.key === "h" || e.key === "l" || e.key === "w" || e.key === "b" || e.key === "e") {
           e.preventDefault();
-          await sendNvimCommand("h", "input");
-          await this.options.onNavigateLeft?.();
-          handled = true;
-        } else if (e.key === "l") {
-          e.preventDefault();
-          await sendNvimCommand("l", "input");
-          await this.options.onNavigateRight?.();
-          handled = true;
+          await sendNvimCommand(e.key, "input");
+          return;
         }
       }
 
-      // Handle Enter
-      if (this.options.allowEnter && e.key === "Enter") {
-        e.preventDefault();
-        await this.options.onSelect?.();
-        handled = true;
-      }
-
-      // Handle Escape
-      if (this.options.allowEscape && e.key === "Escape") {
-        e.preventDefault();
-        await this.options.onCancel?.();
-        handled = true;
+      // Pass-through for code editing (any single character or common motion)
+      if (this.options.allowHorizontal && this.options.allowVertical) {
+        // Si permitimos ambos ejes, asumimos que es un editor real
+        // Enviamos la tecla a Neovim para que él decida qué hacer
+        if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
+          e.preventDefault();
+          await sendNvimCommand(e.key, "input");
+        }
       }
 
       // Handle custom keys (single keys only)

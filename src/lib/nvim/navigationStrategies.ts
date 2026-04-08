@@ -43,22 +43,34 @@
 
 import { BUFFER_IDS } from './contentIds';
 import { WelcomeScreenNavigation } from './navigations/welcomeScreenNavigation';
-import type { NavigationStrategy } from './navigations/baseNavigation';
-
-// Re-export NavigationBuilder for convenience
-export { NavigationBuilder } from './navigations/baseNavigation';
+import { NavigationBuilder, type NavigationStrategy } from './navigations/baseNavigation';
 
 /**
  * Navigation Factory - Creates navigation strategies for client-side
  */
 export class NavigationFactory {
   static createNavigation(bufferType: string): NavigationStrategy {
-    switch (bufferType) {
-      case BUFFER_IDS.WELCOME_SCREEN:
-        return new WelcomeScreenNavigation();
-      default:
-        return new WelcomeScreenNavigation(); // default fallback
+    // Si es la pantalla de bienvenida
+    if (bufferType === BUFFER_IDS.WELCOME_SCREEN) {
+      return new WelcomeScreenNavigation();
     }
+
+    // Por defecto para archivos reales (o cualquier otro ID que parezca una ruta)
+    return {
+      handleNavigation: (onDown, onUp, onSelect) => {
+        return NavigationBuilder.create()
+          .withVertical(true)
+          .withHorizontal(true)
+          .withEnter(true)
+          .withEscape(true)
+          .withCallbacks({
+            onNavigateDown: onDown,
+            onNavigateUp: onUp,
+            onSelect: onSelect
+          })
+          .build();
+      }
+    };
   }
 
   /**
