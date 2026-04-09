@@ -24,7 +24,7 @@
     {#if showWelcome}
       <WelcomeScreen />
     {:else}
-      <BufferView lines={$bufferContent} bufferId={$currentBufferId || ''} />
+      <!-- <BufferView lines={$bufferContent} bufferId={$currentBufferId || ''} /> -->
     {/if}
   </section>
 </main>

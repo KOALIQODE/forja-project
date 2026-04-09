@@ -1,8 +1,8 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { Folder, FolderOpen, FileCode, ChevronRight } from '@lucide/svelte';
+  import { Folder, FolderOpen, FileCode, ChevronRight, Pin } from '@lucide/svelte';
   import { connectNvimForComponent, currentBufferId } from '$lib/stores/nvimStore';
-  import { expandedPaths } from '$lib/stores/explorerStore';
+  import { expandedPaths, pinnedPath } from '$lib/stores/explorerStore';
   import { slide } from 'svelte/transition';
   import FileTreeItem from './FileTreeItem.svelte';
 
@@ -17,13 +17,10 @@
 
   let { entry, depth = 0 }: { entry: FileEntry, depth?: number } = $props();
 
-  // El estado de expansión ahora es reactivo al store global
   let isExpanded = $derived($expandedPaths.has(entry.path));
-  
   let children: FileEntry[] = $state([]);
   let isLoading = $state(false);
 
-  // Cargar metadatos automáticamente cuando se expande
   $effect(() => {
     if (isExpanded && children.length === 0 && !isLoading) {
       loadMetadata();
@@ -58,9 +55,13 @@
       console.error("Error abriendo archivo:", error);
     }
   }
+
+  function pinFolder() {
+    pinnedPath.pin(entry.path);
+  }
 </script>
 
-<div class="flex flex-col">
+<div class="flex flex-col w-full">
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div 
@@ -70,14 +71,18 @@
     onclick={toggle}
     style="padding-left: {depth * 12 + 16}px"
   >
-    <span class="mr-1 flex items-center text-zinc-600 transition-transform duration-200 group-hover:text-zinc-400"
-          class:rotate-90={isExpanded}>
+    <!-- Área izquierda fija (Chevron) - 20px -->
+    <div class="flex w-5 shrink-0 items-center justify-center">
       {#if entry.is_dir}
-        <ChevronRight size="12" />
+        <span class="text-zinc-600 transition-transform duration-200 group-hover:text-zinc-400"
+              class:rotate-90={isExpanded}>
+          <ChevronRight size="12" />
+        </span>
       {/if}
-    </span>
+    </div>
 
-    <span class="mr-2.5 flex items-center opacity-60 transition-opacity group-hover:opacity-100" 
+    <!-- Icono de archivo/carpeta -->
+    <span class="mr-2 flex shrink-0 items-center opacity-60 transition-opacity group-hover:opacity-100" 
           class:text-blue-400={entry.is_dir && !entry.git_status} 
           class:text-emerald-500={!entry.is_dir && !entry.is_ignored && !entry.git_status}
           class:text-orange-400={entry.git_status === 'modified'}
@@ -94,26 +99,39 @@
       {/if}
     </span>
 
-    <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] tracking-tight transition-colors group-hover:text-zinc-200
+    <!-- Nombre del archivo -->
+    <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium transition-colors group-hover:text-zinc-200
                 {$currentBufferId === entry.path || entry.git_status ? 'text-zinc-200' : 'text-zinc-400'}
                 {entry.git_status === 'modified' ? 'text-orange-400/90' : ''}
                 {entry.git_status === 'added' || entry.git_status === 'untracked' ? 'text-green-400/90' : ''}">
       {entry.name}
     </span>
 
-    {#if entry.git_status}
-      <span class="ml-auto pr-3 text-[10px] font-bold uppercase tracking-tighter opacity-50"
-            class:text-orange-400={entry.git_status === 'modified'}
-            class:text-green-400={entry.git_status === 'added' || entry.git_status === 'untracked'}>
-        {entry.git_status === 'modified' ? 'M' : 'U'}
-      </span>
-    {/if}
+    <!-- Área de acciones derecha (ANCHO FIJO 64px con padding final 16px) -->
+    <div class="flex w-16 shrink-0 items-center justify-end gap-2 pr-4">
+      {#if entry.git_status}
+        <span class="text-[10px] font-bold uppercase tracking-tighter opacity-50
+                     {entry.git_status === 'modified' ? 'text-orange-400' : 'text-green-400'}">
+          {entry.git_status === 'modified' ? 'M' : 'U'}
+        </span>
+      {/if}
+
+      {#if entry.is_dir}
+        <button 
+          class="opacity-0 group-hover:opacity-100 p-1 text-zinc-600 hover:text-emerald-400 transition-all cursor-pointer"
+          onclick={(e) => { e.stopPropagation(); pinFolder(); }}
+          title="Anclar esta carpeta como raíz"
+        >
+          <Pin size={12} />
+        </button>
+      {/if}
+    </div>
   </div>
 
   {#if isExpanded}
     <div transition:slide={{ duration: 200 }}>
       {#if isLoading && children.length === 0}
-        <div class="py-1 text-[11px] text-zinc-600" style="padding-left: {(depth + 1) * 12 + 20}px">
+        <div class="py-1 text-[11px] text-zinc-600 font-medium" style="padding-left: {(depth + 1) * 12 + 36}px">
           Cargando...
         </div>
       {:else}
