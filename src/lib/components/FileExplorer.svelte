@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { Folder, FolderOpen, FileCode, ChevronLeft, LogOut, LayoutList, ListTree, FolderPlus, Search, X, RefreshCw, Pin, PinOff } from '@lucide/svelte';
-  import { connectNvimForComponent, currentBufferId } from '$lib/stores/nvimStore';
+  import { openBuffer, activeBufferId } from '$lib/stores/bufferStore';
   import { currentProject, closeProject, openProject } from '$lib/stores/projectStore';
   import { expandedPaths, directoryCache, pinnedPath } from '$lib/stores/explorerStore';
   import FileTreeItem from './explorer/FileTreeItem.svelte';
@@ -17,7 +17,6 @@
     git_status?: 'modified' | 'added' | 'renamed' | 'deleted' | 'untracked';
   }
 
-  // Configuración de visualización con persistencia
   const STORAGE_KEY_VIEW = "forja-explorer-view-mode";
   let viewMode = $state<'drill' | 'tree'>((typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_VIEW) as any) || 'drill');
 
@@ -25,32 +24,25 @@
     localStorage.setItem(STORAGE_KEY_VIEW, viewMode);
   });
 
-  // Resizing state
   const MIN_WIDTH = 180;
   const MAX_WIDTH = 600;
   const DEFAULT_WIDTH = 260;
   let sidebarWidth = $state(DEFAULT_WIDTH);
   let isResizing = $state(false);
 
-  // Search state
   let searchQuery = $state("");
   let searchResults: FileEntry[] = $state([]);
   let isSearching = $state(false);
 
-  // File state
   let entries: FileEntry[] = $state([]);
   let currentPath = $state("");
   let loading = $state(false);
 
-  // Derivados
   let hasProject = $derived(!!$currentProject);
   let effectiveRoot = $derived($pinnedPath || $currentProject);
   let canGoUp = $derived(currentPath !== effectiveRoot);
   let currentFolderName = $derived((viewMode === 'tree' ? (effectiveRoot || "") : currentPath).split(/[/\\]/).pop() || "Raíz");
 
-  /**
-   * Refresca el contenido
-   */
   async function refresh() {
     if (searchQuery) {
       await handleSearch();
@@ -182,8 +174,8 @@
 
   async function openFile(path: string) {
     try {
-      const content = await invoke('read_file', { path });
-      await connectNvimForComponent(path, { filePath: path, content });
+      const content = await invoke<string>('read_file', { path });
+      openBuffer(path, content);
     } catch (error) {
       console.error("Error abriendo archivo:", error);
     }
@@ -220,8 +212,9 @@
     };
   });
 
+  // REACTIVIDAD CRÍTICA: Recargar cuando cambia la raíz (Focus Mode)
   $effect(() => {
-    if (effectiveRoot && currentPath === "") {
+    if (effectiveRoot) {
       loadDirectory(effectiveRoot);
     }
   });
@@ -297,31 +290,21 @@
   </header>
 
   <div class="flex-1 overflow-x-hidden overflow-y-auto py-2 custom-scrollbar">
-    {#if !hasProject}
-      <div class="flex h-full flex-col items-center justify-center p-6 text-center gap-4 font-medium">
-        <div class="rounded-full bg-zinc-900 p-4 text-zinc-600 border border-zinc-800/50"><FolderPlus size="24" /></div>
-        <div>
-          <p class="text-[12px] text-zinc-400">No project opened</p>
-          <button onclick={handleOpenProject} class="mt-2 rounded-md bg-zinc-800 px-4 py-2 text-[11px] text-zinc-300 transition-all hover:bg-zinc-700 hover:text-white border border-zinc-700/50 cursor-pointer">Open Folder</button>
-        </div>
-      </div>
-    {:else if loading || isSearching}
+    {#if loading || isSearching}
       <div class="flex flex-col items-center justify-center p-10 gap-3">
         <div class="w-4 h-4 border-2 border-zinc-700 border-t-emerald-500/50 rounded-full animate-spin"></div>
         <span class="text-[10px] text-zinc-600 font-medium uppercase tracking-widest">Processing</span>
       </div>
     {:else if searchQuery}
       {#each searchResults as entry}
-        <div class="group flex h-7 cursor-pointer items-center border-l-2 pl-4 text-[13px] transition-all duration-150 hover:bg-white/[0.03] {$currentBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}" onclick={() => handleEntryClick(entry)}>
+        <div class="group flex h-7 cursor-pointer items-center border-l-2 px-4 text-[13px] transition-all duration-150 hover:bg-white/[0.03] {$activeBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}" onclick={() => handleEntryClick(entry)}>
           <div class="flex w-5 shrink-0 items-center justify-center"></div>
-          
           <span class="mr-2 flex shrink-0 items-center opacity-60 transition-opacity group-hover:opacity-100 {entry.git_status === 'modified' ? 'text-orange-400' : entry.git_status === 'added' || entry.git_status === 'untracked' ? 'text-green-400' : 'text-emerald-500'}">
             <FileCode size="15" />
           </span>
+          <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-medium transition-colors {$activeBufferId === entry.path || entry.git_status ? 'text-zinc-200' : 'text-zinc-400'} group-hover:text-zinc-200">{entry.name}</span>
           
-          <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-medium transition-colors {$currentBufferId === entry.path || entry.git_status ? 'text-zinc-200' : 'text-zinc-400'} group-hover:text-zinc-200">{entry.name}</span>
-          
-          <div class="flex w-16 shrink-0 items-center justify-end gap-2 pr-4">
+          <div class="flex w-16 shrink-0 items-center justify-end gap-2 pr-4 ml-auto">
             {#if entry.git_status}
               <span class="text-[10px] font-bold uppercase tracking-tighter opacity-50 {entry.git_status === 'modified' ? 'text-orange-400' : 'text-green-400'}">
                 {entry.git_status === 'modified' ? 'M' : 'U'}
@@ -334,14 +317,13 @@
       {#each entries as entry}
         <div 
           class="group flex h-7 cursor-pointer items-center border-l-2 pl-4 text-[13px] transition-all duration-150 hover:bg-white/[0.03] 
-                 {$currentBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}" 
+                 {$activeBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}" 
           class:opacity-40={entry.is_ignored} 
           class:grayscale={entry.is_ignored}
           onclick={() => handleEntryClick(entry)}
         >
           <div class="flex w-5 shrink-0 items-center justify-center"></div>
-
-          <span class="mr-2 flex shrink-0 items-center opacity-60 transition-opacity group-hover:opacity-100" 
+          <span class="mr-2.5 flex shrink-0 items-center opacity-60 transition-opacity group-hover:opacity-100" 
                 class:text-blue-400={entry.is_dir && !entry.git_status} 
                 class:text-emerald-500={!entry.is_dir && !entry.is_ignored && !entry.git_status}
                 class:text-orange-400={entry.git_status === 'modified'}
@@ -354,22 +336,22 @@
             {/if}
           </span>
           <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-medium transition-colors
-                       {$currentBufferId === entry.path || entry.git_status ? 'text-zinc-200' : 'text-zinc-400'}
+                       {$activeBufferId === entry.path || entry.git_status ? 'text-zinc-200' : 'text-zinc-400'}
                        {entry.git_status === 'modified' ? 'text-orange-400/90' : ''}
                        {entry.git_status === 'added' || entry.git_status === 'untracked' ? 'text-green-400/90' : ''}
                        group-hover:text-zinc-200">
             {entry.name}
           </span>
 
-          <div class="flex w-16 shrink-0 items-center justify-end gap-2 pr-4">
+          <div class="flex w-16 shrink-0 items-center justify-end gap-2 pr-4 ml-auto">
             {#if entry.git_status}
-              <span class="text-[10px] font-bold uppercase tracking-tighter opacity-50
+              <span class="text-[10px] font-bold uppercase opacity-50
                            {entry.git_status === 'modified' ? 'text-orange-400' : 'text-green-400'}">
                 {entry.git_status === 'modified' ? 'M' : 'U'}
               </span>
             {/if}
 
-            {#if entry.is_dir}
+            {#if entry.is_dir && !entry.is_ignored}
               <button class="opacity-0 group-hover:opacity-100 p-1 text-zinc-600 hover:text-emerald-400 transition-all cursor-pointer" onclick={(e) => { e.stopPropagation(); pinFolder(entry.path); }} title="Anclar esta carpeta como raíz">
                 <Pin size={12} />
               </button>

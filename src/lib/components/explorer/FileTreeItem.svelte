@@ -1,7 +1,8 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { Folder, FolderOpen, FileCode, ChevronRight, Pin } from '@lucide/svelte';
-  import { connectNvimForComponent, currentBufferId } from '$lib/stores/nvimStore';
+  // import { connectNvimForComponent, currentBufferId } from '$lib/stores/nvimStore';
+  import { openBuffer, activeBufferId } from '$lib/stores/bufferStore';
   import { expandedPaths, pinnedPath } from '$lib/stores/explorerStore';
   import { slide } from 'svelte/transition';
   import FileTreeItem from './FileTreeItem.svelte';
@@ -17,10 +18,13 @@
 
   let { entry, depth = 0 }: { entry: FileEntry, depth?: number } = $props();
 
+  // El estado de expansión ahora es reactivo al store global
   let isExpanded = $derived($expandedPaths.has(entry.path));
+  
   let children: FileEntry[] = $state([]);
   let isLoading = $state(false);
 
+  // Cargar metadatos automáticamente cuando se expande
   $effect(() => {
     if (isExpanded && children.length === 0 && !isLoading) {
       loadMetadata();
@@ -50,7 +54,7 @@
   async function openFile(path: string) {
     try {
       const content = await invoke('read_file', { path });
-      await connectNvimForComponent(path, { filePath: path, content });
+      await openBuffer(path, content);
     } catch (error) {
       console.error("Error abriendo archivo:", error);
     }
@@ -66,12 +70,12 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div 
     class="group flex h-7 cursor-pointer items-center border-l-2 transition-all duration-150 hover:bg-white/5
-           {$currentBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}"
+           {$activeBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}"
     class:opacity-40={entry.is_ignored}
     onclick={toggle}
     style="padding-left: {depth * 12 + 16}px"
   >
-    <!-- Área izquierda fija (Chevron) - 20px -->
+    <!-- ÁREA FIJA IZQUIERDA (Garantiza que nada rebote) -->
     <div class="flex w-5 shrink-0 items-center justify-center">
       {#if entry.is_dir}
         <span class="text-zinc-600 transition-transform duration-200 group-hover:text-zinc-400"
@@ -81,8 +85,7 @@
       {/if}
     </div>
 
-    <!-- Icono de archivo/carpeta -->
-    <span class="mr-2 flex shrink-0 items-center opacity-60 transition-opacity group-hover:opacity-100" 
+    <span class="mr-2.5 flex items-center opacity-60 transition-opacity group-hover:opacity-100" 
           class:text-blue-400={entry.is_dir && !entry.git_status} 
           class:text-emerald-500={!entry.is_dir && !entry.is_ignored && !entry.git_status}
           class:text-orange-400={entry.git_status === 'modified'}
@@ -99,16 +102,15 @@
       {/if}
     </span>
 
-    <!-- Nombre del archivo -->
-    <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium transition-colors group-hover:text-zinc-200
-                {$currentBufferId === entry.path || entry.git_status ? 'text-zinc-200' : 'text-zinc-400'}
+    <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium transition-colors group-hover:text-zinc-200
+                {$activeBufferId === entry.path || entry.git_status ? 'text-zinc-200' : 'text-zinc-400'}
                 {entry.git_status === 'modified' ? 'text-orange-400/90' : ''}
                 {entry.git_status === 'added' || entry.git_status === 'untracked' ? 'text-green-400/90' : ''}">
       {entry.name}
     </span>
 
-    <!-- Área de acciones derecha (ANCHO FIJO 64px con padding final 16px) -->
-    <div class="flex w-16 shrink-0 items-center justify-end gap-2 pr-4">
+    <!-- Área de acciones derecha -->
+    <div class="ml-auto flex items-center justify-end gap-2 pr-4">
       {#if entry.git_status}
         <span class="text-[10px] font-bold uppercase tracking-tighter opacity-50
                      {entry.git_status === 'modified' ? 'text-orange-400' : 'text-green-400'}">
@@ -116,7 +118,7 @@
         </span>
       {/if}
 
-      {#if entry.is_dir}
+      {#if entry.is_dir && !entry.is_ignored}
         <button 
           class="opacity-0 group-hover:opacity-100 p-1 text-zinc-600 hover:text-emerald-400 transition-all cursor-pointer"
           onclick={(e) => { e.stopPropagation(); pinFolder(); }}
@@ -131,7 +133,7 @@
   {#if isExpanded}
     <div transition:slide={{ duration: 200 }}>
       {#if isLoading && children.length === 0}
-        <div class="py-1 text-[11px] text-zinc-600 font-medium" style="padding-left: {(depth + 1) * 12 + 36}px">
+        <div class="py-1 text-[11px] text-zinc-600 font-medium" style="padding-left: {(depth + 1) * 12 + 32}px">
           Cargando...
         </div>
       {:else}

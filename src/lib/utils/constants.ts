@@ -123,8 +123,8 @@ export const SHORTCUTS_FLAT = {
 export const UI_TEXT = {
   APP_TITLE: "Forja Studio",
   APP_SUBTITLE: "Editor",
-  TAGLINE: "The essence of Vim in a native interface",
-  DESCRIPTION: "Keyboard navigation, fast commands, efficient editing",
+  TAGLINE: "Forge your workflow",
+  DESCRIPTION: "A lightweight, modular editor that grows with your needs.",
 
   // Actions
   OPEN_PROJECT: "Open Project",
