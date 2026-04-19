@@ -13,7 +13,8 @@ pub fn run() {
             path::list_directory,
             fs_explorer::explore_directory,
             fs_explorer::search_files,
-            git::git_status_batch
+            git::git_status_batch,
+            git::git_ahead_behind
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

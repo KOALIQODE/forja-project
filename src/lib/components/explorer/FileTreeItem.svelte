@@ -1,7 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { Folder, FolderOpen, FileCode, ChevronRight, Pin } from '@lucide/svelte';
-  // import { connectNvimForComponent, currentBufferId } from '$lib/stores/nvimStore';
   import { openBuffer, activeBufferId } from '$lib/stores/bufferStore';
   import { expandedPaths, pinnedPath } from '$lib/stores/explorerStore';
   import { slide } from 'svelte/transition';

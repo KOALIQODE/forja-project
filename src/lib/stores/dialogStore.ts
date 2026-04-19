@@ -1,5 +1,12 @@
 import { writable } from 'svelte/store';
-import { DIALOG_IDS } from '../nvim/contentIds';
+
+// Centralized Dialog IDs
+export const DIALOG_IDS = {
+  RECENT_PROJECTS: 'recent-projects',
+  SHORTCUTS_HELP: 'shortcuts-help',
+  FILE_SEARCH: 'file-search',
+  COMMAND_PALETTE: 'command-palette'
+} as const;
 
 // Dialog types
 export interface DialogConfig {
@@ -33,7 +40,7 @@ export function closeDialog() {
   }));
 }
 
-// Legacy support for RecentProjectsDialog
+// Support for RecentProjectsDialog
 export function openRecentProjectsDialog(previousContext?: string) {
   openDialog({
     id: DIALOG_IDS.RECENT_PROJECTS,

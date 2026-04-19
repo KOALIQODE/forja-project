@@ -11,7 +11,7 @@ pub struct GitStatus {
 }
 
 #[tauri::command]
-fn git_ahead_behind(path: String) -> GitStatus {
+pub fn git_ahead_behind(path: String) -> GitStatus {
     // 1. Abrir repo
     let repo = match Repository::open(&path) {
         Ok(r) => r,

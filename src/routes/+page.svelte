@@ -1,6 +1,6 @@
 <script lang="ts">
   import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
-  import FileExplorer from "$lib/components/FileExplorer.svelte";
+  import Explorer from "$lib/components/explorer/Explorer.svelte";
   import BufferView from "$lib/components/BufferView.svelte";
   import { 
     activeBuffer,
@@ -39,7 +39,7 @@
   <!-- El Explorador solo aparece si hay un proyecto abierto -->
   {#if showExplorer}
     <aside class="shrink-0 z-20 h-full">
-      <FileExplorer />
+      <Explorer />
     </aside>
   {/if}
 

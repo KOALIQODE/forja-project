@@ -2,7 +2,6 @@
   import type { Snippet } from "svelte";
   import { steppedGradient } from "../lib/utils/backgroundLayer"
   import TitleBar from "../lib/components/TitleBar.svelte";
-  import ShortcutsManager from "../lib/components/shortcuts/ShortcutsManager.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
   import "../app.css";
   import '@fontsource-variable/montserrat/wght.css';
@@ -17,14 +16,16 @@
   let gradient = $derived(steppedGradient(steps, angle, from, to));
 </script>
 
-<div class="flex h-screen flex-col overflow-hidden font-sans" style="background: {gradient};">
+<div 
+  class="flex h-screen flex-col overflow-hidden font-sans" 
+  style="background: {gradient};"
+>
   <TitleBar/>
   <main class="flex-1 overflow-hidden relative">
     {@render children()}
   </main>
 </div>
 
-<ShortcutsManager />
 <DialogManager />
 
 <style>

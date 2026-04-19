@@ -1,15 +1,11 @@
 <script lang="ts">
   import { FolderOpen, Plus, Clock } from "@lucide/svelte";
-  import { onMount } from "svelte";
   import { openProject } from "../stores/projectStore";
   import { openRecentProjectsDialog } from "../stores/dialogStore";
-  import { keyboardManager } from "../utils/keyboardManager";
   import { open } from "@tauri-apps/plugin-dialog";
   import { 
     UI_TEXT, 
-    ERROR_MESSAGES,
-    KEYBOARD_CONTEXTS,
-    SHORTCUTS_FLAT
+    ERROR_MESSAGES
   } from "../utils/constants";
 
   // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
@@ -40,34 +36,8 @@
 
   function handleRecentProjects() {
     console.log('Showing recent projects...');
-    // Pass current context to preserve it
-    const currentContext = keyboardManager.getActiveContext();
-    openRecentProjectsDialog(currentContext);
+    openRecentProjectsDialog();
   }
-
-  onMount(() => {
-    // Register keyboard shortcuts for this view
-    keyboardManager.registerContext(KEYBOARD_CONTEXTS.WELCOME_SCREEN, [
-      {
-        key: SHORTCUTS_FLAT.OPEN_PROJECT,
-        handler: handleOpenProject,
-        description: UI_TEXT.OPEN_PROJECT
-      },
-      {
-        key: SHORTCUTS_FLAT.NEW_PROJECT,
-        handler: handleNewProject,
-        description: UI_TEXT.NEW_EMPTY_PROJECT
-      },
-      {
-        key: SHORTCUTS_FLAT.RECENT_PROJECTS,
-        handler: handleRecentProjects,
-        description: UI_TEXT.RECENT_PROJECTS
-      }
-    ]);
-    
-    keyboardManager.setActiveContext(KEYBOARD_CONTEXTS.WELCOME_SCREEN);
-    keyboardManager.startListening();
-  });
 </script>
 
 <main 
@@ -97,48 +67,41 @@
     <!-- Action buttons -->
     <section class="mb-10 flex flex-col gap-3 animate-[fadeInUp_0.6s_ease_0.3s_both] text-[13px]">
       <button 
+        type="button"
         class="group relative flex cursor-pointer items-center justify-between overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/30 px-5 py-4 font-medium text-zinc-400 transition-all duration-300 hover:border-emerald-500/50 hover:bg-emerald-500/5 hover:text-zinc-100 hover:shadow-[0_0_25px_rgba(16,185,129,0.1)]" 
-        onclick={handleOpenProject}
+        onclick={(e) => { e.preventDefault(); handleOpenProject(); }}
       >
         <div class="absolute top-0 -left-full h-full w-full bg-gradient-to-r from-transparent via-white/5 to-transparent transition-all duration-1000 group-hover:left-full"></div>
         <div class="flex items-center gap-4">
           <FolderOpen size="15" class="text-zinc-500 transition-colors group-hover:text-emerald-400" />
           <span>{UI_TEXT.OPEN_PROJECT}</span>
         </div>
-        <kbd class="rounded border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-500">Space+O</kbd>
       </button>
 
       <button 
+        type="button"
         class="group relative flex cursor-pointer items-center justify-between overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/30 px-5 py-4 font-medium text-zinc-400 transition-all duration-300 hover:border-emerald-500/50 hover:bg-emerald-500/5 hover:text-zinc-100 hover:shadow-[0_0_25px_rgba(16,185,129,0.1)]" 
-        onclick={handleNewProject}
+        onclick={(e) => { e.preventDefault(); handleNewProject(); }}
       >
         <div class="absolute top-0 -left-full h-full w-full bg-gradient-to-r from-transparent via-white/5 to-transparent transition-all duration-1000 group-hover:left-full"></div>
         <div class="flex items-center gap-4">
           <Plus size="15" class="text-zinc-500 transition-colors group-hover:text-emerald-400" />
           <span>{UI_TEXT.NEW_EMPTY_PROJECT}</span>
         </div>
-        <kbd class="rounded border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-500">Space+N</kbd>
       </button>
 
       <button 
+        type="button"
         class="group relative flex cursor-pointer items-center justify-between overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/30 px-5 py-4 font-medium text-zinc-400 transition-all duration-300 hover:border-emerald-500/50 hover:bg-emerald-500/5 hover:text-zinc-100 hover:shadow-[0_0_25px_rgba(16,185,129,0.1)]" 
-        onclick={handleRecentProjects}
+        onclick={(e) => { e.preventDefault(); handleRecentProjects(); }}
       >
         <div class="absolute top-0 -left-full h-full w-full bg-gradient-to-r from-transparent via-white/5 to-transparent transition-all duration-1000 group-hover:left-full"></div>
         <div class="flex items-center gap-4">
           <Clock size="15" class="text-zinc-500 transition-colors group-hover:text-emerald-400" />
           <span>{UI_TEXT.RECENT_PROJECTS}</span>
         </div>
-        <kbd class="rounded border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-zinc-500">Space+R</kbd>
       </button>
     </section>
-
-    <!-- Footer -->
-    <footer class="flex items-center justify-center gap-2 opacity-60 animate-[fadeInUp_0.6s_ease_0.4s_both]">
-      <span class="text-sm font-medium text-zinc-600">Press</span>
-      <kbd class="rounded border border-zinc-800 bg-zinc-900/50 px-2 py-0.5 font-mono text-[13px] font-bold text-emerald-500/80 shadow-sm">?</kbd>
-      <span class="text-sm font-medium text-zinc-600">for keyboard shortcuts</span>
-    </footer>
   </div>
 </main>
 
