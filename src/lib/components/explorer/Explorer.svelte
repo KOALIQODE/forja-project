@@ -1,11 +1,13 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { Folder, FolderOpen, FileCode, ChevronLeft, LogOut, LayoutList, ListTree, FolderPlus, Search, X, RefreshCw, Pin, PinOff, GitBranch } from '@lucide/svelte';
+  import { Folder, FolderOpen, FileCode, ChevronLeft, LogOut, LayoutList, ListTree, Search, X, Pin, PinOff, GitBranch } from '@lucide/svelte';
   import { openBuffer, activeBufferId } from '$lib/stores/bufferStore';
   import { currentProject, closeProject, openProject } from '$lib/stores/projectStore';
   import { expandedPaths, directoryCache, pinnedPath } from '$lib/stores/explorerStore';
+  import FileDrillItem from './FileDrillItem.svelte';
   import FileTreeItem from './FileTreeItem.svelte';
-  import { open } from "@tauri-apps/plugin-dialog";
+  import { open as openDialog } from '@tauri-apps/plugin-dialog';
+  import { untrack } from 'svelte';
 
   interface FileEntry {
     name: string;
@@ -52,7 +54,6 @@
       const status = await invoke<any>('git_ahead_behind', { path: $currentProject });
       gitBranch = status.branch;
     } catch (error) {
-      console.error("Error fetching git branch:", error);
       gitBranch = null;
     }
   }
@@ -74,7 +75,7 @@
         const result = await invoke<FileEntry[]>('explore_directory', { path: currentPath });
         entries = result;
         directoryCache.set(currentPath, result);
-        updateGitBranch(); // Aprovechamos para refrescar la rama
+        updateGitBranch();
       } catch (error) {
         console.error("Error refrescando:", error);
       } finally {
@@ -114,39 +115,85 @@
     searchResults = [];
   }
 
-  async function handleOpenProject() {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Project Folder",
-      });
-      if (selected) {
-        pinnedPath.unpin();
-        openProject(selected);
+  const ITEM_HEIGHT = 28;
+  let visibleHeight = $state(0);
+  let scrollTop = $state(0);
+
+  // --- Algoritmo de Aplanamiento Iterativo (DFS con Pila) ---
+  let flattenedItems = $derived.by(() => {
+    if (searchQuery) return searchResults;
+    if (viewMode === 'drill') return entries;
+    
+    const items: (FileEntry & { depth: number })[] = [];
+    
+    // Inicializar pila con elementos raíz en orden inverso (para que el pop devuelva el primero)
+    const stack: { entry: FileEntry, depth: number }[] = entries
+      .slice()
+      .reverse()
+      .map(entry => ({ entry, depth: 0 }));
+    
+    while (stack.length > 0) {
+      const { entry, depth } = stack.pop()!;
+      items.push({ ...entry, depth });
+      
+      if (entry.is_dir && $expandedPaths.has(entry.path)) {
+        const cached = $directoryCache.get(entry.path);
+        if (cached) {
+          // Meter hijos en orden inverso para mantener el orden correcto al sacar de la pila
+          for (let i = cached.length - 1; i >= 0; i--) {
+            stack.push({ entry: cached[i], depth: depth + 1 });
+          }
+        }
       }
-    } catch (error) {
-      console.error("Error opening folder:", error);
     }
+    
+    return items;
+  });
+
+  let startIndex = $derived(Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - 5));
+  let endIndex = $derived(Math.min(flattenedItems.length, startIndex + Math.ceil(visibleHeight / ITEM_HEIGHT) + 10));
+  let visibleItems = $derived(flattenedItems.slice(startIndex, endIndex));
+  let totalHeight = $derived(flattenedItems.length * ITEM_HEIGHT);
+  let offsetY = $derived(startIndex * ITEM_HEIGHT);
+
+  async function handleEntryClick(entry: FileEntry) {
+    if (entry.is_dir) {
+      if (viewMode === 'drill') {
+        await loadDirectory(entry.path);
+      } else {
+        expandedPaths.toggle(entry.path);
+        // Si expandimos y no está en caché, cargar
+        if ($expandedPaths.has(entry.path) && !$directoryCache.get(entry.path)) {
+          try {
+            const res = await invoke<FileEntry[]>('explore_directory', { path: entry.path });
+            directoryCache.set(entry.path, res);
+          } catch (e) {}
+        }
+      }
+    } else {
+      openBuffer(entry.path);
+    }
+  }
+
+  function pinFolder(path: string) {
+    pinnedPath.pin(path);
   }
 
   async function loadDirectory(path: string, silent = false) {
     if (!path) return;
-    
     const cached = directoryCache.get(path);
     if (cached) {
       entries = cached;
     } else if (!silent) {
       loading = true;
     }
-
     try {
       currentPath = path;
       const result = await invoke<FileEntry[]>('explore_directory', { path: path });
       entries = result;
       directoryCache.set(path, result);
     } catch (error) {
-      console.error("Error explorando directorio:", error);
+      console.error("Error explorando:", error);
     } finally {
       loading = false;
     }
@@ -182,28 +229,6 @@
     if ($currentProject) loadDirectory($currentProject);
   }
 
-  function pinFolder(path: string) {
-    pinnedPath.pin(path);
-    loadDirectory(path);
-  }
-
-  async function handleEntryClick(entry: FileEntry) {
-    if (entry.is_dir) {
-      await loadDirectory(entry.path);
-    } else {
-      await openFile(entry.path);
-    }
-  }
-
-  async function openFile(path: string) {
-    try {
-      const content = await invoke<string>('read_file', { path });
-      openBuffer(path, content);
-    } catch (error) {
-      console.error("Error abriendo archivo:", error);
-    }
-  }
-  
   function startResizing(e: MouseEvent) {
     isResizing = true;
     e.preventDefault();
@@ -217,9 +242,7 @@
     }
   }
 
-  function stopResizing() {
-    isResizing = false;
-  }
+  function stopResizing() { isResizing = false; }
 
   $effect(() => {
     if (isResizing) {
@@ -239,14 +262,23 @@
     if (effectiveRoot) {
       loadDirectory(effectiveRoot, true);
     }
-    
     const onWindowFocus = () => refresh(true);
     window.addEventListener('focus', onWindowFocus);
-    
-    return () => {
-      window.removeEventListener('focus', onWindowFocus);
-    };
+    return () => window.removeEventListener('focus', onWindowFocus);
   });
+
+  function handleContainerScroll(e: Event) {
+    const target = e.target as HTMLElement;
+    scrollTop = target.scrollTop;
+  }
+
+  function handleResizeContainer(node: HTMLElement) {
+    const updateHeight = () => { visibleHeight = node.clientHeight; };
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
+  }
 </script>
 
 <div 
@@ -257,9 +289,9 @@
   <header class="shrink-0 border-b border-zinc-800/40 bg-[#0a0a0a]/80 backdrop-blur-sm p-3.5 pb-3">
     <div class="mb-3 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <h3 class="m-0 text-[10px] font-bold tracking-[0.15em] text-zinc-500 uppercase">Explorer</h3>
+        <h3 class="m-0 text-[10px] font-bold tracking-[0.15em] text-zinc-500 uppercase font-mono">Explorer</h3>
         {#if $pinnedPath}
-          <span class="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-500 uppercase tracking-tighter">
+          <span class="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-500 uppercase tracking-tighter font-mono">
             <Pin size="10" /> Focus
           </span>
         {/if}
@@ -289,7 +321,7 @@
           type="text" 
           bind:value={searchQuery}
           oninput={onSearchInput}
-          placeholder="Search in {currentFolderName}..."
+          placeholder="Search files..."
           class="w-full bg-zinc-900/50 border border-zinc-800/50 rounded-lg py-1.5 pl-8 pr-8 text-[11px] text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/30 focus:bg-zinc-900/80 transition-all font-medium"
         />
         {#if searchQuery}
@@ -305,8 +337,8 @@
             <ChevronLeft size="14" />
           </button>
         {/if}
-        <span class="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-medium tracking-tight text-zinc-400 w-full" title={currentPath}>
-          <span class="truncate shrink-0">{searchQuery ? 'Search Results' : currentFolderName}</span>
+        <span class="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-medium tracking-tight text-zinc-400 w-full font-mono" title={currentPath}>
+          <span class="truncate shrink-0">{searchQuery ? 'Search' : currentFolderName}</span>
           {#if gitBranch}
             <span class="flex items-center gap-1 text-[10px] text-emerald-500/90 font-bold border-l border-zinc-800/60 pl-2 ml-auto shrink-0">
               <GitBranch size="11" />
@@ -318,38 +350,57 @@
     {/if}
   </header>
 
-  <div class="flex-1 overflow-x-hidden overflow-y-auto py-2 custom-scrollbar">
+  <div 
+    class="flex-1 overflow-auto custom-scrollbar relative" 
+    use:handleResizeContainer
+    onscroll={handleContainerScroll}
+  >
     {#if loading || isSearching}
       <div class="flex flex-col items-center justify-center p-10 gap-3">
         <div class="w-4 h-4 border-2 border-zinc-700 border-t-emerald-500/50 rounded-full animate-spin"></div>
-        <span class="text-[10px] text-zinc-600 font-medium uppercase tracking-widest">Processing</span>
+        <span class="text-[10px] text-zinc-600 font-medium uppercase tracking-widest font-mono">Loading</span>
       </div>
-    {:else if searchQuery}
-      {#each searchResults as entry}
-        <FileDrillItem {entry} {handleEntryClick} {pinFolder} />
-      {/each}
-    {:else if viewMode === 'drill'}
-      {#each entries as entry}
-        <FileDrillItem {entry} {handleEntryClick} {pinFolder} />
-      {/each}
     {:else}
-      {#each entries as entry}
-        <FileTreeItem {entry} depth={0} />
-      {/each}
+      <!-- Espaciador que define el alto real del scroll -->
+      <div style="height: {totalHeight}px; width: 1px;" class="pointer-events-none"></div>
+      
+      <!-- Contenedor Virtual -->
+      <div 
+        class="absolute top-0 left-0 w-full pointer-events-none" 
+        style="transform: translate3d(0, {offsetY}px, 0);"
+      >
+        <div class="pointer-events-auto">
+          {#each visibleItems as item (item.path)}
+            {#if viewMode === 'tree' || searchQuery}
+              <FileTreeItem 
+                entry={item} 
+                depth={item.depth || 0} 
+                {handleEntryClick} 
+                isVirtual={true}
+              />
+            {:else}
+              <FileDrillItem 
+                entry={item} 
+                {handleEntryClick} 
+                pinFolder={pinFolder} 
+              />
+            {/if}
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
 
-  <div 
-    class="absolute top-0 right-0 z-[100] h-full w-[2px] cursor-col-resize transition-all duration-300 hover:bg-zinc-600/50" 
+  <button 
+    class="absolute top-0 right-0 z-[100] h-full w-[2px] cursor-col-resize transition-all duration-300 hover:bg-zinc-600/50 p-0 border-none" 
     class:bg-zinc-600={isResizing} 
     class:w-[3px]={isResizing} 
     onmousedown={startResizing}
     onclick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-    role="separator"
+    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') startResizing(e as any); }}
     aria-label="Resize sidebar"
     tabindex="0"
-    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') startResizing(e as any); }}
-  ></div>
+  ></button>
 </div>
 
 <style>

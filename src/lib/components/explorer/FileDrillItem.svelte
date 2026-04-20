@@ -29,8 +29,8 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div 
-  class="group flex h-7 w-full cursor-pointer items-center border-l-2 border-transparent pl-4 text-[13px] transition-all duration-150 hover:bg-white/[0.03] 
-         {$activeBufferId === entry.path ? 'border-emerald-500 bg-white/5' : ''}" 
+  class="group flex h-7 w-full cursor-pointer items-center border-l-2 pl-4 text-[13px] transition-all duration-150 hover:bg-white/[0.03] 
+         {$activeBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}" 
   class:opacity-40={entry.is_ignored} 
   class:grayscale={entry.is_ignored}
   onclick={() => handleEntryClick(entry)}
@@ -43,7 +43,7 @@
         class:text-green-400={entry.git_status === 'added' || entry.git_status === 'untracked'}
         class:text-zinc-500={entry.is_ignored}>
     {#if entry.is_dir}
-      {#if isExpanded}<FolderOpen size="15" weight="fill" />{:else}<Folder size="15" weight="fill" />{/if}
+      {#if isExpanded}<FolderOpen size="15" />{:else}<Folder size="15" />{/if}
     {:else}
       <FileCode size="15" />
     {/if}

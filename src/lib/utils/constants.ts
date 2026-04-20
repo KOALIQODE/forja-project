@@ -89,6 +89,30 @@ export const COMPONENT_SIZES = {
   WINDOW_CONTROL_WIDTH: 46,
 } as const;
 
+// === Editor Configuration ===
+export const EDITOR_CONFIG = {
+  LINE_HEIGHT: 22,
+  FONT_SIZE: 13,
+  FONT_FAMILY: '13px "JetBrains Mono", "Fira Code", monospace',
+  CHUNK_SIZE: 100,
+  VISIBLE_LINES_OFFSET: 5,
+} as const;
+
+// === Syntax Highlighting Colors ===
+export const TOKEN_COLORS: Record<string, string> = {
+  Keyword: '#C586C0',   // Purple
+  Function: '#DCDCAA',  // Yellow
+  Type: '#4EC9B0',      // Teal
+  String: '#CE9178',    // Orange
+  Comment: '#6A9955',   // Green
+  Number: '#B5CEA8',    // Light Green
+  Punctuation: '#888888', // Gray
+  Operator: '#D4D4D4',  // White
+  Variable: '#9CDCFE',  // Blue
+  Property: '#9CDCFE',  // Blue
+  Unknown: '#D4D4D4',   // Default white
+} as const;
+
 // === Error Messages ===
 export const ERROR_MESSAGES = {
   PROJECT_OPEN_FAILED: "Error opening project",

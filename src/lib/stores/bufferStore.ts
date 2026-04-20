@@ -1,11 +1,20 @@
 import { writable, derived } from 'svelte/store';
 
+// Simple extname implementation for browser
+function extname(path: string): string {
+  const base = path.split(/[/\\]/).pop() || '';
+  const dotIndex = base.lastIndexOf('.');
+  if (dotIndex <= 0) return '';
+  return base.substring(dotIndex);
+}
+
 export interface Buffer {
-  id: string;
-  path: string;
-  content: string[];
-  language?: string;
+  id: string; // File path acts as ID
+  filePath: string;
+  language?: string; // Derived from file extension
   lastModified?: number;
+  // content is no longer stored directly in the buffer store
+  // It will be fetched on demand by the EditorBuffer component
 }
 
 // All open buffers
@@ -26,21 +35,44 @@ export const activeBuffer = derived(
 /**
  * Open a file as a buffer
  */
-export function openBuffer(path: string, content: string) {
-  const lines = content.split('\n');
+export function openBuffer(filePath: string) {
+  console.log("bufferStore: Opening buffer for", filePath);
+  // Derive language from file extension
+  const extension = extname(filePath).toLowerCase();
+  let language: string | undefined;
+  switch (extension) {
+    case '.rs':
+      language = 'rust';
+      break;
+    case '.js':
+    case '.ts':
+    case '.svelte':
+      language = 'javascript'; // or typescript
+      break;
+    case '.py':
+      language = 'python';
+      break;
+    case '.json':
+      language = 'json';
+      break;
+    default:
+      language = undefined;
+  }
+
   const buffer: Buffer = {
-    id: path,
-    path,
-    content: lines,
+    id: filePath,
+    filePath,
+    language,
     lastModified: Date.now()
   };
 
   openBuffers.update(map => {
-    map.set(path, buffer);
-    return map;
+    const newMap = new Map(map);
+    newMap.set(filePath, buffer);
+    return newMap;
   });
 
-  activeBufferId.set(path);
+  activeBufferId.set(filePath);
 }
 
 /**

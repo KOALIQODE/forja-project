@@ -1,8 +1,8 @@
 <script lang="ts">
   import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
   import Explorer from "$lib/components/explorer/Explorer.svelte";
-  import BufferView from "$lib/components/BufferView.svelte";
-  import { 
+  import EditorBuffer from "$lib/components/editor/EditorBuffer.svelte";
+  import {
     activeBuffer,
     activeBufferId,
     openBuffer
@@ -23,8 +23,9 @@
           const readmePath = $currentProject + ( $currentProject.endsWith('/') || $currentProject.endsWith('\\') ? '' : '/' ) + 'README.md';
 
           // Intentar leer el README.md
-          const content = await invoke<string>('read_file', { path: readmePath });
-          openBuffer(readmePath, content);
+          // Solo necesitamos comprobar que existe o simplemente intentar abrir el buffer
+          // El componente EditorBuffer se encargará de leerlo
+          openBuffer(readmePath);
         } catch (error) {
           console.log("No se pudo auto-abrir README.md o no existe:", error);
         }
@@ -48,7 +49,7 @@
     {#if showWelcome}
       <WelcomeScreen />
     {:else if $activeBuffer}
-      <BufferView lines={$activeBuffer.content} bufferId={$activeBuffer.id} />
+      <EditorBuffer filePath={$activeBuffer.filePath} bufferId={$activeBuffer.id} language={$activeBuffer.language || 'text'} />
     {/if}
   </section>
 </main>

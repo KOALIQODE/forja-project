@@ -15,7 +15,12 @@
     git_status?: 'modified' | 'added' | 'renamed' | 'deleted' | 'untracked';
   }
 
-  let { entry, depth = 0 }: { entry: FileEntry, depth?: number } = $props();
+  let { entry, depth = 0, handleEntryClick, isVirtual = false }: { 
+    entry: FileEntry, 
+    depth?: number, 
+    handleEntryClick: (entry: FileEntry) => Promise<void>,
+    isVirtual?: boolean
+  } = $props();
 
   // El estado de expansión ahora es reactivo al store global
   let isExpanded = $derived($expandedPaths.has(entry.path));
@@ -23,26 +28,20 @@
   let children: FileEntry[] = $state([]);
   let isLoading = $state(false);
 
-  // Cargar metadatos automáticamente cuando se expande
+  // Cargar metadatos automáticamente cuando se expande (solo si no es virtual o si se necesita para aplanar)
   $effect(() => {
     if (isExpanded && children.length === 0 && !isLoading) {
       loadMetadata();
     }
   });
 
-  async function toggle() {
-    if (!entry.is_dir) {
-      await openFile(entry.path);
-      return;
-    }
-    expandedPaths.toggle(entry.path);
-  }
-
   async function loadMetadata() {
     isLoading = true;
     try {
       const result = await invoke<FileEntry[]>('explore_directory', { path: entry.path });
       children = result;
+      // Actualizar el caché global para que el aplanador lo vea
+      directoryCache.set(entry.path, result);
     } catch (error) {
       console.error("Error cargando subdirectorio:", error);
     } finally {
@@ -51,12 +50,7 @@
   }
 
   async function openFile(path: string) {
-    try {
-      const content = await invoke('read_file', { path });
-      await openBuffer(path, content);
-    } catch (error) {
-      console.error("Error abriendo archivo:", error);
-    }
+    openBuffer(path);
   }
 
   function pinFolder() {
@@ -71,10 +65,12 @@
     class="group flex h-7 cursor-pointer items-center border-l-2 transition-all duration-150 hover:bg-white/5
            {$activeBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}"
     class:opacity-40={entry.is_ignored}
-    onclick={toggle}
+    onclick={(e) => {
+      handleEntryClick(entry);
+    }}
     style="padding-left: {depth * 12 + 16}px"
   >
-    <!-- ÁREA FIJA IZQUIERDA (Garantiza que nada rebote) -->
+    <!-- ÁREA FIJA IZQUIERDA -->
     <div class="flex w-5 shrink-0 items-center justify-center">
       {#if entry.is_dir}
         <span class="text-zinc-600 transition-transform duration-200 group-hover:text-zinc-400"
@@ -92,9 +88,9 @@
           class:text-zinc-500={entry.is_ignored}>
       {#if entry.is_dir}
         {#if isExpanded}
-          <FolderOpen size="15" weight="fill" />
+          <FolderOpen size="15" />
         {:else}
-          <Folder size="15" weight="fill" />
+          <Folder size="15" />
         {/if}
       {:else}
         <FileCode size="15" />
@@ -129,7 +125,7 @@
     </div>
   </div>
 
-  {#if isExpanded}
+  {#if !isVirtual && isExpanded}
     <div transition:slide={{ duration: 200 }}>
       {#if isLoading && children.length === 0}
         <div class="py-1 text-[11px] text-zinc-600 font-medium" style="padding-left: {(depth + 1) * 12 + 32}px">
@@ -137,7 +133,7 @@
         </div>
       {:else}
         {#each children as child}
-          <FileTreeItem entry={child} depth={depth + 1} />
+          <FileTreeItem entry={child} depth={depth + 1} {handleEntryClick} />
         {/each}
       {/if}
     </div>

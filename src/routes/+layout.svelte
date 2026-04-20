@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  // Snippet type is intended for Svelte component props, not global scope.
+  // It should be imported or defined within the script context.
+  // Removed import as it was causing issues with style processing.
+  // import type { Snippet } from "svelte"; // Removed this line
+
   import { steppedGradient } from "../lib/utils/backgroundLayer"
   import TitleBar from "../lib/components/TitleBar.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
