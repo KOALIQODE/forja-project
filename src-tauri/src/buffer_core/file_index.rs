@@ -4,6 +4,7 @@ use std::sync::{Arc, LazyLock};
 use anyhow::{Context, Result};
 use dashmap::DashMap;
 use memmap2::Mmap;
+// Removed unused imports: use std::io; and use parking_lot::RwLock;
 
 static FILE_CACHE: LazyLock<DashMap<String, Arc<FileIndex>>> = LazyLock::new(DashMap::new);
 
@@ -25,15 +26,17 @@ impl FileIndex {
         let mut line_offsets = vec![0];
         let iter = Memchr::new(b'\n', &mmap);
         for pos in iter {
-            if pos + 1 < mmap.len() {
-                line_offsets.push(pos + 1);
-            }
+            line_offsets.push(pos + 1);
         }
 
         Ok(Self {
             mmap,
             line_offsets,
         })
+    }
+
+    pub fn invalidate(path: &str) {
+        FILE_CACHE.remove(path);
     }
 
     pub fn get_or_create(path: &str) -> Result<FileIndexHandle> {
@@ -84,6 +87,7 @@ impl FileIndex {
             end_offset = self.mmap.len();
         }
 
+        // Check for CR before LF and adjust slice end
         let slice_end = if end_offset > offset && self.mmap[end_offset - 1] == b'\r' {
             end_offset - 1
         } else {

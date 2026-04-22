@@ -35,6 +35,7 @@ regex = "1.10"               # Búsqueda de patrones
 aho-corasick = "1.1"         # Multi-pattern search (ultra-rápido)
 rayon = "1.7"                # Paralelización
 memchr = "2.7"
+notify = "6.1"               # File system watching
 
 # CONCURRENCIA
 parking_lot = "0.12"         # RwLock más rápido

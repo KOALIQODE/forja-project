@@ -33,7 +33,7 @@
   }
 
   function getProjectName(path: string): string {
-    return path.split(/[/\\]/).pop() || "Unknown Project";
+    return path.split(/[\/\\]/).pop() || "Unknown Project";
   }
 
   function deleteProject(index: number) {

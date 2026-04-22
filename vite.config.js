@@ -25,8 +25,16 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. tell Vite to ignore watching `src-tauri` and other non-frontend files
+      // we also ignore some common files that might be edited by the user
+      ignored: [
+        "**/src-tauri/**",
+        "**/README.md",
+        "**/ARCH.md",
+        "**/THEMES.md",
+        "**/PLUGINS.md",
+        "**/.codex/**",
+      ],
     },
   },
 }));

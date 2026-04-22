@@ -43,7 +43,7 @@
   let hasProject = $derived(!!$currentProject);
   let effectiveRoot = $derived($pinnedPath || $currentProject);
   let canGoUp = $derived(currentPath !== effectiveRoot);
-  let currentFolderName = $derived((viewMode === 'tree' ? (effectiveRoot || "") : currentPath).split(/[/\\]/).pop() || "Raíz");
+  let currentFolderName = $derived((viewMode === 'tree' ? (effectiveRoot || "") : currentPath).split(/[\/\\]/).pop() || "Raíz");
 
   async function updateGitBranch() {
     if (!$currentProject) {
@@ -201,7 +201,7 @@
 
   async function goUp() {
     if (!canGoUp) return;
-    const parts = currentPath.split(/[/\\]/);
+    const parts = currentPath.split(/[\/\\]/);
     parts.pop();
     const parentPath = parts.join("/");
     if (parentPath) await loadDirectory(parentPath);

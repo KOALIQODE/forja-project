@@ -10,28 +10,31 @@
   import { currentProject } from "$lib/stores/projectStore";
   import { invoke } from "@tauri-apps/api/core";
 
+  import { untrack } from "svelte";
+
   // Determinar si mostrar la pantalla de bienvenida o el editor basado en el proyecto
   let showWelcome = $derived(!$currentProject);
   let showExplorer = $derived(!!$currentProject);
 
-  // Auto-abrir README.md cuando se abre un proyecto
+  // Auto-abrir README.md cuando se abre un proyecto (solo si no hay buffers abiertos)
   $effect(() => {
-    if ($currentProject) {
-      const openDefaultFile = async () => {
-        try {
-          // Usar normalize para evitar problemas de / o \
-          const readmePath = $currentProject + ( $currentProject.endsWith('/') || $currentProject.endsWith('\\') ? '' : '/' ) + 'README.md';
-
-          // Intentar leer el README.md
-          // Solo necesitamos comprobar que existe o simplemente intentar abrir el buffer
-          // El componente EditorBuffer se encargará de leerlo
-          openBuffer(readmePath);
-        } catch (error) {
-          console.log("No se pudo auto-abrir README.md o no existe:", error);
+    const project = $currentProject;
+    if (project) {
+      untrack(() => {
+        // Solo auto-abrir si no hay un buffer activo ya
+        if (!$activeBufferId) {
+          const openDefaultFile = async () => {
+            try {
+              const readmePath = project + ( project.endsWith('/') || project.endsWith('\\') ? '' : '/' ) + 'README.md';
+              console.log("Auto-opening default file:", readmePath);
+              openBuffer(readmePath);
+            } catch (error) {
+              console.log("No se pudo auto-abrir README.md o no existe:", error);
+            }
+          };
+          openDefaultFile();
         }
-      };
-
-      openDefaultFile();
+      });
     }
   });
 </script>

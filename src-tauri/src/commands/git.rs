@@ -133,3 +133,15 @@ pub fn git_ahead_behind(path: String) -> GitStatus {
 pub fn git_status_batch(paths: Vec<String>) -> Vec<GitStatus> {
     paths.into_iter().map(git_ahead_behind).collect()
 }
+
+#[tauri::command]
+pub fn git_status_single(path: String) -> GitStatus {
+    git_ahead_behind(path)
+}
+
+#[tauri::command]
+pub fn git_branch(path: String) -> Option<String> {
+    let repo = Repository::open(&path).ok()?;
+    let head = repo.head().ok()?;
+    head.shorthand().map(|s| s.to_string())
+}

@@ -2,7 +2,7 @@ import { writable, derived } from 'svelte/store';
 
 // Simple extname implementation for browser
 function extname(path: string): string {
-  const base = path.split(/[/\\]/).pop() || '';
+  const base = path.split(/[\/\\]/).pop() || '';
   const dotIndex = base.lastIndexOf('.');
   if (dotIndex <= 0) return '';
   return base.substring(dotIndex);
@@ -18,10 +18,41 @@ export interface Buffer {
 }
 
 // All open buffers
-export const openBuffers = writable<Map<string, Buffer>>(new Map());
+const SAVED_BUFFERS_KEY = "forja-open-buffers";
+const ACTIVE_BUFFER_KEY = "forja-active-buffer";
+
+function loadSavedBuffers(): Map<string, Buffer> {
+  if (typeof localStorage === 'undefined') return new Map();
+  try {
+    const saved = localStorage.getItem(SAVED_BUFFERS_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return new Map(Object.entries(parsed));
+    }
+  } catch (e) {
+    console.error("Failed to load buffers:", e);
+  }
+  return new Map();
+}
+
+export const openBuffers = writable<Map<string, Buffer>>(loadSavedBuffers());
 
 // Currently active buffer ID
-export const activeBufferId = writable<string | null>(null);
+export const activeBufferId = writable<string | null>(
+  typeof localStorage !== 'undefined' ? localStorage.getItem(ACTIVE_BUFFER_KEY) : null
+);
+
+// Persist changes
+if (typeof localStorage !== 'undefined') {
+  openBuffers.subscribe(map => {
+    const obj = Object.fromEntries(map.entries());
+    localStorage.setItem(SAVED_BUFFERS_KEY, JSON.stringify(obj));
+  });
+  activeBufferId.subscribe(id => {
+    if (id) localStorage.setItem(ACTIVE_BUFFER_KEY, id);
+    else localStorage.removeItem(ACTIVE_BUFFER_KEY);
+  });
+}
 
 // Derived store for the current active buffer object
 export const activeBuffer = derived(
