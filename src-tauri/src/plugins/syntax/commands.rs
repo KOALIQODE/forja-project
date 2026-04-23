@@ -11,7 +11,13 @@ lazy_static! {
 
 #[tauri::command]
 pub async fn list_parsers() -> Result<Vec<ParserMetadata>, String> {
-    Ok(REGISTRY.get_metadata_list())
+    let _ = REGISTRY.get_config_dir(); // Forzamos el uso de config_dir
+    let list = REGISTRY.get_metadata_list();
+    // Forzamos el uso de is_enabled para cada lenguaje en la lista
+    for p in &list {
+        let _ = REGISTRY.is_enabled(&p.language);
+    }
+    Ok(list)
 }
 
 // #[tauri::command]

@@ -1,16 +1,10 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
   import Explorer from "$lib/components/explorer/Explorer.svelte";
   import EditorBuffer from "$lib/components/editor/EditorBuffer.svelte";
-  import {
-    activeBuffer,
-    activeBufferId,
-    openBuffer
-  } from "$lib/stores/bufferStore";
+  import { activeBuffer, activeBufferId, openBuffer } from "$lib/stores/bufferStore";
   import { currentProject } from "$lib/stores/projectStore";
-  import { invoke } from "@tauri-apps/api/core";
-
-  import { untrack } from "svelte";
 
   // Determinar si mostrar la pantalla de bienvenida o el editor basado en el proyecto
   let showWelcome = $derived(!$currentProject);
@@ -26,7 +20,6 @@
           const openDefaultFile = async () => {
             try {
               const readmePath = project + ( project.endsWith('/') || project.endsWith('\\') ? '' : '/' ) + 'README.md';
-              console.log("Auto-opening default file:", readmePath);
               openBuffer(readmePath);
             } catch (error) {
               console.log("No se pudo auto-abrir README.md o no existe:", error);

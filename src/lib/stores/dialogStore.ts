@@ -5,7 +5,8 @@ export const DIALOG_IDS = {
   RECENT_PROJECTS: 'recent-projects',
   SHORTCUTS_HELP: 'shortcuts-help',
   FILE_SEARCH: 'file-search',
-  COMMAND_PALETTE: 'command-palette'
+  COMMAND_PALETTE: 'command-palette',
+  BUFFER_DELETE: 'buffer-delete'
 } as const;
 
 // Dialog types
@@ -46,6 +47,16 @@ export function openRecentProjectsDialog(previousContext?: string) {
     id: DIALOG_IDS.RECENT_PROJECTS,
     component: 'RecentProjectsDialog',
     previousContext
+  });
+}
+
+/**
+ * Abre el diálogo de eliminación/gestión de buffers (estilo Telescope)
+ */
+export function openBufferDeleteDialog() {
+  openDialog({
+    id: DIALOG_IDS.BUFFER_DELETE,
+    component: 'BufferDeleteDialog'
   });
 }
 

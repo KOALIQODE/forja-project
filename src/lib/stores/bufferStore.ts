@@ -1,4 +1,5 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
+import { currentProject } from './projectStore';
 
 // Simple extname implementation for browser
 function extname(path: string): string {
@@ -13,46 +14,14 @@ export interface Buffer {
   filePath: string;
   language?: string; // Derived from file extension
   lastModified?: number;
-  // content is no longer stored directly in the buffer store
-  // It will be fetched on demand by the EditorBuffer component
 }
 
-// All open buffers
-const SAVED_BUFFERS_KEY = "forja-open-buffers";
-const ACTIVE_BUFFER_KEY = "forja-active-buffer";
+// Keys for localStorage
+const SAVED_BUFFERS_PREFIX = "forja-buffers-";
+const ACTIVE_BUFFER_PREFIX = "forja-active-";
 
-function loadSavedBuffers(): Map<string, Buffer> {
-  if (typeof localStorage === 'undefined') return new Map();
-  try {
-    const saved = localStorage.getItem(SAVED_BUFFERS_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return new Map(Object.entries(parsed));
-    }
-  } catch (e) {
-    console.error("Failed to load buffers:", e);
-  }
-  return new Map();
-}
-
-export const openBuffers = writable<Map<string, Buffer>>(loadSavedBuffers());
-
-// Currently active buffer ID
-export const activeBufferId = writable<string | null>(
-  typeof localStorage !== 'undefined' ? localStorage.getItem(ACTIVE_BUFFER_KEY) : null
-);
-
-// Persist changes
-if (typeof localStorage !== 'undefined') {
-  openBuffers.subscribe(map => {
-    const obj = Object.fromEntries(map.entries());
-    localStorage.setItem(SAVED_BUFFERS_KEY, JSON.stringify(obj));
-  });
-  activeBufferId.subscribe(id => {
-    if (id) localStorage.setItem(ACTIVE_BUFFER_KEY, id);
-    else localStorage.removeItem(ACTIVE_BUFFER_KEY);
-  });
-}
+export const openBuffers = writable<Map<string, Buffer>>(new Map());
+export const activeBufferId = writable<string | null>(null);
 
 // Derived store for the current active buffer object
 export const activeBuffer = derived(
@@ -63,32 +32,102 @@ export const activeBuffer = derived(
   }
 );
 
+// Subscribe to current project to load/save buffers
+let currentProjectPath: string | null = null;
+
+currentProject.subscribe(project => {
+  if (typeof localStorage === 'undefined') return;
+  
+  // Save current buffers before switching
+  if (currentProjectPath) {
+    saveBuffersForProject(currentProjectPath, get(openBuffers), get(activeBufferId));
+  }
+
+  currentProjectPath = project;
+
+  if (project) {
+    const { buffers, activeId } = loadBuffersForProject(project);
+    openBuffers.set(buffers);
+    activeBufferId.set(activeId);
+  } else {
+    openBuffers.set(new Map());
+    activeBufferId.set(null);
+  }
+});
+
+function loadBuffersForProject(project: string): { buffers: Map<string, Buffer>, activeId: string | null } {
+  const buffersKey = SAVED_BUFFERS_PREFIX + btoa(project);
+  const activeKey = ACTIVE_BUFFER_PREFIX + btoa(project);
+  
+  let buffers = new Map<string, Buffer>();
+  let activeId: string | null = null;
+
+  try {
+    const savedBuffers = localStorage.getItem(buffersKey);
+    if (savedBuffers) {
+      const parsed = JSON.parse(savedBuffers);
+      buffers = new Map(Object.entries(parsed));
+    }
+
+    activeId = localStorage.getItem(activeKey);
+  } catch (e) {
+    console.error("Failed to load buffers for project:", project, e);
+  }
+
+  return { buffers, activeId };
+}
+
+function saveBuffersForProject(project: string, buffers: Map<string, Buffer>, activeId: string | null) {
+  const buffersKey = SAVED_BUFFERS_PREFIX + btoa(project);
+  const activeKey = ACTIVE_BUFFER_PREFIX + btoa(project);
+
+  try {
+    const obj = Object.fromEntries(buffers.entries());
+    localStorage.setItem(buffersKey, JSON.stringify(obj));
+    if (activeId) {
+      localStorage.setItem(activeKey, activeId);
+    } else {
+      localStorage.removeItem(activeKey);
+    }
+  } catch (e) {
+    console.error("Failed to save buffers for project:", project, e);
+  }
+}
+
+// Auto-save on buffer changes
+openBuffers.subscribe(map => {
+  if (currentProjectPath) {
+    saveBuffersForProject(currentProjectPath, map, get(activeBufferId));
+  }
+});
+
+activeBufferId.subscribe(id => {
+  if (currentProjectPath) {
+    saveBuffersForProject(currentProjectPath, get(openBuffers), id);
+  }
+});
+
 /**
  * Open a file as a buffer
  */
 export function openBuffer(filePath: string) {
-  console.log("bufferStore: Opening buffer for", filePath);
-  // Derive language from file extension
+  // console.log("bufferStore: Opening buffer for", filePath);
   const extension = extname(filePath).toLowerCase();
   let language: string | undefined;
-  switch (extension) {
-    case '.rs':
-      language = 'rust';
-      break;
-    case '.js':
-    case '.ts':
-    case '.svelte':
-      language = 'javascript'; // or typescript
-      break;
-    case '.py':
-      language = 'python';
-      break;
-    case '.json':
-      language = 'json';
-      break;
-    default:
-      language = undefined;
-  }
+  
+  // Basic language detection
+  const langMap: Record<string, string> = {
+    '.rs': 'rust',
+    '.js': 'javascript',
+    '.ts': 'typescript',
+    '.svelte': 'svelte',
+    '.py': 'python',
+    '.json': 'json',
+    '.md': 'markdown',
+    '.css': 'css',
+    '.html': 'html'
+  };
+  language = langMap[extension];
 
   const buffer: Buffer = {
     id: filePath,
@@ -110,25 +149,21 @@ export function openBuffer(filePath: string) {
  * Close a buffer
  */
 export function closeBuffer(id: string) {
+  let nextId: string | null = null;
+  
   openBuffers.update(map => {
-    map.delete(id);
-    return map;
-  });
-
-  activeBufferId.update(current => {
-    if (current === id) {
-      // Find another buffer to activate or set to null
-      const map = getOpenBuffersMap();
-      const keys = Array.from(map.keys());
-      return keys.length > 0 ? keys[keys.length - 1] : null;
+    const newMap = new Map(map);
+    newMap.delete(id);
+    
+    if (get(activeBufferId) === id) {
+      const keys = Array.from(newMap.keys());
+      nextId = keys.length > 0 ? keys[keys.length - 1] : null;
     }
-    return current;
+    
+    return newMap;
   });
-}
 
-// Helper to get raw map value (avoiding circular sub in some cases)
-function getOpenBuffersMap(): Map<string, Buffer> {
-  let map: Map<string, Buffer> = new Map();
-  openBuffers.subscribe(v => map = v)();
-  return map;
+  if (nextId !== null || get(activeBufferId) === id) {
+    activeBufferId.set(nextId);
+  }
 }

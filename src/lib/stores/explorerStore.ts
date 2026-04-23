@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-interface FileEntry {
+export interface FileEntry {
   name: string;
   path: string;
   is_dir: boolean;
@@ -24,6 +24,12 @@ function createExpandedStore() {
       else newSet.add(path);
       return newSet;
     }),
+    setExpanded: (path: string, expanded: boolean) => update(set => {
+      const newSet = new Set(set);
+      if (expanded) newSet.add(path);
+      else newSet.delete(path);
+      return newSet;
+    }),
     clear: () => update(() => new Set())
   };
 }
@@ -38,11 +44,11 @@ function createPinnedStore() {
   return {
     subscribe,
     pin: (path: string) => {
-      localStorage.setItem(PINNED_PATH_KEY, path);
+      if (typeof localStorage !== 'undefined') localStorage.setItem(PINNED_PATH_KEY, path);
       set(path);
     },
     unpin: () => {
-      localStorage.removeItem(PINNED_PATH_KEY);
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(PINNED_PATH_KEY);
       set(null);
     }
   };
@@ -62,13 +68,31 @@ function createDirectoryCache() {
     }),
     get: (path: string) => {
       let current: Map<string, FileEntry[]> = new Map();
-      subscribe(v => current = v)();
+      const unsubscribe = subscribe(v => current = v);
+      unsubscribe();
       return current.get(path);
     },
     clear: () => update(() => new Map())
   };
 }
 
+export type FileOperation = 'rename' | 'create_file' | 'create_dir' | null;
+
+interface InlineAction {
+  type: FileOperation;
+  path: string; // The path of the entry being renamed, or the parent path for creation
+}
+
+function createInlineActionStore() {
+  const { subscribe, set } = writable<InlineAction | null>(null);
+  return {
+    subscribe,
+    setAction: (type: FileOperation, path: string) => set({ type, path }),
+    clear: () => set(null)
+  };
+}
+
 export const expandedPaths = createExpandedStore();
 export const directoryCache = createDirectoryCache();
 export const pinnedPath = createPinnedStore();
+export const inlineAction = createInlineActionStore();

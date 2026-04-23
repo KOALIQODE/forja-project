@@ -28,12 +28,35 @@ pub fn run() {
         // PLUGINS FRAMEWORK TAURI
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        // PERSONAL PLUGINS WITH COMMANDS
-        .plugin(plugins::git::init())
-        .plugin(plugins::explorer::init())
-        .plugin(plugins::editor::init())
-        .plugin(plugins::buffer::init())
-        .plugin(plugins::syntax::init())
+        .invoke_handler(tauri::generate_handler![
+            // Editor
+            plugins::editor::get_shortened_paths,
+            // Buffer
+            plugins::buffer::read_file,
+            plugins::buffer::get_total_lines,
+            plugins::buffer::read_file_lines,
+            plugins::buffer::write_file,
+            // Git
+            plugins::git::git_ahead_behind,
+            plugins::git::git_status_batch,
+            plugins::git::git_status_single,
+            plugins::git::git_branch,
+            // Explorer
+            plugins::explorer::search_files,
+            plugins::explorer::search_in_files,
+            plugins::explorer::explore_directory,
+            plugins::explorer::watch_directory,
+            plugins::explorer::create_file,
+            plugins::explorer::create_directory,
+            plugins::explorer::rename_entry,
+            plugins::explorer::delete_entry,
+            plugins::explorer::list_directory_from_path,
+            // Syntax
+            plugins::syntax::list_parsers,
+            plugins::syntax::detect_language,
+            plugins::syntax::get_code_breadcrumb,
+            plugins::syntax::highlight_syntax,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

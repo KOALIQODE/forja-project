@@ -1,12 +1,10 @@
 <script lang="ts">
-  // Snippet type is intended for Svelte component props, not global scope.
-  // It should be imported or defined within the script context.
-  // Removed import as it was causing issues with style processing.
-  // import type { Snippet } from "svelte"; // Removed this line
-
+  import { onMount } from 'svelte';
   import { steppedGradient } from "../lib/utils/backgroundLayer"
   import TitleBar from "../lib/components/TitleBar.svelte";
+  import ParserPrompt from "../lib/components/ParserPrompt.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
+  import { openBufferDeleteDialog, dialogState } from "../lib/stores/dialogStore";
   import "../app.css";
   import '@fontsource-variable/montserrat/wght.css';
 
@@ -18,11 +16,26 @@
   let to    = $state('#1a1a1a');
   
   let gradient = $derived(steppedGradient(steps, angle, from, to));
+
+  onMount(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Open buffer delete dialog with Ctrl+B
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        openBufferDeleteDialog();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  });
 </script>
 
 <div 
   class="flex h-screen flex-col overflow-hidden font-sans" 
-  style="background: {gradient};"
+  style:background={gradient}
 >
   <TitleBar/>
   <main class="flex-1 overflow-hidden relative">
@@ -30,6 +43,7 @@
   </main>
 </div>
 
+<ParserPrompt />
 <DialogManager />
 
 <style>

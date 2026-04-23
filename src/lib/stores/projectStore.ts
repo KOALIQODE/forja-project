@@ -12,10 +12,10 @@ export interface GitStatus {
 }
 
 // Key for localStorage persistence
-const CURRENT_PROJECT_KEY = "forja-current-project";
+// const CURRENT_PROJECT_KEY = "forja-current-project";
 
 // Get initial value from localStorage
-const initialProject = typeof localStorage !== 'undefined' ? localStorage.getItem(CURRENT_PROJECT_KEY) : null;
+const initialProject = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.CURRENT_PROJECT) : null;
 
 export const currentProject = writable<string | null>(initialProject);
 
@@ -23,9 +23,9 @@ export const currentProject = writable<string | null>(initialProject);
 if (typeof localStorage !== 'undefined') {
   currentProject.subscribe(value => {
     if (value) {
-      localStorage.setItem(CURRENT_PROJECT_KEY, value);
+      localStorage.setItem(STORAGE_KEYS.CURRENT_PROJECT, value);
     } else {
-      localStorage.removeItem(CURRENT_PROJECT_KEY);
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_PROJECT);
     }
   });
 }

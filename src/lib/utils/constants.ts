@@ -12,6 +12,7 @@ export const DIALOG_STATE_KEYS = {
 // === Local Storage Keys ===
 export const STORAGE_KEYS = {
   RECENT_PROJECTS: "forja-recent-projects",
+  CURRENT_PROJECT: "forja-current-project",
 } as const;
 
 // === UI Text Constants ===

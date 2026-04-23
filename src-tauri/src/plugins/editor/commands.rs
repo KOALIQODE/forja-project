@@ -21,7 +21,7 @@ pub fn get_shortened_paths(paths: Vec<String>) -> Vec<String> {
             }
 
             // Fallback: show last 2 parts if path is too long
-            let normalized_path = path.replace('\\', "/"); // Corrected: replaced '' with ''
+            let normalized_path = path.replace('\\', "/");
             let parts: Vec<&str> = normalized_path.split('/').collect();
             if parts.len() >= 3 {
                 format!(".../{}", parts[parts.len() - 2..].join("/"))

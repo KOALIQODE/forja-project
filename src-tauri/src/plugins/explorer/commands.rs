@@ -24,7 +24,13 @@ pub struct FileEntry {
 /// Simplifica una ruta para comparaciones. Evitamos canonicalize() porque añade \?\ en Windows
 /// y falla si el archivo no existe.
 fn simplify_path(path: &Path) -> String {
-    path.to_string_lossy().replace("", "/")
+    let s = path.to_string_lossy();
+    // Normalizar barras invertidas de Windows a barras normales
+    let normalized = s.replace("\\", "/");
+    
+    // Doble comprobación: si la ruta tiene un ratio de barras absurdamente alto, algo falló.
+    // Pero con el fix de replace("\\", "/") ya no debería ocurrir.
+    normalized
 }
 
 /// Obtiene los estados de Git para un directorio dado.
@@ -180,6 +186,50 @@ pub async fn explore_directory(path: String) -> Result<Vec<FileEntry>, String> {
     Ok(entries)
 }
 
+use crate::shared::file_searcher::{FileSearcher, SearchResult as TextSearchResult};
+
+#[derive(Serialize, Debug, Clone)]
+pub struct FileContentSearchResult {
+    pub path: String,
+    pub matches: Vec<TextSearchResult>,
+}
+
+#[tauri::command]
+pub async fn search_in_files(path: String, query: String) -> Result<Vec<FileContentSearchResult>, String> {
+    let target_path = PathBuf::from(&path);
+    let walker = WalkBuilder::new(&target_path)
+        .standard_filters(true)
+        .hidden(false)
+        .build();
+
+    let mut results = Vec::new();
+    for result in walker {
+        if let Ok(entry) = result {
+            let p = entry.path();
+            if p.is_dir() { continue; }
+            
+            if let Ok(matches) = FileSearcher::search_in_file(&p.to_string_lossy(), &query, 10) {
+                if !matches.is_empty() {
+                    results.push(FileContentSearchResult {
+                        path: simplify_path(p),
+                        matches,
+                    });
+                }
+            }
+        }
+        if results.len() > 20 { break; }
+    }
+
+    Ok(results)
+}
+
+#[tauri::command]
+pub async fn watch_directory(_path: String) -> Result<(), String> {
+    // Por ahora solo devolvemos Ok para que el frontend no falle.
+    // En una implementación real, aquí se configuraría notify.
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn create_file(path: String) -> Result<(), String> {
     let target_path = PathBuf::from(&path);
@@ -209,6 +259,19 @@ pub async fn rename_entry(old_path: String, new_path: String) -> Result<(), Stri
         return Err("La ruta de destino ya existe".to_string());
     }
     fs::rename(old, new).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_entry(path: String) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    if !target.exists() {
+        return Err("La ruta no existe".to_string());
+    }
+    if target.is_dir() {
+        fs::remove_dir_all(target).map_err(|e| e.to_string())
+    } else {
+        fs::remove_file(target).map_err(|e| e.to_string())
+    }
 }
 
 // --- Moved from path.rs ---

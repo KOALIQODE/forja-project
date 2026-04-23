@@ -1,11 +1,13 @@
 <script lang="ts">
+    // Handle Tauri invoke
     import { invoke } from "@tauri-apps/api/core";
     import { untrack, onMount, onDestroy } from "svelte";
     import { listen } from "@tauri-apps/api/event"; // Correct import for listen in Tauri v2
     import { ask } from "@tauri-apps/plugin-dialog";
 
     import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/constants";
-    // activeBufferId is not directly used here but might be for other editor-related logic
+    import { cursorPosition, currentBreadcrumb } from "$lib/stores/editorStore";
+    import StatusBar from "$lib/components/StatusBar.svelte";
 
     interface Props {
         filePath: string;
@@ -249,6 +251,36 @@
     // --- Basic Editing Support ---
     let cursorLine = $state(0);
     let cursorChar = $state(0);
+
+    // Update global cursor position store
+    $effect(() => {
+        cursorPosition.set({ line: cursorLine + 1, column: cursorChar + 1 });
+        updateBreadcrumb();
+    });
+
+    async function updateBreadcrumb() {
+        if (!filePath) return;
+        try {
+            // We need the full content for breadcrumbs (tree-sitter needs to parse)
+            // But reading all lines every time might be heavy.
+            // For now, let's just use what we have in lineCache or fetch if needed
+            let lines: string[] = [];
+            for (let i = 0; i < totalLines; i++) {
+                lines.push(lineCache.get(i) ?? "");
+            }
+            const content = lines.join("\n");
+            
+            const breadcrumb = await invoke<any>("get_code_breadcrumb", {
+                content,
+                language,
+                line: cursorLine,
+                column: cursorChar,
+            });
+            currentBreadcrumb.set(breadcrumb);
+        } catch (err) {
+            // console.error('Error getting breadcrumb:', err);
+        }
+    }
 
     function handleClick(e: MouseEvent) {
         if (!canvas || !scrollContainer) return;
@@ -515,6 +547,17 @@
         let unlistenFocus: (() => void) | null = null;
 
         (async () => {
+            // Re-trigger highlighting when a parser is installed
+            window.addEventListener('parser-ready', (e: any) => {
+                if (e.detail.language === language) {
+                    console.log("Parser ready, re-highlighting...");
+                    highlightEnabled = true;
+                    // Recargar los chunks visibles para aplicar sintaxis
+                    const start = Math.floor(currentScrollTop / LINE_HEIGHT);
+                    fetchChunk(start);
+                }
+            });
+
             // Escuchar cambios de archivo
             unlistenFileChanged = await listen(
                 "file-changed",
@@ -629,26 +672,32 @@
         </div>
     </div>
 
-    <!-- Main Canvas Renderer -->
-    <canvas
-        bind:this={canvas}
-        class="absolute inset-0 w-full h-full pointer-events-none"
-    ></canvas>
+    <!-- Main Editor Area -->
+    <div class="flex-1 relative overflow-hidden">
+        <!-- Main Canvas Renderer -->
+        <canvas
+            bind:this={canvas}
+            class="absolute inset-0 w-full h-full pointer-events-none"
+        ></canvas>
 
-    <!-- Scroll Capturer (Invisible but native) -->
-    <div
-        class="flex-1 w-full overflow-auto custom-scrollbar relative z-10 outline-none bg-transparent cursor-text"
-        bind:this={scrollContainer}
-        onscroll={handleScroll}
-        onmousedown={handleClick}
-        onmousemove={handleMouseMove}
-        onmouseleave={handleMouseLeave}
-    >
+        <!-- Scroll Capturer (Invisible but native) -->
         <div
-            style="height: {totalLines * LINE_HEIGHT}px; width: 100%;"
-            class="pointer-events-none"
-        ></div>
+            class="absolute inset-0 overflow-auto custom-scrollbar z-10 outline-none bg-transparent cursor-text"
+            bind:this={scrollContainer}
+            onscroll={handleScroll}
+            onmousedown={handleClick}
+            onmousemove={handleMouseMove}
+            onmouseleave={handleMouseLeave}
+        >
+            <div
+                class="pointer-events-none w-full"
+                style="height: {totalLines * LINE_HEIGHT}px"
+            ></div>
+        </div>
     </div>
+
+    <!-- 🔧 Status Bar at the bottom of the editor -->
+    <StatusBar />
 </div>
 
 <style>
