@@ -12,8 +12,8 @@ pub struct GitStatus {
 
 #[tauri::command]
 pub fn git_ahead_behind(path: String) -> GitStatus {
-    // 1. Abrir repo
-    let repo = match Repository::open(&path) {
+    // 1. Descubrir repo (más robusto que open)
+    let repo = match Repository::discover(&path) {
         Ok(r) => r,
         Err(_) => {
             return GitStatus {
@@ -141,7 +141,7 @@ pub fn git_status_single(path: String) -> GitStatus {
 
 #[tauri::command]
 pub fn git_branch(path: String) -> Option<String> {
-    let repo = Repository::open(&path).ok()?;
+    let repo = Repository::discover(&path).ok()?;
     let head = repo.head().ok()?;
     head.shorthand().map(|s| s.to_string())
 }
