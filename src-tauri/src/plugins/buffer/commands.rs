@@ -1,7 +1,7 @@
 use crate::shared::file_index::FileIndex;
 use std::fs;
-use tauri::Emitter;
 use std::path::PathBuf;
+use tauri::Emitter;
 
 fn normalize_path(path: &str) -> String {
     let mut normalized = path.replace("\\", "/");
@@ -14,11 +14,11 @@ fn normalize_path(path: &str) -> String {
 #[tauri::command]
 pub async fn read_file(path: String) -> Result<String, String> {
     let clean_path = normalize_path(&path);
-    
+
     // Indexamos el archivo para tenerlo listo en el cache
     let _handle = FileIndex::get_or_create(&clean_path)
         .map_err(|e| format!("Error al indexar archivo: {}", e))?;
-    
+
     // Leemos el contenido completo para el buffer inicial
     fs::read_to_string(&clean_path)
         .map_err(|e| format!("Failed to read file at {}: {}", clean_path, e))
@@ -49,27 +49,28 @@ pub async fn read_file_lines(
     let handle = FileIndex::get_or_create(&clean_path)
         .map_err(|e| format!("Error al indexar archivo: {}", e))?;
 
-    handle.read_lines(start_line, end_line)
+    handle
+        .read_lines(start_line, end_line)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn write_file(
-    path: String, 
+    path: String,
     content: String,
-    app: tauri::AppHandle  // ← agregar
+    app: tauri::AppHandle, // ← agregar
 ) -> Result<(), String> {
     let clean_path = normalize_path(&path);
     let target_path = PathBuf::from(&clean_path);
-    
+
     fs::write(&target_path, &content)
         .map_err(|e| format!("Failed to write file at {}: {}", clean_path, e))?;
-    
+
     FileIndex::invalidate(&clean_path);
-    
+
     // Emitir evento específico de guardado — distinto al de watcher
     app.emit("file-saved", &clean_path)
         .map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }

@@ -8,8 +8,6 @@ use memmap2::Mmap;
 
 static FILE_CACHE: LazyLock<DashMap<String, Arc<FileIndex>>> = LazyLock::new(DashMap::new);
 
-use memchr::Memchr;
-
 pub struct FileIndex {
     mmap: Mmap,
     line_offsets: Vec<usize>,
@@ -17,22 +15,18 @@ pub struct FileIndex {
 
 impl FileIndex {
     pub fn new(path: String) -> Result<Self> {
-        let file = File::open(&path)
-            .with_context(|| format!("Failed to open file: {}", path))?;
-    
+        let file = File::open(&path).with_context(|| format!("Failed to open file: {}", path))?;
+
         let mmap = unsafe { Mmap::map(&file) }
             .with_context(|| format!("Failed to memory map file: {}", path))?;
-    
+
         let mut line_offsets = vec![0];
-    
+
         for pos in memchr::memchr_iter(b'\n', &mmap) {
             line_offsets.push(pos + 1);
         }
-    
-        Ok(Self {
-            mmap,
-            line_offsets,
-        })
+
+        Ok(Self { mmap, line_offsets })
     }
 
     pub fn invalidate(path: &str) {

@@ -1,4 +1,7 @@
-use tauri::{plugin::{Builder, TauriPlugin}, Runtime};
+use tauri::{
+    plugin::{Builder, TauriPlugin},
+    Runtime,
+};
 
 mod commands;
 

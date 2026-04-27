@@ -1,16 +1,16 @@
 //! FS Explorer Module - Forja Editor
-//! 
+//!
 //! Este módulo proporciona capacidades de exploración del sistema de archivos de alto rendimiento,
 //! integrando el respeto a las reglas de `.gitignore` y detección de estados de Git con propagación a padres.
 
+use git2::{Repository, StatusOptions};
+use ignore::WalkBuilder;
+use notify::{RecommendedWatcher, RecursiveMode};
+use notify_debouncer_mini::{new_debouncer, DebouncedEvent};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use ignore::WalkBuilder;
-use git2::{Repository, StatusOptions};
-use std::collections::HashMap;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use notify_debouncer_mini::{new_debouncer, DebouncedEvent};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::Emitter;
@@ -32,7 +32,7 @@ fn simplify_path(path: &Path) -> String {
     let s = path.to_string_lossy();
     // Normalizar barras invertidas de Windows a barras normales
     let normalized = s.replace("\\", "/");
-    
+
     // Doble comprobación: si la ruta tiene un ratio de barras absurdamente alto, algo falló.
     // Pero con el fix de replace("\\", "/") ya no debería ocurrir.
     normalized
@@ -41,18 +41,18 @@ fn simplify_path(path: &Path) -> String {
 /// Obtiene los estados de Git para un directorio dado.
 pub fn get_git_statuses(path: &Path) -> HashMap<String, String> {
     let mut git_statuses = HashMap::new();
-    
+
     // Intentar encontrar el repositorio
     let repo = match Repository::discover(path) {
         Ok(r) => r,
         Err(_) => return git_statuses, // No es un repo git
     };
-    
+
     let mut status_opts = StatusOptions::new();
     status_opts.include_untracked(true);
     status_opts.renames_head_to_index(true);
     status_opts.show(git2::StatusShow::IndexAndWorkdir);
-    
+
     if let Ok(statuses) = repo.statuses(Some(&mut status_opts)) {
         // El root del repo para unir las rutas relativas de git2
         // repo.path() suele ser la carpeta .git, tomamos el padre
@@ -67,14 +67,16 @@ pub fn get_git_statuses(path: &Path) -> HashMap<String, String> {
                         s if s.is_wt_deleted() || s.is_index_deleted() => "deleted",
                         _ => "untracked",
                     };
-                    
+
                     let normalized_full = simplify_path(&full_path);
                     git_statuses.insert(normalized_full, status_str.to_string());
-                    
+
                     // Propagación a padres (opcional pero ayuda a ver cambios en carpetas)
                     let mut current = full_path.parent();
                     while let Some(parent) = current {
-                        if !parent.starts_with(repo_root) || parent == repo_root { break; }
+                        if !parent.starts_with(repo_root) || parent == repo_root {
+                            break;
+                        }
                         let normalized_parent = simplify_path(parent);
                         if !git_statuses.contains_key(&normalized_parent) {
                             git_statuses.insert(normalized_parent, "modified".to_string());
@@ -85,7 +87,7 @@ pub fn get_git_statuses(path: &Path) -> HashMap<String, String> {
             }
         }
     }
-    
+
     git_statuses
 }
 
@@ -108,8 +110,10 @@ pub async fn search_files(path: String, query: String) -> Result<Vec<FileEntry>,
     for result in walker {
         if let Ok(entry) = result {
             let p = entry.path();
-            if p.is_dir() { continue; }
-            
+            if p.is_dir() {
+                continue;
+            }
+
             let normalized_p = simplify_path(p);
             if !seen_paths.insert(normalized_p.clone()) {
                 continue;
@@ -127,7 +131,9 @@ pub async fn search_files(path: String, query: String) -> Result<Vec<FileEntry>,
                 });
             }
         }
-        if results.len() > 50 { break; }
+        if results.len() > 50 {
+            break;
+        }
     }
 
     Ok(results)
@@ -137,8 +143,8 @@ pub async fn search_files(path: String, query: String) -> Result<Vec<FileEntry>,
 #[tauri::command]
 pub async fn explore_directory(path: String) -> Result<Vec<FileEntry>, String> {
     let target_path = PathBuf::from(&path);
-    if !target_path.exists() { 
-        return Err(format!("La ruta no existe: {}", path)); 
+    if !target_path.exists() {
+        return Err(format!("La ruta no existe: {}", path));
     }
 
     let git_statuses = get_git_statuses(&target_path);
@@ -166,13 +172,14 @@ pub async fn explore_directory(path: String) -> Result<Vec<FileEntry>, String> {
     }
 
     // Añadir ignorados
-    let dir_reader = fs::read_dir(&target_path).map_err(|e| format!("Error leyendo directorio: {}", e))?;
+    let dir_reader =
+        fs::read_dir(&target_path).map_err(|e| format!("Error leyendo directorio: {}", e))?;
     for entry_result in dir_reader {
         if let Ok(entry) = entry_result {
             let p = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
             let normalized_p = simplify_path(&p);
-            
+
             if !entries.iter().any(|e| e.name == name) {
                 entries.push(FileEntry {
                     name,
@@ -206,7 +213,10 @@ pub struct FileContentSearchResult {
 }
 
 #[tauri::command]
-pub async fn search_in_files(path: String, query: String) -> Result<Vec<FileContentSearchResult>, String> {
+pub async fn search_in_files(
+    path: String,
+    query: String,
+) -> Result<Vec<FileContentSearchResult>, String> {
     let target_path = PathBuf::from(&path);
     let walker = WalkBuilder::new(&target_path)
         .standard_filters(true)
@@ -219,8 +229,10 @@ pub async fn search_in_files(path: String, query: String) -> Result<Vec<FileCont
     for result in walker {
         if let Ok(entry) = result {
             let p = entry.path();
-            if p.is_dir() { continue; }
-            
+            if p.is_dir() {
+                continue;
+            }
+
             let normalized_p = simplify_path(p);
             if !seen_paths.insert(normalized_p.clone()) {
                 continue;
@@ -235,27 +247,34 @@ pub async fn search_in_files(path: String, query: String) -> Result<Vec<FileCont
                 }
             }
         }
-        if results.len() > 20 { break; }
+        if results.len() > 20 {
+            break;
+        }
     }
 
     Ok(results)
 }
 
 // Guardar el watcher en estado global para que no se dropee
-static WATCHER: Mutex<Option<notify_debouncer_mini::Debouncer<RecommendedWatcher>>> = Mutex::new(None);
+static WATCHER: Mutex<Option<notify_debouncer_mini::Debouncer<RecommendedWatcher>>> =
+    Mutex::new(None);
 
 #[tauri::command]
 pub async fn watch_directory(path: String, app: tauri::AppHandle) -> Result<(), String> {
     let watch_path = path.clone();
 
-    let mut debouncer = new_debouncer(Duration::from_millis(300), move |res: Result<Vec<DebouncedEvent>, _>| {
-        if let Ok(events) = res {
-            for event in events {
-                let changed_path = event.path.to_string_lossy().to_string();
-                app.emit("file-changed", &changed_path).ok();
+    let mut debouncer = new_debouncer(
+        Duration::from_millis(300),
+        move |res: Result<Vec<DebouncedEvent>, _>| {
+            if let Ok(events) = res {
+                for event in events {
+                    let changed_path = event.path.to_string_lossy().to_string();
+                    app.emit("file-changed", &changed_path).ok();
+                }
             }
-        }
-    }).map_err(|e| e.to_string())?;
+        },
+    )
+    .map_err(|e| e.to_string())?;
 
     debouncer
         .watcher()
@@ -318,44 +337,47 @@ pub async fn delete_entry(path: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn list_directory_from_path(path: String) -> Result<Vec<FileEntry>, String> {
     let target_path = PathBuf::from(&path);
-    
+
     // Crear un constructor de búsqueda que respete .gitignore
     // Usamos el WalkBuilder para que gestione automáticamente los ficheros .gitignore
     // Pero solo queremos el primer nivel (profundidad 1)
     let walker = WalkBuilder::new(&target_path)
         .standard_filters(true) // Respeta .gitignore, .ignore, etc.
-        .hidden(false)         // No ocultamos los ficheros ocultos, solo los marcamos como ignorados si toca
+        .hidden(false) // No ocultamos los ficheros ocultos, solo los marcamos como ignorados si toca
         .max_depth(Some(1))
         .build();
 
     let mut result = Vec::new();
-    
+
     // El Walker también devuelve el directorio raíz, lo saltamos
     for result_entry in walker.skip(1) {
         if let Ok(entry) = result_entry {
             let entry_path = entry.path();
             let normalized_p = simplify_path(entry_path); // Added normalization here
-            
+
             result.push(FileEntry {
                 name: entry.file_name().to_string_lossy().to_string(),
                 path: normalized_p.clone(),
                 is_dir: entry_path.is_dir(),
                 is_ignored: false,
                 // Provide default values for fields missing in the original path.rs FileEntry
-                extension: entry_path.extension().map(|e| e.to_string_lossy().to_string()),
+                extension: entry_path
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_string()),
                 git_status: None, // No git status info available at this level from WalkBuilder
             });
         }
     }
-    
+
     // También necesitamos añadir manualmente los archivos que el WalkBuilder ignoró
-    let dir_reader = fs::read_dir(&target_path).map_err(|e| format!("Error leyendo directorio: {}", e))?;
+    let dir_reader =
+        fs::read_dir(&target_path).map_err(|e| format!("Error leyendo directorio: {}", e))?;
     for entry_result in dir_reader {
         if let Ok(entry) = entry_result {
             let p = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
             let normalized_p = simplify_path(&p);
-            
+
             // If this file is already in the result (was found by the Walker), skip
             if result.iter().any(|e| e.name == name) {
                 continue;
@@ -373,7 +395,7 @@ pub async fn list_directory_from_path(path: String) -> Result<Vec<FileEntry>, St
             });
         }
     }
-    
+
     // Order: Directories first, then files, both alphabetically
     result.sort_by(|a, b| {
         if a.is_dir != b.is_dir {

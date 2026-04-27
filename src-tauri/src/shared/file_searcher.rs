@@ -1,7 +1,7 @@
-use memmap2::Mmap;
-use std::fs::File;
 use anyhow::{Context, Result};
+use memmap2::Mmap;
 use regex::Regex;
+use std::fs::File;
 
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct SearchResult {
@@ -23,8 +23,8 @@ impl FileSearcher {
         let mmap = unsafe { Mmap::map(&file) }
             .with_context(|| format!("Failed to memory map file for searching: {}", file_path))?;
 
-        let re = Regex::new(pattern)
-            .with_context(|| format!("Invalid regex pattern: {}", pattern))?;
+        let re =
+            Regex::new(pattern).with_context(|| format!("Invalid regex pattern: {}", pattern))?;
 
         let mut results = Vec::new();
         for (line_idx, raw_line) in mmap.split(|&byte| byte == b'\n').enumerate() {
@@ -45,7 +45,7 @@ impl FileSearcher {
                 });
             }
         }
-        
+
         Ok(results)
     }
 }

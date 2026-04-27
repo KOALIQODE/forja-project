@@ -1,6 +1,6 @@
-use tree_sitter::{Parser, Node, Point};
-use anyhow::{Result, Context};
-use crate::shared::dynamic_parser::{DynamicParser, REGISTRY}; // Corrected import
+use crate::shared::dynamic_parser::{DynamicParser, REGISTRY};
+use anyhow::{Context, Result};
+use tree_sitter::{Node, Parser, Point}; // Corrected import
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CodeBreadcrumb {
@@ -38,11 +38,13 @@ impl CodeAnalyzer {
         let lang = self.get_language(language_name)?;
         self.parser.set_language(lang)?;
 
-        let tree = self.parser.parse(content, None)
+        let tree = self
+            .parser
+            .parse(content, None)
             .context("Failed to parse content")?;
 
         let target_pos = Point { row: line, column };
-        
+
         let mut items = Vec::new();
         self.collect_breadcrumbs(tree.root_node(), content, target_pos, &mut items);
 
@@ -102,13 +104,18 @@ impl CodeAnalyzer {
     fn extract_name(&self, node: &Node, source: &str) -> String {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            if child.kind() == "identifier" || child.kind() == "name" || child.kind() == "type_identifier" || child.kind() == "tag_name" {
-                return child.utf8_text(source.as_bytes())
+            if child.kind() == "identifier"
+                || child.kind() == "name"
+                || child.kind() == "type_identifier"
+                || child.kind() == "tag_name"
+            {
+                return child
+                    .utf8_text(source.as_bytes())
                     .unwrap_or("anonymous")
                     .to_string();
             }
         }
-        
+
         "anonymous".to_string()
     }
 
