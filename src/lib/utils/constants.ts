@@ -95,7 +95,7 @@ export const EDITOR_CONFIG = {
   LINE_HEIGHT: 22,
   FONT_SIZE: 13,
   FONT_FAMILY: '13px "JetBrains Mono", "Fira Code", monospace',
-  CHUNK_SIZE: 100,
+  CHUNK_SIZE: 500,
   VISIBLE_LINES_OFFSET: 5,
 } as const;
 

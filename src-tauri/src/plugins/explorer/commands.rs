@@ -9,6 +9,11 @@ use std::path::{Path, PathBuf};
 use ignore::WalkBuilder;
 use git2::{Repository, StatusOptions};
 use std::collections::HashMap;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify_debouncer_mini::{new_debouncer, DebouncedEvent};
+use std::sync::Mutex;
+use std::time::Duration;
+use tauri::Emitter;
 
 /// Representa una entrada en el sistema de archivos (archivo o directorio).
 #[derive(Serialize, Debug, Clone)]
@@ -223,10 +228,31 @@ pub async fn search_in_files(path: String, query: String) -> Result<Vec<FileCont
     Ok(results)
 }
 
+// Guardar el watcher en estado global para que no se dropee
+static WATCHER: Mutex<Option<notify_debouncer_mini::Debouncer<RecommendedWatcher>>> = Mutex::new(None);
+
 #[tauri::command]
-pub async fn watch_directory(_path: String) -> Result<(), String> {
-    // Por ahora solo devolvemos Ok para que el frontend no falle.
-    // En una implementación real, aquí se configuraría notify.
+pub async fn watch_directory(path: String, app: tauri::AppHandle) -> Result<(), String> {
+    let watch_path = path.clone();
+
+    let mut debouncer = new_debouncer(Duration::from_millis(300), move |res: Result<Vec<DebouncedEvent>, _>| {
+        if let Ok(events) = res {
+            for event in events {
+                let changed_path = event.path.to_string_lossy().to_string();
+                app.emit("file-changed", &changed_path).ok();
+            }
+        }
+    }).map_err(|e| e.to_string())?;
+
+    debouncer
+        .watcher()
+        .watch(std::path::Path::new(&watch_path), RecursiveMode::Recursive)
+        .map_err(|e| e.to_string())?;
+
+    // Guardar el watcher para que no se dropee
+    let mut guard = WATCHER.lock().unwrap();
+    *guard = Some(debouncer);
+
     Ok(())
 }
 

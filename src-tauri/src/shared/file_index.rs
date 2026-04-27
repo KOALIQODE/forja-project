@@ -19,16 +19,16 @@ impl FileIndex {
     pub fn new(path: String) -> Result<Self> {
         let file = File::open(&path)
             .with_context(|| format!("Failed to open file: {}", path))?;
+    
         let mmap = unsafe { Mmap::map(&file) }
             .with_context(|| format!("Failed to memory map file: {}", path))?;
-
-        // SIMD optimized line indexing
+    
         let mut line_offsets = vec![0];
-        let iter = Memchr::new(b'\n', &mmap);
-        for pos in iter {
+    
+        for pos in memchr::memchr_iter(b'\n', &mmap) {
             line_offsets.push(pos + 1);
         }
-
+    
         Ok(Self {
             mmap,
             line_offsets,
@@ -70,7 +70,15 @@ impl FileIndex {
     }
 
     pub fn total_lines(&self) -> Result<u32> {
-        Ok(self.line_offsets.len() as u32)
+        let len = self.line_offsets.len();
+        // Si el último offset apunta fuera del mmap, no es una línea real
+        if len > 0 {
+            let last_offset = self.line_offsets[len - 1];
+            if last_offset >= self.mmap.len() {
+                return Ok((len - 1) as u32);
+            }
+        }
+        Ok(len as u32)
     }
 
     fn read_line_at_offset(&self, offset: usize) -> Result<String> {

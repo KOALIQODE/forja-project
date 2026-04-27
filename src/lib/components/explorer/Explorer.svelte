@@ -74,6 +74,35 @@
             .split(/[\/\\]/)
             .pop() || "Raíz",
     );
+    
+    import { listen } from "@tauri-apps/api/event"; // ← agregar import
+    
+    onMount(() => {
+        const onWindowFocus = () => refresh(true);
+        window.addEventListener("focus", onWindowFocus);
+    
+        // ← agregar estos dos listeners
+        let unlistenFileSaved: (() => void) | null = null;
+        let unlistenFileChanged: (() => void) | null = null;
+    
+        (async () => {
+            // Cuando el editor guarda — refrescar silencioso
+            unlistenFileSaved = await listen("file-saved", () => {
+                refresh(true);
+            });
+    
+            // Cuando otro programa cambia un archivo — refrescar silencioso
+            unlistenFileChanged = await listen("file-changed", () => {
+                refresh(true);
+            });
+        })();
+    
+        return () => {
+            window.removeEventListener("focus", onWindowFocus);
+            if (unlistenFileSaved) unlistenFileSaved();
+            if (unlistenFileChanged) unlistenFileChanged();
+        };
+    });
 
     // Context Menu State
     let contextMenu = $state<{ x: number, y: number, options: any[] } | null>(null);
@@ -422,23 +451,23 @@
 
             {#if hasProject}
                 <div class="flex items-center gap-1">
-                    <button
+                    <!-- <button
                         type="button"
                         onclick={() => createNewFile()}
                         title="New File"
                         class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-emerald-400"
                     >
                         <Plus size="14" />
-                    </button>
-                    <button
+                    </button> -->
+                    <!-- <button
                         type="button"
                         onclick={() => createNewDirectory()}
                         title="New Folder"
                         class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-emerald-400"
                     >
                         <FolderPlus size="14" />
-                    </button>
-                    <button
+                    </button> -->
+                    <!-- <button
                         type="button"
                         onclick={() => refresh()}
                         title="Refresh"
@@ -448,7 +477,7 @@
                             size="14"
                             class={loading ? "animate-spin" : ""}
                         />
-                    </button>
+                    </button> -->
                     {#if $pinnedPath}
                         <button
                             type="button"
