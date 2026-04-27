@@ -1,6 +1,7 @@
 <script lang="ts">
   import RecentProjectsDialog from "../RecentProjectsDialog.svelte";
   import BufferDeleteDialog from "./BufferDeleteDialog.svelte";
+  import Telescope from "./Telescope.svelte";
   import { dialogState, closeDialog, DIALOG_IDS } from "../../stores/dialogStore";
 
   let currentDialog: any = null;
@@ -26,9 +27,9 @@
       onClose={handleClose}
       {...(currentDialog.props || {})}
     />
-  {:else}
-    {#if currentDialog.id === DIALOG_IDS.BUFFER_DELETE}
-      <BufferDeleteDialog />
-    {/if}
+  {:else if currentDialog.id === DIALOG_IDS.BUFFER_DELETE}
+    <BufferDeleteDialog />
+  {:else if currentDialog.id === DIALOG_IDS.TELESCOPE}
+    <Telescope {...(currentDialog.props || {})} />
   {/if}
 {/if}

@@ -103,14 +103,20 @@ pub async fn search_files(path: String, query: String) -> Result<Vec<FileEntry>,
         .build();
 
     let mut results = Vec::new();
+    let mut seen_paths = std::collections::HashSet::new();
+
     for result in walker {
         if let Ok(entry) = result {
             let p = entry.path();
             if p.is_dir() { continue; }
             
+            let normalized_p = simplify_path(p);
+            if !seen_paths.insert(normalized_p.clone()) {
+                continue;
+            }
+
             let name = entry.file_name().to_string_lossy().to_string();
             if name.to_lowercase().contains(&query_lower) {
-                let normalized_p = simplify_path(p);
                 results.push(FileEntry {
                     name,
                     path: normalized_p.clone(),
@@ -208,15 +214,22 @@ pub async fn search_in_files(path: String, query: String) -> Result<Vec<FileCont
         .build();
 
     let mut results = Vec::new();
+    let mut seen_paths = std::collections::HashSet::new();
+
     for result in walker {
         if let Ok(entry) = result {
             let p = entry.path();
             if p.is_dir() { continue; }
             
+            let normalized_p = simplify_path(p);
+            if !seen_paths.insert(normalized_p.clone()) {
+                continue;
+            }
+
             if let Ok(matches) = FileSearcher::search_in_file(&p.to_string_lossy(), &query, 10) {
                 if !matches.is_empty() {
                     results.push(FileContentSearchResult {
-                        path: simplify_path(p),
+                        path: normalized_p,
                         matches,
                     });
                 }

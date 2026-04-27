@@ -1,5 +1,5 @@
 [package]
-name = "forja-project"
+name = "forja-studio-editor"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]

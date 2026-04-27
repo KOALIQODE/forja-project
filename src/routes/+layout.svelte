@@ -4,7 +4,8 @@
   import TitleBar from "../lib/components/TitleBar.svelte";
   import ParserPrompt from "../lib/components/ParserPrompt.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
-  import { openBufferDeleteDialog, dialogState } from "../lib/stores/dialogStore";
+  import { openBufferDeleteDialog, openTelescope, closeDialog, dialogState } from "../lib/stores/dialogStore";
+  import { get } from 'svelte/store';
   import "../app.css";
   import '@fontsource-variable/montserrat/wght.css';
 
@@ -17,18 +18,53 @@
   
   let gradient = $derived(steppedGradient(steps, angle, from, to));
 
+  let lastTabTime = 0;
+
   onMount(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Open buffer delete dialog with Ctrl+B
+      const currentState = get(dialogState);
+      
+      // Si el diálogo ya está abierto, solo permitimos Escape para cerrar
+      if (currentState.activeDialog) {
+          if (e.key === 'Escape') closeDialog();
+          return;
+      }
+
+      // Tab Tab -> Search Files
+      if (e.key === 'Tab') {
+        const now = Date.now();
+        const delta = now - lastTabTime;
+        if (delta > 0 && delta < 500) { 
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          openTelescope('files');
+          lastTabTime = 0;
+          return;
+        } 
+        lastTabTime = now;
+      }
+
+      // Shift + / (es decir '?') -> Live Grep
+      if (e.shiftKey && e.key === '/') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openTelescope('grep');
+        return;
+      }
+
+      // Ctrl + B -> Buffers
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault();
-        openBufferDeleteDialog();
+        e.stopImmediatePropagation();
+        openTelescope('buffers');
+        return;
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    // Usar useCapture = true para interceptar antes que el editor
+    window.addEventListener('keydown', handleKeyDown, true);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
     };
   });
 </script>

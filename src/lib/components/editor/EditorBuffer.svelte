@@ -1,13 +1,13 @@
 <script lang="ts">
-    // Handle Tauri invoke
     import { invoke } from "@tauri-apps/api/core";
     import { untrack, onMount, onDestroy } from "svelte";
-    import { listen } from "@tauri-apps/api/event"; // Correct import for listen in Tauri v2
+    import { listen } from "@tauri-apps/api/event"; 
     import { ask } from "@tauri-apps/plugin-dialog";
 
     import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/constants";
     import { cursorPosition, currentBreadcrumb } from "$lib/stores/editorStore";
     import StatusBar from "$lib/components/StatusBar.svelte";
+    import { dialogState } from "../../stores/dialogStore";
 
     interface Props {
         filePath: string;
@@ -110,7 +110,7 @@
     }    async function highlightChunk(lines: string[], start: number): Promise<boolean> {
         try {
             const result = await invoke<SyntaxHighlight>("highlight_syntax", {
-                content: lines.join(""),
+                content: lines.join("\n"),
                 language,
             });
     
@@ -125,7 +125,7 @@
             for (const token of result.tokens) {
                 if (!token || typeof token.text !== "string") continue;
     
-                const parts = token.text.split("");
+                const parts = token.text.split("\n");
     
                 for (let i = 0; i < parts.length; i++) {
                     currentTokens.push({
@@ -262,14 +262,11 @@
     async function updateBreadcrumb() {
         if (!filePath) return;
         try {
-            // We need the full content for breadcrumbs (tree-sitter needs to parse)
-            // But reading all lines every time might be heavy.
-            // For now, let's just use what we have in lineCache or fetch if needed
             let lines: string[] = [];
             for (let i = 0; i < totalLines; i++) {
                 lines.push(lineCache.get(i) ?? "");
             }
-            const content = lines.join("");
+            const content = lines.join("\n");
             
             const breadcrumb = await invoke<any>("get_code_breadcrumb", {
                 content,
@@ -324,9 +321,19 @@
     }
 
     function handleKeyDown(e: KeyboardEvent) {
-        if ((e.ctrlKey || e.metaKey) && e.key === "s") return; // Handled in outer listener
+        // Bloquear entrada si hay un diálogo abierto
+        let activeDlg = false;
+        dialogState.subscribe(s => activeDlg = !!s.activeDialog)();
+        if (activeDlg) return;
 
-        cursorVisible = true; // Show immediately on typing
+        if ((e.ctrlKey || e.metaKey) && e.key === "s") return;
+
+        if (e.key === 'Escape') {
+            (e.currentTarget as HTMLElement).blur();
+            return;
+        }
+
+        cursorVisible = true;
 
         // Stop some defaults
         if (
@@ -344,6 +351,7 @@
         }
 
         const currentLineText = lineCache.get(cursorLine) ?? "";
+        // ... rest of the original handleKeyDown logic remains below
 
         if (e.key === "Enter") {
             // Simple Enter: break line
@@ -511,7 +519,7 @@
         try {
             let lines: string[] = [];
             for (let i = 0; i < totalLines; i++) {
-                lines.push(lineCache.get(i) ?? "\n");
+                lines.push(lineCache.get(i) ?? "");
             }
             const content = lines.join("\n"); // ← join con \n no con ""
             await invoke("write_file", { path: filePath, content });
@@ -673,23 +681,8 @@
                 if (Date.now() - lastSaveTime < 2000) return;
             
                 if (changedPath === filePath) {
-                    lineCache.clear();
-                    tokenCache.clear();
-                    pendingChunks.clear();
-                    totalLines = 0;
-                    currentScrollTop = 0;
-                    if (scrollContainer) scrollContainer.scrollTop = 0;
-            
-                    await fetchTotalLines();
-            
-                    // ← cargar chunks iniciales explícitamente, no esperar al fetchLoop
-                    const visibleLines = Math.ceil(window.innerHeight / LINE_HEIGHT);
-                    const chunksNeeded = Math.ceil((visibleLines * 3) / CHUNK_SIZE);
-                    for (let i = 0; i < chunksNeeded; i++) {
-                        const lineIdx = i * CHUNK_SIZE;
-                        if (lineIdx < totalLines) fetchChunk(lineIdx);
-                    }
-                    queueRedraw();
+                    console.log("External change detected, reloading file.");
+                    resetAndLoad(filePath);
                 }
             });
             
@@ -705,11 +698,11 @@
 
             // Escuchar foco de ventana
             unlistenFocus = await listen("tauri://focus", async () => {
-                console.log("Window focused, refreshing editor state.");
-                fetchTotalLines().then(() => {
-                    fetchChunk(startLine);
-                    queueRedraw();
-                });
+                console.log("Window focused, checking for updates.");
+                // Simplemente refrescar total lines por si acaso, 
+                // pero no resetear todo a menos que file-changed lo pida
+                await fetchTotalLines();
+                queueRedraw();
             });
         })(); // Ejecutar inmediatamente
 

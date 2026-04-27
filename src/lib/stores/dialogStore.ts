@@ -6,10 +6,13 @@ export const DIALOG_IDS = {
   SHORTCUTS_HELP: 'shortcuts-help',
   FILE_SEARCH: 'file-search',
   COMMAND_PALETTE: 'command-palette',
-  BUFFER_DELETE: 'buffer-delete'
+  BUFFER_DELETE: 'buffer-delete',
+  TELESCOPE: 'telescope'
 } as const;
 
 // Dialog types
+export type TelescopeMode = 'files' | 'grep' | 'buffers';
+
 export interface DialogConfig {
   id: string;
   component: any;
@@ -39,6 +42,14 @@ export function closeDialog() {
     ...state,
     activeDialog: null
   }));
+}
+
+export function openTelescope(mode: TelescopeMode = 'files') {
+  openDialog({
+    id: DIALOG_IDS.TELESCOPE,
+    component: 'Telescope',
+    props: { mode }
+  });
 }
 
 // Support for RecentProjectsDialog

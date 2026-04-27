@@ -70,15 +70,7 @@ impl FileIndex {
     }
 
     pub fn total_lines(&self) -> Result<u32> {
-        let len = self.line_offsets.len();
-        // Si el último offset apunta fuera del mmap, no es una línea real
-        if len > 0 {
-            let last_offset = self.line_offsets[len - 1];
-            if last_offset >= self.mmap.len() {
-                return Ok((len - 1) as u32);
-            }
-        }
-        Ok(len as u32)
+        Ok(self.line_offsets.len() as u32)
     }
 
     fn read_line_at_offset(&self, offset: usize) -> Result<String> {
@@ -95,12 +87,7 @@ impl FileIndex {
             end_offset = self.mmap.len();
         }
 
-        // Check for CR before LF and adjust slice end
-        let slice_end = if end_offset > offset && self.mmap[end_offset - 1] == b'\r' {
-            end_offset - 1
-        } else {
-            end_offset
-        };
+        let slice_end = end_offset;
 
         Ok(String::from_utf8_lossy(&self.mmap[offset..slice_end]).into_owned())
     }
