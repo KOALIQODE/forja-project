@@ -1,8 +1,7 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
-    import { untrack, onMount, onDestroy } from "svelte";
+    import { untrack, onMount } from "svelte";
     import { listen } from "@tauri-apps/api/event"; 
-    import { ask } from "@tauri-apps/plugin-dialog";
 
     import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/constants";
     import { cursorPosition, currentBreadcrumb } from "$lib/stores/editorStore";
@@ -16,7 +15,6 @@
     }
 
     let { filePath, bufferId, language }: Props = $props();
-    console.log(`EditorBuffer initialized for: ${filePath}`);
 
     const { LINE_HEIGHT, FONT_FAMILY, CHUNK_SIZE } = EDITOR_CONFIG;
 
@@ -38,6 +36,28 @@
 
     function queueRedraw() {
         needsRedraw = true;
+    }
+
+    function getChunkBounds(chunkId: number) {
+        const start = chunkId * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE - 1, totalLines - 1);
+        return { start, end };
+    }
+
+    function getCachedLinesForChunk(chunkId: number): string[] | null {
+        const { start, end } = getChunkBounds(chunkId);
+        const lines: string[] = [];
+
+        for (let i = start; i <= end; i++) {
+            const line = lineCache.get(i);
+            if (line === undefined) {
+                return null;
+            }
+
+            lines.push(line);
+        }
+
+        return lines;
     }
 
     // Helper functions to interact with backend
@@ -69,8 +89,7 @@
     
         pendingChunks.add(chunkId);
     
-        const start = chunkId * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE - 1, totalLines - 1);
+        const { start, end } = getChunkBounds(chunkId);
     
         try {
             const fetched = await invoke<string[]>("read_file_lines", {
@@ -107,14 +126,16 @@
         } finally {
             pendingChunks.delete(chunkId);
         }
-    }    async function highlightChunk(lines: string[], start: number): Promise<boolean> {
+    }
+
+    async function highlightChunk(lines: string[], start: number): Promise<boolean> {
         try {
             const result = await invoke<SyntaxHighlight>("highlight_syntax", {
                 content: lines.join("\n"),
                 language,
             });
     
-            if (!result || !Array.isArray(result.tokens)) {
+            if (!result || !Array.isArray(result.tokens) || result.used_fallback) {
                 console.warn("Invalid syntax highlight response");
                 return false;
             }
@@ -148,6 +169,58 @@
             return true;
         } catch (e) {
             console.warn("Highlight failed, fallback to plain text:", e);
+            return false;
+        }
+    }
+
+    async function rehighlightLoadedChunks(): Promise<boolean> {
+        tokenCache.clear();
+
+        for (const chunkId of [...loadedChunks].sort((a, b) => a - b)) {
+            const lines = getCachedLinesForChunk(chunkId);
+            if (!lines) continue;
+
+            const ok = await highlightChunk(lines, chunkId * CHUNK_SIZE);
+            if (!ok) {
+                highlightEnabled = false;
+                tokenCache.clear();
+                queueRedraw();
+                return false;
+            }
+        }
+
+        queueRedraw();
+        return true;
+    }
+
+    async function refreshHighlightAvailability(): Promise<boolean> {
+        if (!language || language === "unknown") {
+            highlightEnabled = false;
+            tokenCache.clear();
+            queueRedraw();
+            return false;
+        }
+
+        try {
+            const probe = await invoke<SyntaxHighlight>("highlight_syntax", {
+                content: "const forja_probe = 1;",
+                language,
+            });
+
+            if (!probe || !Array.isArray(probe.tokens) || probe.used_fallback) {
+                highlightEnabled = false;
+                tokenCache.clear();
+                queueRedraw();
+                return false;
+            }
+
+            highlightEnabled = true;
+            return rehighlightLoadedChunks();
+        } catch (e) {
+            console.warn("Highlight probe failed:", e);
+            highlightEnabled = false;
+            tokenCache.clear();
+            queueRedraw();
             return false;
         }
     }
@@ -594,7 +667,9 @@
     
         currentFilePath = path;
     
-        fetchTotalLines().then(() => {
+        fetchTotalLines().then(async () => {
+            await refreshHighlightAvailability();
+
             const visibleLines = Math.ceil(scrollContainer?.clientHeight ?? 600 / LINE_HEIGHT);
             const chunksNeeded = Math.ceil((visibleLines * 3) / CHUNK_SIZE);
     
@@ -646,33 +721,17 @@
         }).catch((e) => console.error("Failed to start directory watcher:", e));
 
         // 🔧 AQUÍ: Hacer async y await los listeners
+        let unlistenParserReady: (() => void) | null = null;
         let unlistenFileChanged: (() => void) | null = null;
+        let unlistenFileSaved: (() => void) | null = null;
         let unlistenFocus: (() => void) | null = null;
 
         (async () => {
-            // Re-trigger highlighting when a parser is installed
-            window.addEventListener("parser-ready", async (e: any) => {
-                if (e.detail.language === language) {
-                    console.log("Parser ready, testing highlight backend...");
-            
-                    try {
-                        const ok = await invoke<SyntaxHighlight>("highlight_syntax", {
-                            content: "test",
-                            language,
-                        });
-            
-                        if (ok && Array.isArray(ok.tokens)) {
-                            highlightEnabled = true;
-            
-                            const start = Math.floor(currentScrollTop / LINE_HEIGHT);
-                            fetchChunk(start);
-                        } else {
-                            highlightEnabled = false;
-                        }
-                    } catch {
-                        highlightEnabled = false;
-                    }
-                }
+            unlistenParserReady = await listen<string>("parser-ready", async (event) => {
+                if (event.payload !== language) return;
+
+                console.log("Parser ready, refreshing highlighted chunks...");
+                await refreshHighlightAvailability();
             });
 
             unlistenFileChanged = await listen("file-changed", async (event: any) => {
@@ -687,7 +746,7 @@
             });
             
             // Nuevo: escuchar guardado propio — solo refrescar explorer, NO el buffer
-            const unlistenFileSaved = await listen("file-saved", (event: any) => {
+            unlistenFileSaved = await listen("file-saved", (event: any) => {
                 const savedPath = event.payload;
                 // Disparar evento para que el explorer refresque el tree
                 window.dispatchEvent(new CustomEvent('explorer-refresh', { 
@@ -714,7 +773,9 @@
             resizeObserver.disconnect();
 
             // Ahora son funciones, no Promises
+            if (unlistenParserReady) unlistenParserReady();
             if (unlistenFileChanged) unlistenFileChanged();
+            if (unlistenFileSaved) unlistenFileSaved();
             if (unlistenFocus) unlistenFocus();
         };
     });
@@ -730,11 +791,15 @@
     }
     interface SyntaxHighlight {
         tokens: Token[];
+        used_fallback: boolean;
     }
 </script>
 
 <div
     class="relative h-full w-full bg-[#0d0d0d] flex flex-col font-mono text-sm overflow-hidden"
+    role="textbox"
+    aria-label="Code editor"
+    aria-multiline="true"
     onkeydown={(e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === "s") {
             e.preventDefault();
@@ -791,6 +856,7 @@
         <div
             class="absolute inset-0 min-h-0 overflow-auto custom-scrollbar z-10 outline-none bg-transparent cursor-text"
             bind:this={scrollContainer}
+            role="presentation"
             onscroll={handleScroll}
             onmousedown={handleClick}
             onmousemove={handleMouseMove}

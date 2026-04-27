@@ -1,6 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use glib::ObjectExt;
-use tauri::{Manager};
+use tauri::Manager;
 mod plugins;
 mod shared;
 
@@ -16,7 +16,7 @@ pub fn run() {
                     let webview = webview.inner();
 
                     unsafe {
-                        if let Some(data) = webview.data::<glib::Object>("wk-view-zoom-gesture"){
+                        if let Some(data) = webview.data::<glib::Object>("wk-view-zoom-gesture") {
                             glib::gobject_ffi::g_signal_handlers_destroy(data.as_ptr().cast());
                         }
                     }
@@ -53,6 +53,7 @@ pub fn run() {
             plugins::explorer::list_directory_from_path,
             // Syntax
             plugins::syntax::list_parsers,
+            plugins::syntax::install_parser,
             plugins::syntax::detect_language,
             plugins::syntax::get_code_breadcrumb,
             plugins::syntax::highlight_syntax,

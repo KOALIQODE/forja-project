@@ -7,7 +7,8 @@ export const DIALOG_IDS = {
   FILE_SEARCH: 'file-search',
   COMMAND_PALETTE: 'command-palette',
   BUFFER_DELETE: 'buffer-delete',
-  TELESCOPE: 'telescope'
+  TELESCOPE: 'telescope',
+  GRAMMAR_HUB: 'grammar-hub'
 } as const;
 
 // Dialog types
@@ -49,6 +50,13 @@ export function openTelescope(mode: TelescopeMode = 'files') {
     id: DIALOG_IDS.TELESCOPE,
     component: 'Telescope',
     props: { mode }
+  });
+}
+
+export function openGrammarHub() {
+  openDialog({
+    id: DIALOG_IDS.GRAMMAR_HUB,
+    component: 'ParserManager'
   });
 }
 

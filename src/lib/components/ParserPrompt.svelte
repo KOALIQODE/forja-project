@@ -1,44 +1,82 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import { ask } from '@tauri-apps/plugin-dialog';
   import { Sparkles, Download, X, CheckCircle2 } from '@lucide/svelte';
   import { activeBuffer } from '$lib/stores/bufferStore';
 
+  interface ParserMetadata {
+    language: string;
+    installed: boolean;
+  }
+
+  const STATUS_PROGRESS: Record<string, number> = {
+    'Fetching queries...': 35,
+    'Downloading binary...': 80,
+    Ready: 100
+  };
+
   let installingParser = $state<string | null>(null);
   let installProgress = $state(0);
+  let installMessage = $state('Starting...');
+  let installError = $state<string | null>(null);
   let recommendation = $state<string | null>(null);
   let checkedLanguages = new Set<string>();
   let showToast = $state(false);
 
+  function formatError(error: unknown) {
+    if (error instanceof Error) return error.message;
+    return typeof error === 'string' ? error : 'Unknown parser installation error';
+  }
+
   async function installParser(language: string) {
     installingParser = language;
-    installProgress = 0;
+    installProgress = 5;
+    installMessage = 'Starting...';
+    installError = null;
     recommendation = null;
+    showToast = true;
+
+    let unlistenStatus = () => {};
+    let unlistenReady = () => {};
 
     try {
-      const unlistenDownload = await listen('parser-downloading', (event: any) => {
-        if (event.payload[0] === language) {
-          installProgress = parseInt(event.payload[1]);
-        }
+      unlistenStatus = await listen<[string, string]>('parser-status', (event) => {
+        const [eventLanguage, status] = event.payload;
+        if (eventLanguage !== language) return;
+
+        installMessage = status;
+        installProgress = STATUS_PROGRESS[status] ?? installProgress;
+      });
+
+      unlistenReady = await listen<string>('parser-ready', (event) => {
+        if (event.payload !== language) return;
+
+        installMessage = 'Ready';
+        installProgress = 100;
       });
 
       await invoke('install_parser', { language });
-      unlistenDownload();
-      
-      // Success state
+
+      installMessage = 'Ready';
       installProgress = 100;
-      
-      // 🔥 Notificar a la ventana que el parser está listo para resaltar
-      window.dispatchEvent(new CustomEvent('parser-ready', { detail: { language } }));
+      checkedLanguages.add(language);
 
       setTimeout(() => {
-        installingParser = null;
-        showToast = false;
+        if (installingParser === language) {
+          installingParser = null;
+          showToast = false;
+        }
       }, 2000);
     } catch (err) {
+      checkedLanguages.delete(language);
+      installError = formatError(err);
+      installMessage = installError;
       console.error('Failed to install parser:', err);
       installingParser = null;
+      recommendation = language;
+    } finally {
+      unlistenStatus();
+      unlistenReady();
     }
   }
 
@@ -51,13 +89,16 @@
 
   async function checkParser(language: string) {
     try {
-      const parsers = await invoke<any[]>('list_parsers');
+      const parsers = await invoke<ParserMetadata[]>('list_parsers');
       const parser = parsers.find(p => p.language === language);
       
-      if (parser && !parser.installed) {
-        recommendation = language;
-        showToast = true;
+      if (parser) {
         checkedLanguages.add(language);
+
+        if (!parser.installed) {
+          recommendation = language;
+          showToast = true;
+        }
       }
     } catch (err) {
       console.error('Error checking parser:', err);
@@ -67,6 +108,7 @@
   function dismiss() {
     showToast = false;
     recommendation = null;
+    installError = null;
   }
 </script>
 
@@ -87,7 +129,7 @@
               <p class="text-[12px] font-bold text-zinc-100">
                 {installProgress === 100 ? 'Installed!' : `Installing ${installingParser}...`}
               </p>
-              <p class="text-[10px] text-zinc-500">Syntax highlighting for {installingParser}</p>
+              <p class="text-[10px] text-zinc-500">{installMessage}</p>
             </div>
           </div>
           <div class="w-full h-1 bg-white/5 rounded-full overflow-hidden">
@@ -113,12 +155,17 @@
               <p class="text-[11px] text-zinc-400 mt-1 leading-relaxed">
                 Install syntax highlighting for <span class="text-emerald-400 font-bold">{recommendation}</span> to improve your workflow.
               </p>
+              {#if installError}
+                <p class="mt-2 text-[10px] leading-relaxed text-rose-400">
+                  {installError}
+                </p>
+              {/if}
               <div class="mt-4 flex gap-2">
                 <button 
                   onclick={() => installParser(recommendation!)}
                   class="flex-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-black text-[11px] font-bold rounded-md transition-all cursor-pointer shadow-lg shadow-emerald-500/10"
                 >
-                  Install Now
+                  {installError ? 'Retry install' : 'Install Now'}
                 </button>
                 <button 
                   onclick={dismiss}

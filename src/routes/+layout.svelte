@@ -4,7 +4,7 @@
   import TitleBar from "../lib/components/TitleBar.svelte";
   import ParserPrompt from "../lib/components/ParserPrompt.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
-  import { openBufferDeleteDialog, openTelescope, closeDialog, dialogState } from "../lib/stores/dialogStore";
+  import { openBufferDeleteDialog, openTelescope, openGrammarHub, closeDialog, dialogState } from "../lib/stores/dialogStore";
   import { get } from 'svelte/store';
   import "../app.css";
   import '@fontsource-variable/montserrat/wght.css';
@@ -57,6 +57,14 @@
         e.preventDefault();
         e.stopImmediatePropagation();
         openTelescope('buffers');
+        return;
+      }
+
+      // Ctrl + G -> Grammar Hub
+      if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openGrammarHub();
         return;
       }
     };
