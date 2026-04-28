@@ -42,6 +42,7 @@
 
 <main 
   class="flex h-full w-full items-center justify-center outline-none" 
+  data-program-ui
   bind:this={welcomeContainer}
 >
   <div class="w-full max-w-[480px] px-8 py-12 text-center">
@@ -78,7 +79,7 @@
         </div>
       </button>
 
-      <button 
+      <!-- <button 
         type="button"
         class="group relative flex cursor-pointer items-center justify-between overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/30 px-5 py-4 font-medium text-zinc-400 transition-all duration-300 hover:border-emerald-500/50 hover:bg-emerald-500/5 hover:text-zinc-100 hover:shadow-[0_0_25px_rgba(16,185,129,0.1)]" 
         onclick={(e) => { e.preventDefault(); handleNewProject(); }}
@@ -88,7 +89,7 @@
           <Plus size="15" class="text-zinc-500 transition-colors group-hover:text-emerald-400" />
           <span>{UI_TEXT.NEW_EMPTY_PROJECT}</span>
         </div>
-      </button>
+      </button> -->
 
       <button 
         type="button"

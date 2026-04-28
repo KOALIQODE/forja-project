@@ -3,6 +3,7 @@
   import BufferDeleteDialog from "./BufferDeleteDialog.svelte";
   import Telescope from "./Telescope.svelte";
   import ParserManager from "./ParserManager.svelte";
+  import PreferencesDialog from "./PreferencesDialog.svelte";
   import { dialogState, closeDialog, DIALOG_IDS } from "../../stores/dialogStore";
 
   let currentDialog: any = null;
@@ -23,16 +24,28 @@
 
 {#if currentDialog}
   {#if currentDialog.id === DIALOG_IDS.RECENT_PROJECTS}
-    <RecentProjectsDialog 
-      isOpen={true} 
-      onClose={handleClose}
-      {...(currentDialog.props || {})}
-    />
+    <div data-program-ui>
+      <RecentProjectsDialog 
+        isOpen={true} 
+        onClose={handleClose}
+        {...(currentDialog.props || {})}
+      />
+    </div>
   {:else if currentDialog.id === DIALOG_IDS.BUFFER_DELETE}
-    <BufferDeleteDialog />
+    <div data-program-ui>
+      <BufferDeleteDialog />
+    </div>
   {:else if currentDialog.id === DIALOG_IDS.TELESCOPE}
-    <Telescope {...(currentDialog.props || {})} />
+    <div data-program-ui>
+      <Telescope {...(currentDialog.props || {})} />
+    </div>
   {:else if currentDialog.id === DIALOG_IDS.GRAMMAR_HUB}
-    <ParserManager />
+    <div data-program-ui>
+      <ParserManager />
+    </div>
+  {:else if currentDialog.id === DIALOG_IDS.PREFERENCES}
+    <div data-program-ui>
+      <PreferencesDialog {...(currentDialog.props || {})} />
+    </div>
   {/if}
 {/if}

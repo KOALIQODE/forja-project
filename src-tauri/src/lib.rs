@@ -44,6 +44,7 @@ pub fn run() {
             // Explorer
             plugins::explorer::search_files,
             plugins::explorer::search_in_files,
+            plugins::explorer::get_project_todos,
             plugins::explorer::explore_directory,
             plugins::explorer::watch_directory,
             plugins::explorer::create_file,

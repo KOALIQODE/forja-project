@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Bell, Puzzle, User, BadgeQuestionMark, Minus, Square, X, Settings } from "@lucide/svelte";
+  import { Bell, Puzzle, BadgeQuestionMark, Minus, Square, X, Settings } from "@lucide/svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { openPreferencesDialog } from "../stores/dialogStore";
   const appWindow = getCurrentWindow();
 
   function handleMinimize() {
@@ -16,7 +17,7 @@
   }
 </script>
 
-<header class="flex h-10 w-full items-center justify-between bg-transparent text-[#e0e0e0] select-none" data-tauri-drag-region>
+<header class="flex h-10 w-full items-center justify-between bg-transparent text-[#e0e0e0] select-none" data-program-ui data-tauri-drag-region>
   <!-- Left section - Logo/Brand -->
   <div class="flex items-center pl-4">
     <div class="flex items-center gap-2.5">
@@ -42,7 +43,7 @@
       <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white">
         <Puzzle size="16" />
       </button>
-      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Settings">
+      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Preferences" onclick={() => openPreferencesDialog("program")}>
         <Settings size="16" />
       </button>
       <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Help">

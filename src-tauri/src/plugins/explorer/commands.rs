@@ -255,6 +255,49 @@ pub async fn search_in_files(
     Ok(results)
 }
 
+#[tauri::command]
+pub async fn get_project_todos(path: String) -> Result<Vec<FileContentSearchResult>, String> {
+    let target_path = PathBuf::from(&path);
+    let walker = WalkBuilder::new(&target_path)
+        .standard_filters(true)
+        .hidden(false)
+        .build();
+
+    let mut results = Vec::new();
+    let mut seen_paths = std::collections::HashSet::new();
+    let query = "// TODO:";
+
+    for result in walker {
+        if let Ok(entry) = result {
+            let p = entry.path();
+            if p.is_dir() {
+                continue;
+            }
+
+            let normalized_p = simplify_path(p);
+            if !seen_paths.insert(normalized_p.clone()) {
+                continue;
+            }
+
+            // Aumentamos el límite de resultados por archivo para los TODOs
+            if let Ok(matches) = FileSearcher::search_in_file(&p.to_string_lossy(), query, 100) {
+                if !matches.is_empty() {
+                    results.push(FileContentSearchResult {
+                        path: normalized_p,
+                        matches,
+                    });
+                }
+            }
+        }
+        // No ponemos un límite tan estricto de archivos para los TODOs como en search_in_files
+        if results.len() > 500 {
+            break;
+        }
+    }
+
+    Ok(results)
+}
+
 // Guardar el watcher en estado global para que no se dropee
 static WATCHER: Mutex<Option<notify_debouncer_mini::Debouncer<RecommendedWatcher>>> =
     Mutex::new(None);

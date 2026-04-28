@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
   import Explorer from "$lib/components/explorer/Explorer.svelte";
+  import TodoSidebar from "$lib/components/TodoSidebar.svelte";
   import EditorBuffer from "$lib/components/editor/EditorBuffer.svelte";
   import { activeBuffer, activeBufferId, openBuffer } from "$lib/stores/bufferStore";
   import { currentProject } from "$lib/stores/projectStore";
@@ -48,4 +49,6 @@
       <EditorBuffer filePath={$activeBuffer.filePath} bufferId={$activeBuffer.id} language={$activeBuffer.language || 'text'} />
     {/if}
   </section>
+
+  <TodoSidebar />
 </main>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { activeBuffer, activeBufferId, openBuffers } from "$lib/stores/bufferStore";
-  import { cursorPosition, currentBreadcrumb } from "$lib/stores/editorStore";
+  import { cursorPosition, currentBreadcrumb, vimStatus } from "$lib/stores/editorStore";
   import { openBufferDeleteDialog } from "$lib/stores/dialogStore";
   import { FileCode, AlertCircle, AlertTriangle, List, ChevronRight } from "@lucide/svelte";
   import { getFileIcon } from "$lib/utils/fileIcons";
@@ -36,9 +36,20 @@
   }
 
   let activeFileIcon = $derived($activeBuffer ? getFileIcon($activeBuffer.filePath) : null);
+  let vimModeLabel = $derived(
+    $vimStatus.mode === 'off'
+      ? 'VIM OFF'
+      : $vimStatus.mode === 'command' && $vimStatus.command
+      ? `:${$vimStatus.command}`
+      : [
+          $vimStatus.mode.toUpperCase(),
+          $vimStatus.pending,
+          $vimStatus.count
+        ].filter(Boolean).join(' ')
+  );
 </script>
 
-<footer class="h-8 bg-black/15 backdrop-blur-xl border-t border-white/5 flex items-center justify-between px-3 text-[11px] text-[#cccccc] select-none z-50">
+<footer class="h-8 bg-black/15 backdrop-blur-xl border-t border-white/5 flex items-center justify-between px-3 text-[11px] text-[#cccccc] select-none z-50" data-program-ui style="font-family: var(--forja-buffer-font-family);">
   <div class="flex items-center gap-1 h-full overflow-hidden">
     <!-- Breadcrumb -->
     {#if $activeBuffer}
@@ -80,6 +91,12 @@
   </div>
 
   <div class="flex items-center h-full shrink-0">
+    <div class="flex items-center gap-1 hover:bg-white/5 px-3 h-full transition-colors min-w-[120px]">
+      <span class="rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-bold tracking-[0.12em] text-emerald-400">
+        {vimModeLabel || 'NORMAL'}
+      </span>
+    </div>
+
     <!-- Active Buffers Icon - Now triggers Telescope Dialog -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -100,6 +117,6 @@
 
 <style>
   footer {
-    font-family: var(--font-family-mono);
+    font-family: var(--forja-buffer-font-family, var(--font-family-mono));
   }
 </style>

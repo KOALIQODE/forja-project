@@ -8,7 +8,8 @@ export const DIALOG_IDS = {
   COMMAND_PALETTE: 'command-palette',
   BUFFER_DELETE: 'buffer-delete',
   TELESCOPE: 'telescope',
-  GRAMMAR_HUB: 'grammar-hub'
+  GRAMMAR_HUB: 'grammar-hub',
+  PREFERENCES: 'preferences'
 } as const;
 
 // Dialog types
@@ -57,6 +58,14 @@ export function openGrammarHub() {
   openDialog({
     id: DIALOG_IDS.GRAMMAR_HUB,
     component: 'ParserManager'
+  });
+}
+
+export function openPreferencesDialog(initialSection: 'program' | 'buffer' = 'program') {
+  openDialog({
+    id: DIALOG_IDS.PREFERENCES,
+    component: 'PreferencesDialog',
+    props: { initialSection }
   });
 }
 

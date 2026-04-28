@@ -19,6 +19,7 @@
         Edit2,
         RefreshCw,
         Trash2,
+        ListTodo,
         File as FileIcon
     } from "@lucide/svelte";
     import { openBuffer, activeBufferId } from "$lib/stores/bufferStore";
@@ -27,6 +28,7 @@
         closeProject,
         openProject,
     } from "$lib/stores/projectStore";
+    import { toggleTodoSidebar } from "$lib/stores/todoStore";
     import {
         expandedPaths,
         directoryCache,
@@ -34,6 +36,10 @@
         inlineAction,
         type FileEntry
     } from "$lib/stores/explorerStore";
+    import {
+        programPreferences,
+        setProgramPreference,
+    } from "$lib/stores/preferencesStore";
     import FileDrillItem from "./FileDrillItem.svelte";
     import FileTreeItem from "./FileTreeItem.svelte";
     import ContextMenu from "../ContextMenu.svelte";
@@ -53,8 +59,7 @@
 
     const MIN_WIDTH = 180;
     const MAX_WIDTH = 600;
-    const DEFAULT_WIDTH = 260;
-    let sidebarWidth = $state(DEFAULT_WIDTH);
+    let sidebarWidth = $state(260);
     let isResizing = $state(false);
 
     let searchQuery = $state("");
@@ -307,8 +312,17 @@
     }
 
     function stopResizing() {
+        if (sidebarWidth !== $programPreferences.explorerWidth) {
+            setProgramPreference("explorerWidth", sidebarWidth);
+        }
         isResizing = false;
     }
+
+    $effect(() => {
+        if (!isResizing && sidebarWidth !== $programPreferences.explorerWidth) {
+            sidebarWidth = $programPreferences.explorerWidth;
+        }
+    });
 
     $effect(() => {
         if (isResizing) {
@@ -427,6 +441,7 @@
 
 <div
     class="relative flex shrink-0 flex-col border-r border-zinc-800/50 bg-[#0a0a0a] text-zinc-400 select-none h-full transition-colors duration-300 font-sans"
+    data-program-ui
     style="width: {sidebarWidth}px;"
     onauxclick={(e) => e.preventDefault()}
 >
@@ -488,6 +503,14 @@
                             <PinOff size="14" />
                         </button>
                     {/if}
+                    <button
+                        type="button"
+                        onclick={toggleTodoSidebar}
+                        title="Lista de TODOs del proyecto"
+                        class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-emerald-400"
+                    >
+                        <ListTodo size="14" />
+                    </button>
                     <button
                         type="button"
                         onclick={toggleViewMode}

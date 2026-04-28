@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, type Snippet } from 'svelte';
   import { steppedGradient } from "../lib/utils/backgroundLayer"
   import TitleBar from "../lib/components/TitleBar.svelte";
   import ParserPrompt from "../lib/components/ParserPrompt.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
-  import { openBufferDeleteDialog, openTelescope, openGrammarHub, closeDialog, dialogState } from "../lib/stores/dialogStore";
+  import "../lib/stores/preferencesStore";
+  import { openTelescope, openGrammarHub, openPreferencesDialog, closeDialog, dialogState } from "../lib/stores/dialogStore";
   import { get } from 'svelte/store';
   import "../app.css";
   import '@fontsource-variable/montserrat/wght.css';
@@ -67,6 +68,13 @@
         openGrammarHub();
         return;
       }
+
+      // Ctrl/Cmd + , -> Preferences
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openPreferencesDialog('program');
+      }
     };
 
     // Usar useCapture = true para interceptar antes que el editor
@@ -87,7 +95,9 @@
   </main>
 </div>
 
-<ParserPrompt />
+<div data-program-ui>
+  <ParserPrompt />
+</div>
 <DialogManager />
 
 <style>
@@ -96,7 +106,6 @@
     padding: 0;
     height: 100%;
     overflow: hidden;
-    /* Usamos el nombre exacto que proporciona Fontsource Variable */
-    font-family: 'Montserrat Variable', sans-serif;
+    font-family: var(--forja-program-font-family, 'Montserrat Variable', sans-serif);
   }
 </style>
