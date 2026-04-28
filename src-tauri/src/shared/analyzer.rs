@@ -1,6 +1,6 @@
 use crate::shared::dynamic_parser::{DynamicParser, REGISTRY};
 use anyhow::{Context, Result};
-use tree_sitter::{Node, Parser, Point}; // Corrected import
+use tree_sitter::{Node, Parser, Point, Language, WasmStore};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CodeBreadcrumb {
@@ -35,8 +35,12 @@ impl CodeAnalyzer {
         line: usize,
         column: usize,
     ) -> Result<CodeBreadcrumb> {
-        let lang = self.get_language(language_name)?;
-        self.parser.set_language(lang)?;
+        // Wasm parsers need a WasmStore associated with the parser
+        let mut wasm_store = WasmStore::new(&REGISTRY.wasm_engine)?;
+        
+        let wasm_lang = wasm_store.load_language(language_name, &std::fs::read(REGISTRY.get_parser_lib_path(language_name))?)?;
+        self.parser.set_wasm_store(wasm_store)?;
+        self.parser.set_language(&wasm_lang)?;
 
         let tree = self
             .parser
@@ -119,7 +123,7 @@ impl CodeAnalyzer {
         "anonymous".to_string()
     }
 
-    fn get_language(&self, lang: &str) -> Result<tree_sitter::Language> {
+    fn get_language(&self, lang: &str) -> Result<Language> {
         DynamicParser::load(lang, &REGISTRY)
     }
 }

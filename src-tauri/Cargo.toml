@@ -38,19 +38,21 @@ dashmap = "5.5"
 notify-debouncer-mini = "0.4"
 
 # SYNTAX HIGHLIGHTING (Arquitectura Zed)
-tree-sitter = "0.20"
-tree-sitter-highlight = "0.20" # Gestiona colores y queries
+tree-sitter = { version = "0.24", features = ["wasm"] }
+tree-sitter-highlight = "0.24" # Upgraded to match tree-sitter version
 libloading = "0.7"             # Carga de .so/.dll
-reqwest = { version = "0.11", features = ["json", "blocking"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "blocking"] }
 
 # Parsers base (embebidos como fallback)
 
 # MISC
 anyhow = "1.0"
+thiserror = "1.0" # Added thiserror for custom error types
 tracing = "0.1"
 dirs = "5.0"
 lazy_static = "1.4"
 pathdiff = "0.2"
+chrono = "0.4"
 git2 = { version = "0.20.3", features = ["vendored-libgit2"] }
 ignore = "0.4"
 glib = "0.18"

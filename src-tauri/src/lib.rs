@@ -41,6 +41,7 @@ pub fn run() {
             plugins::git::git_status_batch,
             plugins::git::git_status_single,
             plugins::git::git_branch,
+            plugins::git::git_blame,
             // Explorer
             plugins::explorer::search_files,
             plugins::explorer::search_in_files,

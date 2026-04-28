@@ -145,3 +145,61 @@ pub fn git_branch(path: String) -> Option<String> {
     let head = repo.head().ok()?;
     head.shorthand().map(|s| s.to_string())
 }
+
+#[derive(serde::Serialize, Clone)]
+pub struct BlameLine {
+    pub author: String,
+    pub date: String,
+    pub commit_id: String,
+    pub summary: String,
+}
+
+#[tauri::command]
+pub fn git_blame(path: String) -> Result<Vec<BlameLine>, String> {
+    let repo = Repository::discover(&path).map_err(|e| e.to_string())?;
+    
+    let repo_root = repo.workdir().ok_or("No workdir found")?;
+    let relative_path = pathdiff::diff_paths(&path, repo_root).ok_or("Could not compute relative path")?;
+
+    let blame = repo.blame_file(&relative_path, None).map_err(|e| e.to_string())?;
+    let mut results = Vec::new();
+
+    for hunk in blame.iter() {
+        let commit_id = hunk.final_commit_id();
+        let commit = repo.find_commit(commit_id).map_err(|e| e.to_string())?;
+        let author = commit.author();
+        let author_name = author.name().unwrap_or("Unknown").to_string();
+        let time = commit.time();
+        
+        // Use chrono to format date
+        let date = chrono::DateTime::from_timestamp(time.seconds(), 0)
+            .map(|dt| dt.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+        let summary = commit.summary().unwrap_or("").to_string();
+
+        let info = BlameLine {
+            author: author_name,
+            date,
+            commit_id: commit_id.to_string(),
+            summary,
+        };
+
+        let start_line = hunk.final_start_line(); // 1-indexed
+        
+        // Ensure the vector is large enough
+        if results.len() < start_line + hunk.lines_in_hunk() - 1 {
+            results.resize(start_line + hunk.lines_in_hunk() - 1, BlameLine {
+                author: "".to_string(),
+                date: "".to_string(),
+                commit_id: "".to_string(),
+                summary: "Not committed yet".to_string(),
+            });
+        }
+
+        for i in 0..hunk.lines_in_hunk() {
+            results[start_line - 1 + i] = info.clone();
+        }
+    }
+
+    Ok(results)
+}

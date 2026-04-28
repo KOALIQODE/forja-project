@@ -843,6 +843,27 @@
 
     let pendingChunks = new Set<number>(); // Needs to be declared outside `requestChunk`
 
+    interface BlameLine {
+        author: string;
+        date: string;
+        commit_id: string;
+        summary: string;
+    }
+
+    let blameCache = $state<BlameLine[]>([]);
+
+    async function fetchBlame() {
+        if (!filePath) return;
+        try {
+            const results = await invoke<BlameLine[]>("git_blame", { path: filePath });
+            blameCache = results;
+            queueRedraw();
+        } catch (e) {
+            // console.error("Failed to fetch blame:", e);
+            blameCache = [];
+        }
+    }
+
     function draw() {
         if (!canvas || !scrollContainer) {
             requestAnimationFrame(draw);
@@ -938,16 +959,20 @@
     
             if (line !== undefined) {
                 const tokens = highlightEnabled ? tokenCache.get(i) : null;
+                let lineWidth = 0;
                 if (tokens) {
                     let x = contentStartX;
                     for (const token of tokens) {
                         ctx.fillStyle = TOKEN_COLORS[token.token_type] || TOKEN_COLORS.Unknown;
                         ctx.fillText(token.text, x, y);
-                        x += ctx.measureText(token.text).width;
+                        const tokenWidth = ctx.measureText(token.text).width;
+                        x += tokenWidth;
+                        lineWidth += tokenWidth;
                     }
                 } else {
                     ctx.fillStyle = "#cccccc";
                     ctx.fillText(line, contentStartX, y);
+                    lineWidth = ctx.measureText(line).width;
                 }
     
                 if (i === cursorLine && cursorVisible) {
@@ -969,6 +994,18 @@
                         ctx.fillStyle = "#34d399";
                         ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
                     }
+                }
+
+                // Render Git Blame ghost text for active line
+                if (i === cursorLine && blameCache[i]) {
+                    const blame = blameCache[i];
+                    ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
+                    ctx.font = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
+                    const blameText = blame.author 
+                        ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`
+                        : `  • ${blame.summary}`;
+                    ctx.fillText(blameText, contentStartX + lineWidth + 20, y);
+                    ctx.font = editorFont; // Restore font
                 }
             } else {
                 ctx.fillStyle = "#1a1a1a";
@@ -1695,6 +1732,7 @@
             const content = lines.join("\n"); // ← join con \n no con ""
             await invoke("write_file", { path: filePath, content });
             isDirty = false;
+            void fetchBlame();
             return true;
         } catch (e) {
             console.error("Save failed:", e);
@@ -1778,6 +1816,7 @@
     
         fetchTotalLines().then(async () => {
             await refreshHighlightAvailability();
+            void fetchBlame();
 
             const visibleLines = Math.ceil(scrollContainer?.clientHeight ?? 600 / editorLineHeight);
             const chunksNeeded = Math.ceil((visibleLines * 3) / CHUNK_SIZE);

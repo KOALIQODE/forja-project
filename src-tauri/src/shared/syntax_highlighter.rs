@@ -44,10 +44,11 @@ impl SyntaxHighlighter {
 
         // 2. Configurar el resaltador
         let mut config = HighlightConfiguration::new(
-            lang,
+            lang.clone(),
             &highlight_query,
             "", // injections
             "", // locals
+            "", // combined
         )
         .context("Failed to create highlight config")?;
 
