@@ -46,7 +46,7 @@
     {#if showWelcome}
       <WelcomeScreen />
     {:else if $activeBuffer}
-      <EditorBuffer filePath={$activeBuffer.filePath} bufferId={$activeBuffer.id} language={$activeBuffer.language || 'text'} />
+      <EditorBuffer filePath={$activeBuffer.filePath} bufferId={$activeBuffer.id} language={$activeBuffer.language ?? 'unknown'} />
     {/if}
   </section>
 

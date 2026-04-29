@@ -39,11 +39,20 @@ notify-debouncer-mini = "0.4"
 
 # SYNTAX HIGHLIGHTING (Arquitectura Zed)
 tree-sitter = { version = "0.24", features = ["wasm"] }
-tree-sitter-highlight = "0.24" # Upgraded to match tree-sitter version
-libloading = "0.7"             # Carga de .so/.dll
+libloading = "0.7"             # Carga de .so/.dll (future native plugins)
 reqwest = { version = "0.11", features = ["json", "rustls-tls", "blocking"] }
 
-# Parsers base (embebidos como fallback)
+# ── Native parsers (core languages — compiled into binary, zero downloads) ──
+tree-sitter-rust       = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-python     = "0.23"
+tree-sitter-json       = "0.24"
+tree-sitter-html       = "0.23"
+tree-sitter-css        = "0.23"
+tree-sitter-go         = "0.23"
+tree-sitter-md         = "0.3"  # markdown (block + inline combined)
+tree-sitter-svelte-ng  = "1.0"  # svelte (html + js + css injections)
 
 # MISC
 anyhow = "1.0"
@@ -58,6 +67,8 @@ ignore = "0.4"
 glib = "0.18"
 gtk = "0.18"
 webkit2gtk = "2.0"
+streaming-iterator = "0.1"
+ropey = "1.6" # Added for efficient text buffer management
 
 [profile.release]
 opt-level = 3

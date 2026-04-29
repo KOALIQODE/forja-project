@@ -17,6 +17,7 @@
     name: string;
     language: string;
     installed: boolean;
+    is_native: boolean;
     size_mb: number;
   }
 
@@ -25,6 +26,14 @@
   let installing = $state<string | null>(null);
   let statusMessage = $state<Record<string, string>>({});
   let searchQuery = $state('');
+
+  let nativeParsers = $derived(parsers.filter(p => p.is_native));
+  let communityParsers = $derived(
+    parsers.filter(p => !p.is_native && (
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.language.toLowerCase().includes(searchQuery.toLowerCase())
+    ))
+  );
 
   function formatError(error: unknown) {
     if (error instanceof Error) return error.message;
@@ -58,10 +67,7 @@
   }
 
   let filteredParsers = $derived(
-    parsers.filter(p => 
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      p.language.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    communityParsers
   );
 
   onMount(() => {
@@ -139,55 +145,86 @@
           <Loader2 size={32} class="animate-spin text-emerald-500/20" />
         </div>
       {:else}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {#each filteredParsers as parser}
-            <div class="group relative flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:border-white/10 hover:bg-white/[0.04]">
-              <div class="flex items-center gap-4">
-                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-black/40 text-white/40 group-hover:text-emerald-400 transition-colors">
-                  <Package size={20} />
+        <!-- Bundled / Native languages -->
+        <div class="mb-8">
+          <p class="mb-3 text-[9px] uppercase tracking-[0.2em] text-white/20 flex items-center gap-2">
+            <span class="h-px flex-1 bg-white/5"></span>
+            Bundled grammars — always available
+            <span class="h-px flex-1 bg-white/5"></span>
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {#each nativeParsers as parser}
+              <div class="flex items-center gap-3 rounded-xl border border-emerald-500/10 bg-emerald-500/5 px-4 py-3">
+                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                  <Cpu size={16} />
                 </div>
-                <div>
-                  <h3 class="text-sm font-medium text-white">{parser.name}</h3>
-                  <p class="text-[10px] tracking-widest text-white/20 uppercase">{parser.language} • {parser.size_mb}MB</p>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-xs font-medium text-white truncate">{parser.name}</h3>
+                  <p class="text-[9px] tracking-widest text-emerald-500/40 uppercase">native</p>
                 </div>
+                <CheckCircle2 size={14} class="shrink-0 text-emerald-400/60" />
               </div>
+            {/each}
+          </div>
+        </div>
 
-              <div>
-                {#if parser.installed}
-                  <div class="flex items-center gap-2 text-emerald-400/60">
-                    <CheckCircle2 size={16} />
-                    <span class="text-[10px] font-bold uppercase tracking-wider">Installed</span>
+        <!-- Community / WASM languages -->
+        <div>
+          <p class="mb-3 text-[9px] uppercase tracking-[0.2em] text-white/20 flex items-center gap-2">
+            <span class="h-px flex-1 bg-white/5"></span>
+            Community grammars — install on demand
+            <span class="h-px flex-1 bg-white/5"></span>
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {#each filteredParsers as parser}
+              <div class="group relative flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:border-white/10 hover:bg-white/[0.04]">
+                <div class="flex items-center gap-4">
+                  <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-black/40 text-white/40 group-hover:text-emerald-400 transition-colors">
+                    <Package size={20} />
                   </div>
-                {:else if installing === parser.language}
-                  <div class="flex flex-col items-end gap-1">
-                    <Loader2 size={16} class="animate-spin text-emerald-500" />
-                    <span class="text-[9px] text-emerald-500/70">{statusMessage[parser.language] || 'Installing...'}</span>
+                  <div>
+                    <h3 class="text-sm font-medium text-white">{parser.name}</h3>
+                    <p class="text-[10px] tracking-widest text-white/20 uppercase">{parser.language} • {parser.size_mb}MB</p>
                   </div>
-                {:else}
-                  <div class="flex flex-col items-end gap-1">
-                    <button 
-                      onclick={() => install(parser.language)}
-                      class="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-emerald-500 hover:text-black"
-                    >
-                      <Download size={14} />
-                      Install
-                    </button>
-                    {#if statusMessage[parser.language]}
-                      <span
-                        class={`max-w-48 text-right text-[9px] ${
-                          statusMessage[parser.language].startsWith('Error:')
-                            ? 'text-rose-400/80'
-                            : 'text-white/35'
-                        }`}
+                </div>
+
+                <div>
+                  {#if parser.installed}
+                    <div class="flex items-center gap-2 text-emerald-400/60">
+                      <CheckCircle2 size={16} />
+                      <span class="text-[10px] font-bold uppercase tracking-wider">Installed</span>
+                    </div>
+                  {:else if installing === parser.language}
+                    <div class="flex flex-col items-end gap-1">
+                      <Loader2 size={16} class="animate-spin text-emerald-500" />
+                      <span class="text-[9px] text-emerald-500/70">{statusMessage[parser.language] || 'Installing...'}</span>
+                    </div>
+                  {:else}
+                    <div class="flex flex-col items-end gap-1">
+                      <button 
+                        onclick={() => install(parser.language)}
+                        class="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-emerald-500 hover:text-black"
                       >
-                        {statusMessage[parser.language]}
-                      </span>
-                    {/if}
-                  </div>
-                {/if}
+                        <Download size={14} />
+                        Install
+                      </button>
+                      {#if statusMessage[parser.language]}
+                        <span
+                          class={`max-w-48 text-right text-[9px] ${
+                            statusMessage[parser.language].startsWith('Error:')
+                              ? 'text-rose-400/80'
+                              : 'text-white/35'
+                          }`}
+                        >
+                          {statusMessage[parser.language]}
+                        </span>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
               </div>
-            </div>
-          {/each}
+            {/each}
+          </div>
         </div>
       {/if}
     </div>
@@ -196,9 +233,9 @@
     <div class="flex items-center justify-between border-t border-white/5 bg-white/[0.01] px-8 py-4 text-[9px] uppercase tracking-[0.2em] text-white/20">
       <div class="flex gap-6">
         <span class="flex items-center gap-2"><div class="h-1.5 w-1.5 rounded-full bg-emerald-500"></div> Native Highlights</span>
-        <span class="flex items-center gap-2"><div class="h-1.5 w-1.5 rounded-full bg-emerald-500"></div> official queries</span>
+        <span class="flex items-center gap-2"><div class="h-1.5 w-1.5 rounded-full bg-white/20"></div> WASM Community</span>
       </div>
-      <span>{parsers.filter(p => p.installed).length} Grammars active</span>
+      <span>{nativeParsers.length} bundled · {parsers.filter(p => !p.is_native && p.installed).length} community installed</span>
     </div>
   </div>
 </div>

@@ -101,17 +101,20 @@ export const EDITOR_CONFIG = {
 
 // === Syntax Highlighting Colors ===
 export const TOKEN_COLORS: Record<string, string> = {
-  Keyword: '#C586C0',   // Purple
-  Function: '#DCDCAA',  // Yellow
-  Type: '#4EC9B0',      // Teal
-  String: '#CE9178',    // Orange
-  Comment: '#6A9955',   // Green
-  Number: '#B5CEA8',    // Light Green
-  Punctuation: '#888888', // Gray
-  Operator: '#D4D4D4',  // White
-  Variable: '#9CDCFE',  // Blue
-  Property: '#9CDCFE',  // Blue
-  Unknown: '#D4D4D4',   // Default white
+  Keyword:     '#C586C0',  // Purple
+  Function:    '#DCDCAA',  // Yellow
+  Type:        '#4EC9B0',  // Teal  (also used for HTML tags)
+  String:      '#CE9178',  // Orange
+  Comment:     '#6A9955',  // Green
+  Number:      '#B5CEA8',  // Light green
+  Punctuation: '#888888',  // Gray
+  Operator:    '#D4D4D4',  // White
+  Variable:    '#9CDCFE',  // Light blue
+  Property:    '#9CDCFE',  // Light blue
+  Constant:    '#569CD6',  // Blue     (constants, true/false/null, bold text)
+  Attribute:   '#9CDCFE',  // Light blue
+  Boolean:     '#569CD6',  // Blue
+  Unknown:     '#D4D4D4',  // Default white
 } as const;
 
 // === Error Messages ===

@@ -16,6 +16,7 @@ pub struct ParserMetadata {
     pub name: String,
     pub language: String,
     pub installed: bool,
+    pub is_native: bool,  // true = bundled in binary, false = user-installable WASM
     pub size_mb: f64,
 }
 
@@ -29,9 +30,9 @@ pub struct LanguageRegistry {
 
 impl LanguageRegistry {
     pub fn new() -> Result<Self> {
-        let config_dir = dirs::config_dir()
-            .context("Failed to get config dir")?
-            .join("forja");
+        let config_dir = dirs::data_local_dir()  // ~/.local/share en Linux
+                .context("Failed to get data dir")?
+                .join("forja");
 
         let parsers_dir = config_dir.join("parsers");
         std::fs::create_dir_all(&parsers_dir)?;
@@ -77,28 +78,44 @@ impl LanguageRegistry {
     }
 
     pub fn get_metadata_list(&self) -> Vec<ParserMetadata> {
-        let mut list = Vec::new();
-        let languages = [
-            ("rust", "Rust", 0.5),
-            ("javascript", "JavaScript", 0.8),
-            ("typescript", "TypeScript", 0.9),
-            ("python", "Python", 0.6),
-            ("json", "JSON", 0.3),
-            ("svelte", "Svelte", 0.7),
-            ("html", "HTML", 0.4),
-            ("css", "CSS", 0.4),
-            ("markdown", "Markdown", 0.5),
-            ("go", "Go", 0.6),
-            ("cpp", "C++", 0.8),
-        ];
+        use crate::shared::native_languages::{is_native, NATIVE_LANGUAGES};
 
-        for (id, name, size) in languages {
+        let mut list = Vec::new();
+
+        // ── Native languages (always installed, compiled into binary) ────────────
+        for (id, name) in NATIVE_LANGUAGES {
             list.push(ParserMetadata {
                 name: name.to_string(),
                 language: id.to_string(),
-                installed: self.is_language_installed(id),
-                size_mb: size,
+                installed: true,
+                is_native: true,
+                size_mb: 0.0,
             });
+        }
+
+        // ── Community languages (WASM — user must install) ───────────────────────
+        let community = [
+            ("svelte", "Svelte",  0.7),
+            ("cpp",    "C++",     0.8),
+            ("java",   "Java",    0.9),
+            ("ruby",   "Ruby",    0.6),
+            ("php",    "PHP",     0.7),
+            ("toml",   "TOML",    0.3),
+            ("yaml",   "YAML",    0.4),
+            ("bash",   "Bash",    0.4),
+            ("lua",    "Lua",     0.4),
+            ("c",      "C",       0.5),
+        ];
+        for (id, name, size) in community {
+            if !is_native(id) {
+                list.push(ParserMetadata {
+                    name: name.to_string(),
+                    language: id.to_string(),
+                    installed: self.is_language_installed(id),
+                    is_native: false,
+                    size_mb: size,
+                });
+            }
         }
         list
     }

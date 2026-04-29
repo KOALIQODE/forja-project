@@ -154,6 +154,21 @@ pub struct BlameLine {
     pub summary: String,
 }
 
+fn relative_time(timestamp: i64) -> String {
+    let now = chrono::Utc::now().timestamp();
+    let diff = now - timestamp;
+
+    match diff {
+        d if d < 60          => "just now".to_string(),
+        d if d < 3600        => format!("{}m ago", d / 60),
+        d if d < 86400       => format!("{}h ago", d / 3600),
+        d if d < 86400 * 5   => format!("{}d ago", d / 86400),
+        _                    => chrono::DateTime::from_timestamp(timestamp, 0)
+                                    .map(|dt| dt.format("%Y-%m-%d").to_string())
+                                    .unwrap_or_else(|| "Unknown".to_string()),
+    }
+}
+
 #[tauri::command]
 pub fn git_blame(path: String) -> Result<Vec<BlameLine>, String> {
     let repo = Repository::discover(&path).map_err(|e| e.to_string())?;
@@ -172,9 +187,7 @@ pub fn git_blame(path: String) -> Result<Vec<BlameLine>, String> {
         let time = commit.time();
         
         // Use chrono to format date
-        let date = chrono::DateTime::from_timestamp(time.seconds(), 0)
-            .map(|dt| dt.format("%Y-%m-%d").to_string())
-            .unwrap_or_else(|| "Unknown".to_string());
+        let date = relative_time(time.seconds());
         let summary = commit.summary().unwrap_or("").to_string();
 
         let info = BlameLine {

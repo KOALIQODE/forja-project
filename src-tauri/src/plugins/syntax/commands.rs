@@ -70,14 +70,27 @@ pub async fn install_parser(app: tauri::AppHandle, language: String) -> Result<S
     if !wasm_path.exists() {
         let _ = app.emit("parser-status", (&language, "Downloading Wasm..."));
         let wasm_url = format!(
-            "https://github.com/tree-sitter/tree-sitter-{}/releases/latest/download/tree-sitter-{}.wasm",
+            "https://unpkg.com/tree-sitter-{}/tree-sitter-{}.wasm",
             language, language
         );
-
-        let bytes = client.get(&wasm_url).send().await
-            .map_err(|e| ParserError::DownloadError(e.to_string()))?
-            .bytes().await
-            .map_err(|e| ParserError::DownloadError(e.to_string()))?;
+        
+        let bytes = match client.get(&wasm_url).send().await {
+            Ok(res) if res.status().is_success() => {
+                res.bytes().await.map_err(|e| ParserError::DownloadError(e.to_string()))?
+            }
+            _ => {
+                // intenta fallback
+                let fallback_url = format!(
+                    "https://unpkg.com/@tree-sitter/{}/tree-sitter-{}.wasm",
+                    language, language
+                );
+                client.get(&fallback_url)
+                    .send().await
+                    .map_err(|e| ParserError::DownloadError(e.to_string()))?
+                    .bytes().await
+                    .map_err(|e| ParserError::DownloadError(e.to_string()))?
+            }
+        };
 
         std::fs::write(&wasm_path, &bytes)
             .map_err(|e| ParserError::WriteFileError(e.to_string()))?;
@@ -120,6 +133,11 @@ pub async fn install_parser(app: tauri::AppHandle, language: String) -> Result<S
 }
 
 #[tauri::command]
+pub async fn is_native_language(language: String) -> bool {
+    crate::shared::native_languages::is_native(&language)
+}
+
+#[tauri::command]
 pub async fn detect_language(file_path: String) -> Result<String, String> {
     let ext = std::path::Path::new(&file_path)
         .extension()
@@ -127,12 +145,29 @@ pub async fn detect_language(file_path: String) -> Result<String, String> {
         .unwrap_or("");
 
     Ok(match ext {
-        "rs" => "rust",
-        "js" | "ts" | "jsx" | "tsx" => "javascript",
-        "py" => "python",
-        "json" => "json",
-        "svelte" => "svelte",
-        _ => "unknown",
+        "rs"                     => "rust",
+        "js" | "mjs" | "cjs"    => "javascript",
+        "jsx"                    => "jsx",
+        "ts"                     => "typescript",
+        "tsx"                    => "tsx",
+        "py" | "pyw"             => "python",
+        "json" | "jsonc"         => "json",
+        "svelte"                 => "svelte",
+        "html" | "htm"           => "html",
+        "css"                    => "css",
+        "go"                     => "go",
+        "md" | "mdx" | "markdown" => "markdown",
+        "cpp" | "cc" | "cxx"    => "cpp",
+        "c"                      => "c",
+        "h" | "hpp"              => "cpp",
+        "java"                   => "java",
+        "rb"                     => "ruby",
+        "php"                    => "php",
+        "toml"                   => "toml",
+        "yaml" | "yml"           => "yaml",
+        "sh" | "bash"            => "bash",
+        "lua"                    => "lua",
+        _                        => "unknown",
     }
     .to_string())
 }
@@ -144,8 +179,8 @@ pub async fn get_code_breadcrumb(
     line: usize,
     column: usize,
 ) -> Result<CodeBreadcrumb, String> {
-    let mut analyzer = ANALYZER.lock();
-    analyzer
+    CodeAnalyzer::new()
+        .map_err(|e| e.to_string())?
         .get_breadcrumb(&content, &language, line, column)
         .map_err(|e| e.to_string())
 }
@@ -155,8 +190,8 @@ pub async fn highlight_syntax(
     content: String,
     language: String,
 ) -> Result<SyntaxHighlight, String> {
-    let mut highlighter = SyntaxHighlighter::new().map_err(|e| e.to_string())?;
-    highlighter
+    SyntaxHighlighter::new()
+        .map_err(|e: anyhow::Error| e.to_string())?
         .highlight(&content, &language)
-        .map_err(|e| e.to_string())
+        .map_err(|e: anyhow::Error| e.to_string())
 }

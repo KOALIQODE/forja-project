@@ -111,23 +111,46 @@ activeBufferId.subscribe(id => {
  * Open a file as a buffer
  */
 export function openBuffer(filePath: string) {
-  // console.log("bufferStore: Opening buffer for", filePath);
   const extension = extname(filePath).toLowerCase();
-  let language: string | undefined;
-  
-  // Basic language detection
+
+  // Complete extension → language map (mirrors backend detect_language)
   const langMap: Record<string, string> = {
-    '.rs': 'rust',
-    '.js': 'javascript',
-    '.ts': 'typescript',
-    '.svelte': 'svelte',
-    '.py': 'python',
-    '.json': 'json',
-    '.md': 'markdown',
-    '.css': 'css',
-    '.html': 'html'
+    '.rs':       'rust',
+    '.js':       'javascript',
+    '.mjs':      'javascript',
+    '.cjs':      'javascript',
+    '.jsx':      'jsx',
+    '.ts':       'typescript',
+    '.tsx':      'tsx',
+    '.svelte':   'svelte',
+    '.py':       'python',
+    '.pyw':      'python',
+    '.json':     'json',
+    '.jsonc':    'json',
+    '.md':       'markdown',
+    '.mdx':      'markdown',
+    '.markdown': 'markdown',
+    '.css':      'css',
+    '.html':     'html',
+    '.htm':      'html',
+    '.go':       'go',
+    '.cpp':      'cpp',
+    '.cc':       'cpp',
+    '.cxx':      'cpp',
+    '.c':        'c',
+    '.h':        'cpp',
+    '.hpp':      'cpp',
+    '.java':     'java',
+    '.rb':       'ruby',
+    '.php':      'php',
+    '.toml':     'toml',
+    '.yaml':     'yaml',
+    '.yml':      'yaml',
+    '.sh':       'bash',
+    '.bash':     'bash',
+    '.lua':      'lua',
   };
-  language = langMap[extension];
+  const language: string = langMap[extension] ?? 'unknown';
 
   const buffer: Buffer = {
     id: filePath,
