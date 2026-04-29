@@ -4,10 +4,11 @@
   import { openBufferDeleteDialog } from "$lib/stores/dialogStore";
   import { FileCode, AlertCircle, AlertTriangle, List, ChevronRight } from "@lucide/svelte";
   import { getFileIcon } from "$lib/utils/fileIcons";
+  import { errorCount, warningCount } from "$lib/stores/diagnosticsStore";
   
   // Mock diagnostics for now
-  let errors = 0;
-  let warnings = 0;
+  // let errors = 0;
+  // let warnings = 0;
 
   function handleOpenBufferDialog() {
     openBufferDeleteDialog();
@@ -17,6 +18,9 @@
     switch (kind) {
       case 'function_item':
       case 'function_declaration':
+      case 'function_expression':
+      case 'generator_function_declaration':
+      case 'generator_function':
       case 'method_definition':
       case 'arrow_function':
         return 'ƒ';
@@ -25,17 +29,30 @@
       case 'module':
         return '📦';
       case 'class_declaration':
-        return '🏛️';
+      case 'class_expression':
+      case 'abstract_class_declaration':
+        return '🏛';
       case 'struct_item':
         return 'S';
       case 'enum_item':
+      case 'enum_declaration':
         return 'E';
+      case 'pair':
+      case 'method_signature':
+      case 'property_signature':
+        return '{}';
+
+      case 'type_alias_declaration':
+        return 'T';
+      case 'trait_item':
+        return '◈';
       default:
         return '•';
     }
   }
 
   let activeFileIcon = $derived($activeBuffer ? getFileIcon($activeBuffer.filePath) : null);
+  let activeFileName = $derived($activeBuffer ? $activeBuffer.filePath.split('/').pop() ?? '' : '');
   let vimModeLabel = $derived(
     $vimStatus.mode === 'off'
       ? 'VIM OFF'
@@ -53,16 +70,17 @@
   <div class="flex items-center gap-1 h-full overflow-hidden">
     <!-- Breadcrumb -->
     {#if $activeBuffer}
-      <div class="flex items-center hover:bg-white/5 px-2 h-full cursor-pointer transition-colors shrink-0">
+      <div class="flex items-center hover:bg-white/5 px-2 h-full cursor-pointer transition-colors shrink-0 gap-1.5">
         {#if activeFileIcon}
           <activeFileIcon.icon size={14} style={`color: ${activeFileIcon.color}`} />
         {:else}
           <FileCode size={14} class="text-[#ce9178]" />
         {/if}
+        <span class="opacity-70 text-[11px]">{activeFileName}</span>
       </div>
       
       {#if $currentBreadcrumb && $currentBreadcrumb.items.length > 0}
-        {#each $currentBreadcrumb.items as item, i}
+        {#each $currentBreadcrumb.items as item, i (i)}
           <ChevronRight size={12} class="text-white/10 shrink-0" />
           <div class="flex items-center gap-1 hover:bg-white/5 px-2 h-full cursor-pointer transition-colors shrink-0 max-w-[150px]">
             <span class="text-[10px] opacity-40">{getBreadcrumbIcon(item.kind)}</span>
@@ -81,11 +99,11 @@
     <div class="flex items-center gap-0 h-full ml-4">
       <div class="flex items-center gap-1 hover:bg-white/5 px-2 h-full cursor-pointer transition-colors">
         <AlertCircle size={14} class="text-red-500/70" />
-        <span class="opacity-70">{errors}</span>
+        <span class="opacity-70">{$errorCount}</span>
       </div>
       <div class="flex items-center gap-1 hover:bg-white/5 px-2 h-full cursor-pointer transition-colors">
         <AlertTriangle size={14} class="text-amber-500/70" />
-        <span class="opacity-70">{warnings}</span>
+        <span class="opacity-70">{$warningCount}</span>
       </div>
     </div>
   </div>

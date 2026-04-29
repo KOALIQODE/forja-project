@@ -4,6 +4,18 @@
     import { listen } from "@tauri-apps/api/event"; 
 
     import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/constants";
+    import { ChunkRenderer } from "$lib/utils/ChunkRenderer";
+    import { TextMetricsCache } from "$lib/utils/TextMetricsCache";
+    import { DocumentBridge } from "$lib/utils/documentBridge";
+    import {
+        DiffScheduler,
+        DiffRenderInvalidationManager,
+        ViewportDiffCache,
+        GitHunkManager,
+        HunkPreviewEngine,
+        DIFF_COLORS,
+        type LineDiffResult,
+    } from "$lib/utils/diff";
     import {
         cursorPosition,
         currentBreadcrumb,
@@ -14,6 +26,7 @@
     import { bufferPreferences } from "$lib/stores/preferencesStore";
     import StatusBar from "$lib/components/StatusBar.svelte";
     import { dialogState } from "../../stores/dialogStore";
+    import { diagnosticsByFile, type Diagnostic } from "$lib/stores/diagnosticsStore";
 
     interface Props {
         filePath: string;
@@ -45,8 +58,39 @@
     let tokenCache = new Map<number, Token[]>();
     let highlightEnabled = $state(false);
 
+    // ── Diff gutter state ────────────────────────────────────────────────────────
+    let mouseX             = $state(0);
+    let hunkPreviewHTML    = $state('');
+    let hunkPreviewVisible = $state(false);
+    let hunkPreviewScreenX = $state(0);
+    let hunkPreviewScreenY = $state(0);
+
     // State to track the currently loaded file path, to avoid redundant checks
     let currentFilePath = $state<string | null>(null);
+
+    // ── Phase 4: OffscreenCanvas chunk renderer ─────────────────────────────────
+    const chunkRenderer = new ChunkRenderer(CHUNK_SIZE);
+
+    // ── Phase 5: Text metrics cache ──────────────────────────────────────────────
+    const metricsCache = new TextMetricsCache();
+
+    // ── Phase 3→frontend / Phase 6: Stateful document bridge ────────────────────
+    const docBridge = new DocumentBridge();
+
+    // ── Diff system (gutter annotations — Phases diff-1 to diff-4) ──────────────
+    const diffScheduler    = new DiffScheduler();
+    const diffInvalidator  = new DiffRenderInvalidationManager(CHUNK_SIZE);
+    const viewportDiffCache = new ViewportDiffCache();
+    const hunkManager      = new GitHunkManager();
+    const previewEngine    = new HunkPreviewEngine();
+
+    // ── Phase 7: Frame budget ────────────────────────────────────────────────────
+    let lastFrameDuration = 0;
+
+    // ── Error Lens: diagnostics ──────────────────────────────────────────────────
+    /** line → first (most-severe) diagnostic; rebuilt on store change */
+    let diagByLine = new Map<number, Diagnostic>();
+    let fileDiagnostics = $derived($diagnosticsByFile.get(filePath) ?? []);
 
     let editorFontFamily = $derived($bufferPreferences.fontFamily);
     let editorFontSize = $derived($bufferPreferences.fontSize);
@@ -101,6 +145,10 @@
         editorLineHeight;
         showLineNumbers;
         highlightActiveLine;
+        // Phase 5: font changed → all cached measurements are stale
+        metricsCache.invalidateAll();
+        // Phase 4: font changed → all cached chunk canvases are stale
+        chunkRenderer.invalidateAll();
         queueRedraw();
     });
 
@@ -128,6 +176,21 @@
         }
 
         syncVimStatus();
+        queueRedraw();
+    });
+
+    // ── Error Lens: rebuild line→diagnostic map when store updates ───────────────
+    $effect(() => {
+        const next = new Map<number, Diagnostic>();
+        // severity priority: error > warning > info > hint
+        const order: Record<string, number> = { error: 0, warning: 1, info: 2, hint: 3 };
+        for (const d of fileDiagnostics) {
+            const existing = next.get(d.line);
+            if (!existing || order[d.severity] < order[existing.severity]) {
+                next.set(d.line, d);
+            }
+        }
+        diagByLine = next;
         queueRedraw();
     });
 
@@ -467,11 +530,19 @@
     }
 
     async function refreshHighlightsAfterEdit() {
-        if (highlightEnabled) {
-            await rehighlightLoadedChunks();
-        } else {
-            queueRedraw();
+        // Phase 7: mark only the affected chunk dirty instead of rehighlighting everything
+        const affectedChunkId = Math.floor(cursorLine / CHUNK_SIZE);
+        chunkRenderer.markDirty(affectedChunkId);
+
+        if (docBridge.isOpen()) {
+            // Phase 6: use backend AST for visible-range tokens (fast, incremental)
+            await highlightViewportViaDocBridge();
+        } else if (highlightEnabled) {
+            // Fallback: rehighlight only the affected chunk
+            const lines = getCachedLinesForChunk(affectedChunkId);
+            if (lines) await highlightChunk(lines, affectedChunkId * CHUNK_SIZE);
         }
+        queueRedraw();
     }
 
     async function mutateDocument(mutation: () => void) {
@@ -482,7 +553,16 @@
             normalizeNormalCursor();
         }
         isDirty = true;
+        // Phase 4: mark the affected chunk as needing re-render
+        chunkRenderer.markDirty(Math.floor(cursorLine / CHUNK_SIZE));
         await refreshHighlightsAfterEdit();
+        // Diff: notify incremental edit (±5 lines window around cursor)
+        diffScheduler.notifyEdit(
+            lineCache,
+            totalLines,
+            Math.max(0, cursorLine - 5),
+            Math.min(totalLines - 1, cursorLine + 5),
+        );
     }
 
     function shiftLinesUp(startLine: number, amount: number) {
@@ -735,6 +815,10 @@
             }
     
             loadedChunks.add(chunkId);
+            // Phase 4: new lines loaded → mark chunk canvas as needing re-render
+            chunkRenderer.markDirty(chunkId);
+            // Diff: this chunk's lines are now in lineCache — re-run diff for this range
+            diffScheduler.notifyEdit(lineCache, totalLines, start, end);
             queueRedraw();
     
         } catch (e) {
@@ -789,6 +873,26 @@
         }
     }
 
+    /**
+     * Phase 3 / Phase 6 — highlights only the visible viewport using the backend AST.
+     * Much cheaper than rehighlighting all loaded chunks: only N visible lines are queried.
+     */
+    async function highlightViewportViaDocBridge(): Promise<boolean> {
+        if (!docBridge.isOpen() || !canvas || !scrollContainer) return false;
+        const startLine = Math.floor(currentScrollTop / editorLineHeight);
+        const endLine = Math.min(
+            startLine + Math.ceil(scrollContainer.clientHeight / editorLineHeight) + 2,
+            totalLines - 1
+        );
+        const lineTokens = await docBridge.getTokensForRange(startLine, endLine, lineCache);
+        if (!lineTokens) return false;
+        for (const [line, tokens] of lineTokens) {
+            tokenCache.set(line, tokens);
+            chunkRenderer.markDirty(Math.floor(line / CHUNK_SIZE));
+        }
+        return true;
+    }
+
     async function rehighlightLoadedChunks(): Promise<boolean> {
         tokenCache.clear();
 
@@ -818,8 +922,18 @@
         }
 
         try {
+            // Fast path: native languages are always compiled into the binary.
+            // No probe needed — just ask Rust if it knows this language.
+            const isNative = await invoke<boolean>("is_native_language", { language });
+
+            if (isNative) {
+                highlightEnabled = true;
+                return rehighlightLoadedChunks();
+            }
+
+            // Community WASM language: check if files are installed on disk
             const probe = await invoke<SyntaxHighlight>("highlight_syntax", {
-                content: "const forja_probe = 1;",
+                content: "x",
                 language,
             });
 
@@ -869,41 +983,43 @@
             requestAnimationFrame(draw);
             return;
         }
-    
+
+        const frameStart = performance.now();
         const dpr = window.devicePixelRatio || 1;
         const rect = canvas.getBoundingClientRect();
-    
+
         if (rect.width === 0 || rect.height === 0) {
             requestAnimationFrame(draw);
             return;
         }
-    
+
         const ctx = canvas.getContext("2d", { alpha: false });
         if (!ctx) return;
-    
-        // Resize solo si realmente cambió — y NO forzar needsRedraw aquí
+
+        // Resize only when dimensions actually changed
         const targetW = Math.floor(rect.width * dpr);
         const targetH = Math.floor(rect.height * dpr);
         if (canvas.width !== targetW || canvas.height !== targetH) {
             canvas.width = targetW;
             canvas.height = targetH;
-            // ctx.scale se aplica DESPUÉS del resize, pero no ponemos needsRedraw=true
-            // porque el propio resize ya causa un frame nuevo
+            // Phase 4: canvas resized → cached OffscreenCanvases are wrong size
+            chunkRenderer.clear();
         }
-    
-        // Siempre aplicar scale después de cualquier resize
+
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    
+
         if (!needsRedraw) {
             requestAnimationFrame(draw);
             return;
         }
-    
+
         needsRedraw = false;
-    
-        ctx.fillStyle = "#0d0d0d";
-        ctx.fillRect(0, 0, rect.width, rect.height);
-    
+
+        // ── Phase 7: frame budget ────────────────────────────────────────────────
+        // If the last frame took too long, skip expensive chunk re-renders
+        // (overlays like cursor blink still draw at full speed).
+        const overBudget = lastFrameDuration > 14; // > 14ms ≈ below 60fps
+
         const scrollPos = untrack(() => currentScrollTop);
         const startLine = Math.floor(scrollPos / editorLineHeight);
         const endLine = Math.min(
@@ -911,14 +1027,22 @@
             totalLines,
         );
         const yOffset = -(scrollPos % editorLineHeight);
-    
+        // Y pixel where startLine begins on the canvas
+        const yStart = yOffset;
+
+        // ── Background ──────────────────────────────────────────────────────────
+        ctx.fillStyle = "#0d0d0d";
+        ctx.fillRect(0, 0, rect.width, rect.height);
+
+        // ── Pass 1: line backgrounds (active line, hover, selection) ────────────
+        const visualBounds = vimMode === "visual" ? getVisualRange() : null;
+
         ctx.font = editorFont;
         ctx.textBaseline = "middle";
-        const visualBounds = vimMode === "visual" ? getVisualRange() : null;
-    
+
         for (let i = startLine; i < endLine; i++) {
             const y = (i - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
-    
+
             if (highlightActiveLine && i === cursorLine) {
                 ctx.fillStyle = "rgba(52, 211, 153, 0.08)";
                 ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
@@ -933,11 +1057,11 @@
                 const [selectionStart, selectionEnd] = visualBounds;
                 if (i >= selectionStart.line && i <= selectionEnd.line) {
                     const line = getLine(i);
-                    const startChar = i === selectionStart.line ? selectionStart.char : 0;
-                    const endChar = i === selectionEnd.line ? selectionEnd.char : line.length;
-                    const highlightStart = contentStartX + ctx.measureText(line.slice(0, startChar)).width;
-                    const highlightEnd = contentStartX + ctx.measureText(line.slice(0, Math.max(endChar, startChar))).width;
-
+                    const sc = i === selectionStart.line ? selectionStart.char : 0;
+                    const ec = i === selectionEnd.line ? selectionEnd.char : line.length;
+                    // Phase 5: use metrics cache for selection bounds
+                    const highlightStart = contentStartX + metricsCache.measure(ctx, line.slice(0, sc), editorFont);
+                    const highlightEnd = contentStartX + metricsCache.measure(ctx, line.slice(0, Math.max(ec, sc)), editorFont);
                     ctx.fillStyle = "rgba(52, 211, 153, 0.18)";
                     ctx.fillRect(
                         highlightStart,
@@ -947,72 +1071,173 @@
                     );
                 }
             }
-    
+
+            // Diff: 3px gutter bar on the left edge for added / modified lines
+            // NOTE: drawn in Pass 1 as background; redrawn in Pass 3 to stay on top of blit
+
+            // Error Lens: subtle full-line background tint
+            const _dBg = diagByLine.get(i);
+            if (_dBg) {
+                if (_dBg.severity === 'error') {
+                    ctx.fillStyle = "rgba(239, 68, 68, 0.07)";
+                } else if (_dBg.severity === 'warning') {
+                    ctx.fillStyle = "rgba(245, 158, 11, 0.05)";
+                } else {
+                    ctx.fillStyle = "rgba(96, 165, 250, 0.05)";
+                }
+                ctx.fillRect(gutterWidth, y - editorLineHeight / 2, rect.width - gutterWidth, editorLineHeight);
+            }
+        }
+
+        // Diff: thin deleted-block markers between gutter rows
+        for (const marker of viewportDiffCache.getDeletedMarkersInViewport()) {
+            const markerRow = marker.afterLine + 1 - startLine;
+            if (markerRow < 0 || markerRow > endLine - startLine + 1) continue;
+            const markerY = markerRow * editorLineHeight + yOffset - 2;
+            ctx.fillStyle = DIFF_COLORS.deleted;
+            ctx.fillRect(0, markerY, gutterWidth, 3);
+        }
+
+        // ── Pass 2: blit OffscreenCanvas text chunks (Phase 4) ─────────────────
+        const chunkConfig = {
+            lineHeight: editorLineHeight,
+            fontSize: editorFontSize,
+            fontFamily: editorFontFamily,
+            contentStartX,
+            canvasWidth: rect.width,
+            tokenColors: TOKEN_COLORS,
+        };
+
+        // Determine which chunks intersect the visible range
+        const firstChunkId = Math.floor(startLine / CHUNK_SIZE);
+        const lastChunkId = Math.floor(Math.max(endLine - 1, startLine) / CHUNK_SIZE);
+
+        for (let chunkId = firstChunkId; chunkId <= lastChunkId; chunkId++) {
+            // Phase 7: skip dirty re-renders when over budget (cursor still updates)
+            if (chunkRenderer.isDirty(chunkId) && !overBudget) {
+                chunkRenderer.renderChunk(
+                    chunkId,
+                    chunkConfig,
+                    (i) => lineCache.get(i),
+                    (i) => (highlightEnabled ? tokenCache.get(i) : undefined),
+                    totalLines
+                );
+            }
+            chunkRenderer.blit(ctx, chunkId, startLine, endLine, yStart, editorLineHeight);
+        }
+
+        // ── Pass 3: overlays — diff bars, line numbers, cursor, blame ─────────
+        for (let i = startLine; i < endLine; i++) {
+            const y = (i - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
+
+            // Diff: 4px gutter bar at left edge (drawn on top of chunk blit)
+            const diffDeco = viewportDiffCache.getDecoration(i);
+            if (diffDeco) {
+                ctx.fillStyle = diffDeco.color;
+                ctx.fillRect(0, (i - startLine) * editorLineHeight + yOffset, 4, editorLineHeight);
+            }
+
             if (showLineNumbers) {
                 ctx.fillStyle = "#3a3a3a";
                 ctx.textAlign = "right";
-                ctx.fillText((i + 1).toString(), lineNumberX, y);
+                const lineNumberText = vimModeEnabled && vimMode !== "insert"
+                    ? Math.abs(i - cursorLine).toString()
+                    : (i + 1).toString();
+                ctx.fillText(lineNumberText, lineNumberX, y);
             }
-    
+
             ctx.textAlign = "left";
             const line = lineCache.get(i);
-    
-            if (line !== undefined) {
+            if (line === undefined) continue;
+
+            if (i === cursorLine && cursorVisible) {
+                // Phase 5: use metrics cache for cursor position
+                const cursorX = contentStartX + metricsCache.measure(ctx, line.substring(0, cursorChar), editorFont);
+
+                if (vimModeEnabled && vimMode !== "insert") {
+                    const char = line[cursorChar] || " ";
+                    const charWidth = metricsCache.measure(ctx, char, editorFont);
+                    ctx.fillStyle = "rgba(52, 211, 153, 0.6)";
+                    ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, charWidth, editorLineHeight - 4);
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillText(char, cursorX, y);
+                } else {
+                    ctx.fillStyle = "#34d399";
+                    ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
+                }
+            }
+
+            // Git blame ghost text on active line
+            if (i === cursorLine && blameCache[i]) {
+                const blame = blameCache[i];
+                // Phase 5: estimate line content width for blame placement
                 const tokens = highlightEnabled ? tokenCache.get(i) : null;
                 let lineWidth = 0;
                 if (tokens) {
-                    let x = contentStartX;
-                    for (const token of tokens) {
-                        ctx.fillStyle = TOKEN_COLORS[token.token_type] || TOKEN_COLORS.Unknown;
-                        ctx.fillText(token.text, x, y);
-                        const tokenWidth = ctx.measureText(token.text).width;
-                        x += tokenWidth;
-                        lineWidth += tokenWidth;
-                    }
+                    for (const t of tokens) lineWidth += metricsCache.measure(ctx, t.text, editorFont);
                 } else {
-                    ctx.fillStyle = "#cccccc";
-                    ctx.fillText(line, contentStartX, y);
-                    lineWidth = ctx.measureText(line).width;
+                    lineWidth = metricsCache.measure(ctx, line, editorFont);
                 }
-    
-                if (i === cursorLine && cursorVisible) {
-                    const textBeforeCursor = line.substring(0, cursorChar);
-                    const cursorX = contentStartX + ctx.measureText(textBeforeCursor).width;
-                    
-                    if (vimModeEnabled && vimMode !== "insert") {
-                        // Draw block cursor
-                        const char = line[cursorChar] || " ";
-                        const charWidth = ctx.measureText(char).width;
-                        ctx.fillStyle = "rgba(52, 211, 153, 0.6)";
-                        ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, charWidth, editorLineHeight - 4);
-                        
-                        // Draw character on top of block cursor
-                        ctx.fillStyle = "#ffffff";
-                        ctx.fillText(char, cursorX, y);
+                const blameFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
+                ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
+                ctx.font = blameFont;
+                const blameText = blame.author
+                    ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`
+                    : `  • ${blame.summary}`;
+                ctx.fillText(blameText, contentStartX + lineWidth + 20, y);
+                ctx.font = editorFont;
+            }
+
+            // ── Error Lens: gutter indicator dot + inline message ─────────────────
+            const _diag = diagByLine.get(i);
+            if (_diag) {
+                // Gutter dot (right edge of gutter, above the line number)
+                const _dotColor = _diag.severity === 'error'
+                    ? 'rgba(239, 68, 68, 0.85)'
+                    : _diag.severity === 'warning'
+                    ? 'rgba(245, 158, 11, 0.80)'
+                    : 'rgba(96, 165, 250, 0.70)';
+                ctx.fillStyle = _dotColor;
+                ctx.beginPath();
+                ctx.arc(8, y, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Inline message (skip cursor line when blame is visible to avoid overlap)
+                const _hasBlame = i === cursorLine && blameCache[i];
+                if (!_hasBlame) {
+                    const _lTokens = highlightEnabled ? tokenCache.get(i) : null;
+                    let _lw = 0;
+                    if (_lTokens) {
+                        for (const t of _lTokens) _lw += metricsCache.measure(ctx, t.text, editorFont);
                     } else {
-                        // Draw line cursor
-                        ctx.fillStyle = "#34d399";
-                        ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
+                        _lw = metricsCache.measure(ctx, line, editorFont);
+                    }
+                    const _msgX = contentStartX + _lw + 32;
+                    if (_msgX < rect.width - 40) {
+                        const _diagFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
+                        ctx.font = _diagFont;
+                        if (_diag.severity === 'error') {
+                            ctx.fillStyle = "rgba(239, 68, 68, 0.60)";
+                        } else if (_diag.severity === 'warning') {
+                            ctx.fillStyle = "rgba(245, 158, 11, 0.60)";
+                        } else {
+                            ctx.fillStyle = "rgba(96, 165, 250, 0.55)";
+                        }
+                        const _prefix = _diag.severity === 'error' ? '⛔ '
+                            : _diag.severity === 'warning' ? '⚠ ' : '› ';
+                        const _raw = _diag.message.length > 80
+                            ? _diag.message.slice(0, 80) + '…'
+                            : _diag.message;
+                        ctx.fillText(_prefix + _raw, _msgX, y);
+                        ctx.font = editorFont;
                     }
                 }
-
-                // Render Git Blame ghost text for active line
-                if (i === cursorLine && blameCache[i]) {
-                    const blame = blameCache[i];
-                    ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
-                    ctx.font = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
-                    const blameText = blame.author 
-                        ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`
-                        : `  • ${blame.summary}`;
-                    ctx.fillText(blameText, contentStartX + lineWidth + 20, y);
-                    ctx.font = editorFont; // Restore font
-                }
-            } else {
-                ctx.fillStyle = "#1a1a1a";
-                ctx.fillRect(contentStartX, y - 2, 100, 4);
             }
         }
-    
+
+        // Phase 7: track frame duration for next budget check
+        lastFrameDuration = performance.now() - frameStart;
+
         requestAnimationFrame(draw);
     }
 
@@ -1020,10 +1245,13 @@
     let cursorLine = $state(0);
     let cursorChar = $state(0);
 
+    let breadcrumbTimer: ReturnType<typeof setTimeout> | null = null;
+
     // Update global cursor position store
     $effect(() => {
         cursorPosition.set({ line: cursorLine + 1, column: cursorChar + 1 });
-        updateBreadcrumb();
+        if (breadcrumbTimer !== null) clearTimeout(breadcrumbTimer);
+        breadcrumbTimer = setTimeout(() => updateBreadcrumb(), 300);
     });
 
     $effect(() => {
@@ -1038,12 +1266,7 @@
     async function updateBreadcrumb() {
         if (!filePath) return;
         try {
-            let lines: string[] = [];
-            for (let i = 0; i < totalLines; i++) {
-                lines.push(lineCache.get(i) ?? "");
-            }
-            const content = lines.join("\n");
-            
+            const content = await invoke<string>("read_file", { path: filePath });
             const breadcrumb = await invoke<any>("get_code_breadcrumb", {
                 content,
                 language,
@@ -1052,7 +1275,7 @@
             });
             currentBreadcrumb.set(breadcrumb);
         } catch (err) {
-            // console.error('Error getting breadcrumb:', err);
+            // breadcrumb is best-effort, silently ignore errors
         }
     }
 
@@ -1657,6 +1880,10 @@
             if (newScroll !== currentScrollTop) {
                 currentScrollTop = newScroll;
                 queueRedraw();
+                // Diff: keep viewport decoration cache current on scroll
+                const diffStart = Math.floor(newScroll / editorLineHeight);
+                const diffEnd   = diffStart + Math.ceil(scrollContainer.clientHeight / editorLineHeight) + 2;
+                viewportDiffCache.scroll(diffStart, diffEnd);
                 
                 console.log(`[scroll] scrollTop=${newScroll} startLine=${Math.floor(newScroll / editorLineHeight)}`);
                 prefetchNearbyChunks(); // ← agregar esto
@@ -1809,6 +2036,19 @@
         pendingOperator = null;
         pendingSequence = "";
         syncVimStatus();
+
+        // Phase 4: discard stale OffscreenCanvas pool
+        chunkRenderer.clear();
+        // Phase 5: discard stale metrics (font may change between files)
+        metricsCache.invalidateAll();
+        // Phase 3 bridge: close previous document (no-op if not open)
+        void docBridge.close();
+        // Diff: reset all diff state for the new file (keeps onDiffReady callbacks)
+        diffScheduler.reset();
+        viewportDiffCache.clear();
+        hunkManager.clear();
+        previewEngine.clearCache();
+        hunkPreviewVisible = false;
     
         if (scrollContainer) scrollContainer.scrollTop = 0;
     
@@ -1817,6 +2057,30 @@
         fetchTotalLines().then(async () => {
             await refreshHighlightAvailability();
             void fetchBlame();
+
+            // Diff: tell scheduler about current line count before setting baseline,
+            // so initBaseline can immediately schedule a full diff.
+            diffScheduler.updateCurrentContent(lineCache, totalLines);
+
+            // Diff: init baseline from git HEAD content (or empty if not in a repo)
+            try {
+                const repoPath    = path.substring(0, path.lastIndexOf('/'));
+                const headContent = await invoke<string>('get_file_head_content', {
+                    repoPath,
+                    filePath: path,
+                });
+                diffScheduler.initBaseline(headContent, path);
+            } catch {
+                // New file or not tracked by git — empty baseline → all lines "added"
+                diffScheduler.initBaseline('', path);
+            }
+
+            // Phase 3 bridge: open backend document for AST-based highlighting
+            const firstChunkLines: string[] = [];
+            for (let i = 0; i < Math.min(CHUNK_SIZE, totalLines); i++) {
+                firstChunkLines.push(lineCache.get(i) ?? '');
+            }
+            void docBridge.open(path, firstChunkLines.join('\n'), language);
 
             const visibleLines = Math.ceil(scrollContainer?.clientHeight ?? 600 / editorLineHeight);
             const chunksNeeded = Math.ceil((visibleLines * 3) / CHUNK_SIZE);
@@ -1831,18 +2095,42 @@
     function handleMouseMove(e: MouseEvent) {
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
         const scrollPos = currentScrollTop;
         const line = Math.floor((y + scrollPos) / editorLineHeight);
 
+        mouseX = x;
         if (line !== mouseLine) {
             mouseLine = line >= 0 && line < totalLines ? line : null;
             queueRedraw();
+        }
+
+        // Diff: show hunk preview popup when hovering the gutter decoration bar
+        if (x <= gutterWidth + 4 && mouseLine !== null && viewportDiffCache.hasDecorations) {
+            const hunk = hunkManager.getHunkAtLine(mouseLine);
+            if (hunk) {
+                const baselineLines = diffScheduler.baselineManager.getLines();
+                const currentLines  = Array.from(
+                    { length: totalLines },
+                    (_, i) => lineCache.get(i) ?? (baselineLines[i] ?? '')
+                );
+                const preview = previewEngine.getPreview(hunk, baselineLines, currentLines);
+                hunkPreviewHTML    = HunkPreviewEngine.toHTML(preview);
+                hunkPreviewScreenX = e.clientX + 16;
+                hunkPreviewScreenY = Math.min(e.clientY, window.innerHeight - 220);
+                hunkPreviewVisible = true;
+            } else {
+                hunkPreviewVisible = false;
+            }
+        } else {
+            hunkPreviewVisible = false;
         }
     }
 
     function handleMouseLeave() {
         mouseLine = null;
+        hunkPreviewVisible = false;
         queueRedraw();
     }
 
@@ -1855,6 +2143,18 @@
             cursorVisible = !cursorVisible;
             queueRedraw();
         }, 500);
+
+        // Diff: subscribe to incremental diff results
+        const unsubDiff = diffScheduler.onDiffReady((result: LineDiffResult) => {
+            diffInvalidator.applyDiff(result, chunkRenderer);
+            if (scrollContainer) {
+                const startLine = Math.floor(currentScrollTop / editorLineHeight);
+                const endLine   = startLine + Math.ceil(scrollContainer.clientHeight / editorLineHeight) + 2;
+                viewportDiffCache.update(result, startLine, endLine);
+            }
+            hunkManager.update(result, diffScheduler.baselineManager.getLines());
+            queueRedraw();
+        });
 
         const resizeObserver = new ResizeObserver(() => {
             queueRedraw();
@@ -1932,6 +2232,8 @@
             // cancelAnimationFrame(raf);
             clearInterval(blinkInterval);
             resizeObserver.disconnect();
+            unsubDiff();
+            diffScheduler.dispose();
 
             // Ahora son funciones, no Promises
             if (unlistenParserReady) unlistenParserReady();
@@ -1939,8 +2241,15 @@
             if (unlistenFileSaved) unlistenFileSaved();
             if (unlistenFocus) unlistenFocus();
             window.removeEventListener('go-to-line', handleGoToLine);
+            // Phase 3 bridge: release backend document state
+            void docBridge.close();
         };
     });
+    
+    const handleGoToLine = () => {
+      
+    }
+    
     // --- Types & Colors ---
     interface Token {
         text: string;
@@ -2036,6 +2345,17 @@
         </div>
     {/if}
 
+    <!-- Diff hunk preview popup (fixed so it escapes overflow-hidden containers) -->
+    {#if hunkPreviewVisible}
+        <div
+            class="diff-hunk-preview"
+            style="top: {hunkPreviewScreenY}px; left: {hunkPreviewScreenX}px"
+            aria-hidden="true"
+        >
+            {@html hunkPreviewHTML}
+        </div>
+    {/if}
+
     <!-- 🔧 Status Bar at the bottom of the editor -->
     <StatusBar />
 </div>
@@ -2055,5 +2375,61 @@
     }
     .custom-scrollbar:hover::-webkit-scrollbar-thumb {
         background: #252525;
+    }
+
+    /* ── Diff hunk preview popup ─────────────────────────────────────────────── */
+    .diff-hunk-preview {
+        position: fixed;
+        z-index: 9999;
+        background: #161616;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        padding: 4px 0;
+        pointer-events: none;
+        min-width: 280px;
+        max-width: 560px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+        overflow: hidden;
+        font-family: monospace;
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    :global(.diff-preview-container) {
+        display: flex;
+        flex-direction: column;
+    }
+    :global(.diff-preview-line) {
+        display: flex;
+        align-items: baseline;
+        padding: 0 8px;
+        white-space: pre;
+    }
+    :global(.diff-preview-added) {
+        background: rgba(78, 201, 78, 0.12);
+        color: #7ddd7d;
+    }
+    :global(.diff-preview-deleted) {
+        background: rgba(224, 82, 82, 0.12);
+        color: #e07777;
+    }
+    :global(.diff-preview-lineno) {
+        color: #444;
+        min-width: 2.8em;
+        text-align: right;
+        margin-right: 10px;
+        flex-shrink: 0;
+        font-size: 11px;
+        user-select: none;
+    }
+    :global(.diff-preview-text) {
+        white-space: pre;
+        color: #ccc;
+    }
+    :global(.diff-preview-added .diff-preview-text) {
+        color: #7ddd7d;
+    }
+    :global(.diff-preview-deleted .diff-preview-text) {
+        color: #e07777;
     }
 </style>

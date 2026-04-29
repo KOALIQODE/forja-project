@@ -1,13 +1,23 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use glib::ObjectExt;
+use std::sync::Mutex;
 use tauri::Manager;
+
 mod plugins;
 mod shared;
+mod document;
+mod language;
+mod highlight;
+
+use document::DocumentManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // Register DocumentManager as Tauri-managed state (Phase 1-3)
+            app.manage(Mutex::new(DocumentManager::new()));
+
             let window = app.get_webview_window("main").unwrap();
 
             #[cfg(target_os = "linux")]
@@ -31,7 +41,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // Editor
             plugins::editor::get_shortened_paths,
-            // Buffer
+            // Buffer (stateless file I/O)
             plugins::buffer::read_file,
             plugins::buffer::get_total_lines,
             plugins::buffer::read_file_lines,
@@ -53,12 +63,28 @@ pub fn run() {
             plugins::explorer::rename_entry,
             plugins::explorer::delete_entry,
             plugins::explorer::list_directory_from_path,
-            // Syntax
+            // Syntax (WASM-based, stateless)
             plugins::syntax::list_parsers,
             plugins::syntax::install_parser,
             plugins::syntax::detect_language,
+            plugins::syntax::is_native_language,
             plugins::syntax::get_code_breadcrumb,
             plugins::syntax::highlight_syntax,
+            // Document (Phase 1-3: stateful document management + highlight pipeline)
+            plugins::document::open_document,
+            plugins::document::apply_text_edit,
+            plugins::document::get_document_tokens,
+            plugins::document::close_document,
+            // Diff (Phase 5-6: git hunks, char diff, stage/revert)
+            plugins::diff::get_git_hunks,
+            plugins::diff::get_file_head_content,
+            plugins::diff::stage_hunk,
+            plugins::diff::revert_hunk,
+            plugins::diff::compute_char_diff,
+            plugins::diff::compute_hunk_preview,
+            // LSP (Language Server Protocol)
+            plugins::lsp::list_lsp_servers,
+            plugins::lsp::install_lsp_server,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -4,6 +4,7 @@
   import Telescope from "./Telescope.svelte";
   import ParserManager from "./ParserManager.svelte";
   import PreferencesDialog from "./PreferencesDialog.svelte";
+  import ExtensionsManager from "./ExtensionsManager.svelte";
   import { dialogState, closeDialog, DIALOG_IDS } from "../../stores/dialogStore";
 
   let currentDialog: any = null;
@@ -46,6 +47,10 @@
   {:else if currentDialog.id === DIALOG_IDS.PREFERENCES}
     <div data-program-ui>
       <PreferencesDialog {...(currentDialog.props || {})} />
+    </div>
+  {:else if currentDialog.id === DIALOG_IDS.EXTENSIONS}
+    <div data-program-ui>
+      <ExtensionsManager />
     </div>
   {/if}
 {/if}

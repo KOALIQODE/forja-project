@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Bell, Puzzle, BadgeQuestionMark, Minus, Square, X, Settings } from "@lucide/svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { openPreferencesDialog } from "../stores/dialogStore";
+  import { openPreferencesDialog, openExtensionsManager } from "../stores/dialogStore";
   const appWindow = getCurrentWindow();
 
   function handleMinimize() {
@@ -40,7 +40,7 @@
       <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Notifications">
         <Bell size="16" />
       </button>
-      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white">
+      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Extensions" onclick={() => openExtensionsManager()}>
         <Puzzle size="16" />
       </button>
       <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Preferences" onclick={() => openPreferencesDialog("program")}>

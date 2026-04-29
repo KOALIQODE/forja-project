@@ -9,7 +9,8 @@ export const DIALOG_IDS = {
   BUFFER_DELETE: 'buffer-delete',
   TELESCOPE: 'telescope',
   GRAMMAR_HUB: 'grammar-hub',
-  PREFERENCES: 'preferences'
+  PREFERENCES: 'preferences',
+  EXTENSIONS: 'extensions'
 } as const;
 
 // Dialog types
@@ -90,4 +91,11 @@ export function openBufferDeleteDialog() {
 
 export function closeRecentProjectsDialog() {
   closeDialog();
+}
+
+export function openExtensionsManager() {
+  openDialog({
+    id: DIALOG_IDS.EXTENSIONS,
+    component: 'ExtensionsManager'
+  });
 }
