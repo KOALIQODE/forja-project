@@ -34,6 +34,76 @@ const BUILTIN_SEED: &[(&str, &str, &str, &str)] = &[
     ),
 ];
 
+// ── Security / Registry configuration ────────────────────────────────────────
+
+/// Official Forja plugin registry — the single trusted source.
+/// All plugin downloads must come from this domain.
+/// To self-host: change this constant and rebuild.
+pub const OFFICIAL_REGISTRY: &str = "https://registry.forja.dev";
+
+/// Returns true when the `FORJA_DEV_MODE` environment variable is set.
+/// Dev mode allows downloading plugins from any HTTPS URL (e.g. GitHub raw).
+/// **Never run a production release with this env var set.**
+fn is_dev_mode() -> bool {
+    std::env::var("FORJA_DEV_MODE").is_ok()
+}
+
+/// Validate that a URL is safe to download plugin files from.
+/// - Production (default): only `OFFICIAL_REGISTRY` domain passes.
+/// - Dev mode (`FORJA_DEV_MODE=1`): any HTTPS URL passes (for local testing / GitHub).
+fn validate_download_url(url: &str) -> Result<(), String> {
+    if !url.starts_with("https://") {
+        return Err("only HTTPS plugin sources are permitted".into());
+    }
+    if is_dev_mode() {
+        eprintln!("[security] FORJA_DEV_MODE active — allowing unofficial source: {}", url);
+        return Ok(());
+    }
+    if !url.starts_with(OFFICIAL_REGISTRY) {
+        return Err(format!(
+            "plugin source rejected: '{}' is not the official registry.\n\
+             Only '{}' is trusted in production.\n\
+             Set FORJA_DEV_MODE=1 to allow unofficial sources (development only).",
+            url, OFFICIAL_REGISTRY
+        ));
+    }
+    Ok(())
+}
+
+/// Compute SHA-256 hex digest of raw bytes.
+fn sha256_hex(data: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(data);
+    hex::encode(h.finalize())
+}
+
+/// Verify a file's content against an expected SHA-256 hex string.
+/// Returns an error with a descriptive message if the hashes don't match.
+fn verify_sha256(content: &str, expected_hex: &str, label: &str) -> Result<(), String> {
+    let computed = sha256_hex(content.as_bytes());
+    if computed.to_lowercase() != expected_hex.to_lowercase() {
+        return Err(format!(
+            "integrity check FAILED for '{}': expected {}, got {}.\n\
+             The file may have been tampered with. Installation aborted.",
+            label, expected_hex, computed
+        ));
+    }
+    Ok(())
+}
+
+/// Registry metadata shape for a specific plugin version.
+/// Served at: GET {REGISTRY}/plugins/{name}/{version}/meta.json
+#[derive(Debug, serde::Deserialize)]
+struct RegistryMeta {
+    #[allow(dead_code)]
+    name: String,
+    #[allow(dead_code)]
+    version: String,
+    manifest_sha256: String,
+    main_sha256: String,
+}
+
 /// Returns the user's Forja plugins root directory, creating it if needed.
 /// ~/.local/share/forja/plugins/   (Linux)
 /// ~/Library/Application Support/forja/plugins/   (macOS)
@@ -362,4 +432,134 @@ pub fn plugin_run_bracket_providers(
         .lock()
         .map_err(|e| format!("state lock error: {}", e))?
         .run_bracket_providers(&text, &language))
+}
+
+// ── Registry install commands ─────────────────────────────────────────────────
+
+/// Save plugin source files to the appropriate user data subdirectory and load them.
+/// Helper shared by both install commands.
+async fn install_plugin_files(
+    manifest_src: String,
+    main_src: String,
+    host: State<'_, std::sync::Mutex<PluginHost>>,
+) -> Result<String, String> {
+    use crate::plugin_host::manifest::PluginKind;
+
+    let manifest = crate::plugin_host::manifest::load_manifest(&manifest_src)?;
+    let subdir = match manifest.kind {
+        PluginKind::Theme  => "themes",
+        PluginKind::Plugin => "plugins",
+    };
+
+    let plugin_dir = plugins_dir()?.join(subdir).join(&manifest.name);
+    std::fs::create_dir_all(&plugin_dir)
+        .map_err(|e| format!("create plugin dir error: {}", e))?;
+    std::fs::write(plugin_dir.join("manifest.lua"), &manifest_src)
+        .map_err(|e| format!("write manifest error: {}", e))?;
+    std::fs::write(plugin_dir.join("main.lua"), &main_src)
+        .map_err(|e| format!("write main.lua error: {}", e))?;
+
+    // Load into runtime (brief Mutex lock — no await after here)
+    let mut guard = host.lock().map_err(|e| format!("state lock error: {}", e))?;
+    load_plugin_from_dir(&mut guard, &plugin_dir)
+}
+
+/// Install a plugin from the official Forja registry by name + version.
+///
+/// Flow: fetch meta.json (hashes) → download manifest.lua + main.lua →
+///       verify SHA-256 → save to ~/.local/share/forja/plugins/ → load.
+///
+/// Registry endpoints expected:
+///   GET {REGISTRY}/plugins/{name}/{version}/meta.json
+///   GET {REGISTRY}/plugins/{name}/{version}/manifest.lua
+///   GET {REGISTRY}/plugins/{name}/{version}/main.lua
+#[tauri::command]
+pub async fn plugin_install_from_registry(
+    name: String,
+    version: String,
+    host: State<'_, std::sync::Mutex<PluginHost>>,
+) -> Result<String, String> {
+    let base = OFFICIAL_REGISTRY;
+    let meta_url     = format!("{}/plugins/{}/{}/meta.json",   base, name, version);
+    let manifest_url = format!("{}/plugins/{}/{}/manifest.lua", base, name, version);
+    let main_url     = format!("{}/plugins/{}/{}/main.lua",     base, name, version);
+
+    let client = reqwest::Client::new();
+
+    // 1. Fetch metadata (SHA-256 hashes for integrity verification)
+    let meta: RegistryMeta = client
+        .get(&meta_url)
+        .send()
+        .await
+        .map_err(|e| format!("registry unreachable ({}): {}", meta_url, e))?
+        .json()
+        .await
+        .map_err(|e| format!("registry meta parse error: {}", e))?;
+
+    // 2. Download plugin source files
+    let manifest_src = client.get(&manifest_url)
+        .send().await.map_err(|e| format!("download manifest error: {}", e))?
+        .text().await.map_err(|e| format!("read manifest error: {}", e))?;
+
+    let main_src = client.get(&main_url)
+        .send().await.map_err(|e| format!("download main.lua error: {}", e))?
+        .text().await.map_err(|e| format!("read main.lua error: {}", e))?;
+
+    // 3. Integrity check BEFORE touching disk
+    verify_sha256(&manifest_src, &meta.manifest_sha256, "manifest.lua")?;
+    verify_sha256(&main_src,     &meta.main_sha256,     "main.lua")?;
+
+    // 4. Save + load
+    install_plugin_files(manifest_src, main_src, host).await
+}
+
+/// Install a plugin from explicit manifest + main URLs with mandatory hash verification.
+///
+/// Security:
+/// - Production: `manifest_url` and `main_url` must start with `OFFICIAL_REGISTRY`.
+/// - Dev mode (`FORJA_DEV_MODE=1`): any HTTPS URL is accepted (GitHub raw, localhost, etc.).
+/// - SHA-256 hashes are ALWAYS verified regardless of mode — no bypassing.
+#[tauri::command]
+pub async fn plugin_install_from_url(
+    manifest_url:    String,
+    main_url:        String,
+    manifest_sha256: String,
+    main_sha256:     String,
+    host: State<'_, std::sync::Mutex<PluginHost>>,
+) -> Result<String, String> {
+    // Security gate — reject non-HTTPS or non-registry URLs in production
+    validate_download_url(&manifest_url)?;
+    validate_download_url(&main_url)?;
+
+    let client = reqwest::Client::new();
+
+    let manifest_src = client.get(&manifest_url)
+        .send().await.map_err(|e| format!("download manifest error: {}", e))?
+        .text().await.map_err(|e| format!("read manifest error: {}", e))?;
+
+    let main_src = client.get(&main_url)
+        .send().await.map_err(|e| format!("download main.lua error: {}", e))?
+        .text().await.map_err(|e| format!("read main.lua error: {}", e))?;
+
+    // Hash verification is ALWAYS mandatory
+    verify_sha256(&manifest_src, &manifest_sha256, "manifest.lua")?;
+    verify_sha256(&main_src,     &main_sha256,     "main.lua")?;
+
+    install_plugin_files(manifest_src, main_src, host).await
+}
+
+/// Returns the current registry configuration and security mode.
+/// Useful for the Extensions UI to display "Connected to registry.forja.dev"
+/// or a "⚠ DEV MODE" badge.
+#[tauri::command]
+pub fn plugin_registry_info() -> serde_json::Value {
+    serde_json::json!({
+        "registry_url": OFFICIAL_REGISTRY,
+        "dev_mode": is_dev_mode(),
+        "warning": if is_dev_mode() {
+            Some("FORJA_DEV_MODE is active — unofficial plugin sources are allowed. Do not use in production.")
+        } else {
+            None
+        }
+    })
 }

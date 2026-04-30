@@ -106,6 +106,9 @@ pub fn run() {
             plugin_host::plugin_emit_event,
             plugin_host::plugin_get_themes,
             plugin_host::plugin_run_bracket_providers,
+            plugin_host::plugin_install_from_registry,
+            plugin_host::plugin_install_from_url,
+            plugin_host::plugin_registry_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

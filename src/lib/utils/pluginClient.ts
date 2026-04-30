@@ -139,3 +139,50 @@ export async function pluginRunBracketProviders(
         language,
     });
 }
+
+// ── Registry install ──────────────────────────────────────────────────────────
+
+export interface RegistryInfo {
+    registry_url: string;
+    dev_mode: boolean;
+    warning: string | null;
+}
+
+/**
+ * Install a plugin from the official Forja registry.
+ * The backend fetches meta.json for hashes, downloads both Lua files,
+ * verifies SHA-256, saves to disk, and loads into the runtime.
+ */
+export async function pluginInstallFromRegistry(
+    name: string,
+    version: string
+): Promise<string> {
+    return invoke<string>("plugin_install_from_registry", { name, version });
+}
+
+/**
+ * Install a plugin from explicit manifest + main URLs.
+ * SHA-256 hashes are mandatory and always verified.
+ *
+ * Security:
+ * - Production: URLs must start with the official registry domain.
+ * - Dev mode (FORJA_DEV_MODE=1 set on the binary): any HTTPS URL is accepted.
+ */
+export async function pluginInstallFromUrl(
+    manifestUrl: string,
+    mainUrl: string,
+    manifestSha256: string,
+    mainSha256: string
+): Promise<string> {
+    return invoke<string>("plugin_install_from_url", {
+        manifestUrl,
+        mainUrl,
+        manifestSha256,
+        mainSha256,
+    });
+}
+
+/** Returns current registry URL and whether dev mode is active. */
+export async function pluginRegistryInfo(): Promise<RegistryInfo> {
+    return invoke<RegistryInfo>("plugin_registry_info");
+}
