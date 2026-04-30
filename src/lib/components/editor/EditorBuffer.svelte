@@ -359,13 +359,49 @@
         normalizeCursor();
         chunkRenderer.invalidateAll();
         tokenCache.clear();
-        loadedChunks.clear();
         pendingChunks.clear();
-        diffScheduler.updateCurrentContent(lineCache, totalLines);
-        queueRedraw();
-        if (highlightEnabled) {
-            void rehighlightLoadedChunks();
+
+        // Rebuild loadedChunks from the restored lineCache instead of clearing it
+        // entirely. The snapshot contains the full in-memory content, so any chunk
+        // whose lines are already present can be marked as loaded — this avoids a
+        // re-fetch from disk that would produce stale content for highlighting.
+        loadedChunks.clear();
+        const totalChunks = Math.ceil(totalLines / CHUNK_SIZE);
+        for (let chunkId = 0; chunkId < totalChunks; chunkId++) {
+            if (getCachedLinesForChunk(chunkId) !== null) loadedChunks.add(chunkId);
         }
+
+        // Trigger a full diff recompute so mini.diff (and the gutter) immediately
+        // reflect the restored state. updateCurrentContent() intentionally skips
+        // scheduling, so we use notifyEdit() with the whole file range instead.
+        diffScheduler.notifyEdit(lineCache, totalLines, 0, Math.max(0, totalLines - 1));
+
+        queueRedraw();
+
+        // Reopen the backend AST document with the restored content so tree-sitter
+        // tokens are fresh and don't reflect pre-undo incremental edits.
+        void (async () => {
+            if (docBridge.isOpen()) {
+                await docBridge.close();
+                const restoredLines: string[] = [];
+                for (let i = 0; i < Math.min(CHUNK_SIZE, totalLines); i++) {
+                    restoredLines.push(lineCache.get(i) ?? '');
+                }
+                await docBridge.open(currentFilePath ?? '', restoredLines.join('\n'), language);
+            }
+            // Prefer viewport-only highlighting (fast, uses the fresh AST).
+            const bridgeProduced = await highlightViewportViaDocBridge();
+            if (!bridgeProduced && highlightEnabled) {
+                void rehighlightLoadedChunks();
+            }
+        })();
+    }
+
+    /** Returns the current editor content as a single string (for dirty-state checks). */
+    function getCurrentContent(): string {
+        const lines: string[] = [];
+        for (let i = 0; i < totalLines; i++) lines.push(lineCache.get(i) ?? '');
+        return lines.join('\n');
     }
 
     function undo() {
@@ -374,7 +410,8 @@
 
         redoStack.push(cloneSnapshot());
         restoreSnapshot(snapshot);
-        isDirty = true;
+        // Only mark dirty if the restored content differs from what was last saved.
+        isDirty = savedContent !== '' && getCurrentContent() !== savedContent;
     }
 
     function redo() {
@@ -382,7 +419,7 @@
         if (!snapshot) return;
         undoStack.push(cloneSnapshot());
         restoreSnapshot(snapshot);
-        isDirty = true;
+        isDirty = savedContent !== '' && getCurrentContent() !== savedContent;
     }
 
     function comparePositions(a: CursorPosition, b: CursorPosition) {
@@ -857,10 +894,38 @@
         });
     }
 
-    async function refreshHighlightsAfterEdit() {
+    // ── Debounced syntax highlight scheduler ─────────────────────────────────────
+    //
+    // Syntax highlighting requires 1-2 Tauri IPC round-trips (apply_text_edit +
+    // get_document_tokens). Firing these on every keystroke is wasteful — the text
+    // is already redrawn immediately via queueRedraw(), so the highlight can safely
+    // lag by a small amount without the user noticing.
+    //
+    // We debounce the refresh: the first edit after a pause fires immediately (via
+    // RAF), subsequent edits during a burst are coalesced and fire once the user
+    // stops typing for HIGHLIGHT_DEBOUNCE_MS.
+
+    const HIGHLIGHT_DEBOUNCE_MS = 120;
+    let highlightDebounceId: ReturnType<typeof setTimeout> | null = null;
+    let highlightPendingChunk = -1; // chunk that needs re-highlight in the fallback path
+
+    function scheduleHighlightRefresh(chunkId: number): void {
+        // Always track the latest affected chunk so the eventual refresh targets it.
+        highlightPendingChunk = chunkId;
+
+        if (highlightDebounceId !== null) {
+            clearTimeout(highlightDebounceId);
+        }
+        highlightDebounceId = setTimeout(() => {
+            highlightDebounceId = null;
+            void refreshHighlightsAfterEdit(highlightPendingChunk);
+            highlightPendingChunk = -1;
+        }, HIGHLIGHT_DEBOUNCE_MS);
+    }
+
+    async function refreshHighlightsAfterEdit(chunkId: number) {
         // Phase 7: mark only the affected chunk dirty instead of rehighlighting everything
-        const affectedChunkId = Math.floor(cursorLine / CHUNK_SIZE);
-        chunkRenderer.markDirty(affectedChunkId);
+        chunkRenderer.markDirty(chunkId);
 
         if (docBridge.isOpen()) {
             // Phase 6: use backend AST for visible-range tokens (fast, incremental).
@@ -868,18 +933,18 @@
             // (e.g. no WASM grammar installed for this language).
             const bridgeProducedTokens = await highlightViewportViaDocBridge();
             if (!bridgeProducedTokens && highlightEnabled) {
-                const lines = getCachedLinesForChunk(affectedChunkId);
-                if (lines) await highlightChunk(lines, affectedChunkId * CHUNK_SIZE);
+                const lines = getCachedLinesForChunk(chunkId);
+                if (lines) await highlightChunk(lines, chunkId * CHUNK_SIZE);
             }
         } else if (highlightEnabled) {
             // Fallback: rehighlight only the affected chunk
-            const lines = getCachedLinesForChunk(affectedChunkId);
-            if (lines) await highlightChunk(lines, affectedChunkId * CHUNK_SIZE);
+            const lines = getCachedLinesForChunk(chunkId);
+            if (lines) await highlightChunk(lines, chunkId * CHUNK_SIZE);
         }
         queueRedraw();
     }
 
-    async function mutateDocument(mutation: () => void) {
+    function mutateDocument(mutation: () => void) {
         pushUndoSnapshot();
         const preMutationLines = totalLines;
         mutation();
@@ -897,12 +962,12 @@
             chunkRenderer.markDirty(editChunk);
         }
         // Trigger an immediate redraw so the edit appears in the next frame
-        // (without this, the text only redraws after the async highlight completes,
-        // causing a 50-500ms delay where nothing appears on screen).
+        // (text is visible right away; highlighting follows after the debounce).
         wrapLayoutDirty = true;
         queueRedraw();
         scheduleBracketUpdate();
-        await refreshHighlightsAfterEdit();
+        // Debounced: coalesces rapid keystrokes into a single highlight IPC call.
+        scheduleHighlightRefresh(editChunk);
         // Diff: notify incremental edit (±5 lines window around cursor)
         diffScheduler.notifyEdit(
             lineCache,
@@ -3039,6 +3104,9 @@
     
     let isSaving = $state(false);
     let isDirty = $state(false);
+    // Fingerprint of the last-saved (or initially-loaded) content.
+    // Used to determine whether an undo/redo operation restores a clean state.
+    let savedContent = '';
     let lspVersion = 1;
 
     // Suppress file-changed watcher events triggered by our own save.
@@ -3069,6 +3137,7 @@
             const content = lines.join("\n");
             await invoke("write_file", { path: filePath, content });
             isDirty = false;
+            savedContent = content;
             void fetchBlame();
             void lspChangeDocument(language, filePath, ++lspVersion, content);
             // Notify Lua plugins about the save event
@@ -3164,6 +3233,12 @@
         wrapLayoutDirty = true;
         // Phase 3 bridge: close previous document (no-op if not open)
         void docBridge.close();
+        // Cancel any pending debounced highlight from the previous file.
+        if (highlightDebounceId !== null) {
+            clearTimeout(highlightDebounceId);
+            highlightDebounceId = null;
+        }
+        highlightPendingChunk = -1;
         // Diff: reset all diff state for the new file (keeps onDiffReady callbacks)
         diffScheduler.reset();
         viewportDiffCache.clear();
@@ -3210,6 +3285,9 @@
             // LSP: open document for language-server diagnostics
             try {
                 const fullContent = await invoke<string>('read_file', { path });
+                // Normalise line endings so savedContent matches what saveFile writes.
+                savedContent = fullContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                isDirty = false;
                 lspVersion = 1;
                 void lspOpenDocument(language, path, fullContent);
             } catch (e) {
