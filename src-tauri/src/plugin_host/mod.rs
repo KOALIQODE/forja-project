@@ -428,10 +428,64 @@ pub fn plugin_run_bracket_providers(
     language: String,
     host: State<'_, std::sync::Mutex<PluginHost>>,
 ) -> Result<Vec<BracketRange>, String> {
-    Ok(host
+    let ranges = host
         .lock()
         .map_err(|e| format!("state lock error: {}", e))?
-        .run_bracket_providers(&text, &language))
+        .run_bracket_providers(&text, &language);
+
+    // Lua iterates the text as raw UTF-8 bytes and returns 1-based byte offsets.
+    // JavaScript's String indexing uses UTF-16 code units. For ASCII-only content
+    // these are identical, but files with non-ASCII characters (Unicode in comments,
+    // strings, identifiers) before a bracket would produce wrong positions.
+    // Convert here once so the frontend always receives UTF-16 code unit offsets.
+    Ok(byte_ranges_to_utf16(&text, ranges))
+}
+
+/// Convert bracket ranges from 1-based UTF-8 byte offsets (Lua convention) to
+/// 1-based UTF-16 code unit offsets (JavaScript String convention).
+/// BMP characters (U+0000–U+FFFF) occupy 1 UTF-16 unit; supplementary characters
+/// (e.g. emoji) occupy 2. ASCII characters are always 1 byte = 1 UTF-16 unit.
+fn byte_ranges_to_utf16(text: &str, ranges: Vec<BracketRange>) -> Vec<BracketRange> {
+    if ranges.is_empty() {
+        return ranges;
+    }
+
+    // Collect all unique 0-based byte offsets we need to convert, then sort them
+    // so we can walk the text once in a single O(n) pass.
+    let mut offsets: Vec<usize> = ranges
+        .iter()
+        .flat_map(|r| [r.start.saturating_sub(1), r.finish.saturating_sub(1)])
+        .collect();
+    offsets.sort_unstable();
+    offsets.dedup();
+
+    // Single forward walk: track current byte index and UTF-16 unit count.
+    let mut byte_to_utf16: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::with_capacity(offsets.len());
+    let mut utf16_count: usize = 0;
+    let mut prev_byte: usize = 0;
+
+    for &target_byte in &offsets {
+        let slice = &text[prev_byte..target_byte.min(text.len())];
+        utf16_count += slice.encode_utf16().count();
+        byte_to_utf16.insert(target_byte, utf16_count);
+        prev_byte = target_byte.min(text.len());
+    }
+
+    let convert = |byte_pos: usize| -> usize {
+        // byte_pos is 1-based; convert to 0-based, look up, then back to 1-based
+        let key = byte_pos.saturating_sub(1).min(text.len());
+        byte_to_utf16.get(&key).copied().unwrap_or(key) + 1
+    };
+
+    ranges
+        .into_iter()
+        .map(|r| BracketRange {
+            start:  convert(r.start),
+            finish: convert(r.finish),
+            depth:  r.depth,
+        })
+        .collect()
 }
 
 // ── Registry install commands ─────────────────────────────────────────────────

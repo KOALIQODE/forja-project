@@ -212,28 +212,87 @@ formatter v1.2.0  →  rejected  (motivo: patron os.execute detectado)
 
 ## 7. Verificación en el Cliente Tauri
 
-Al instalar un plugin, el cliente:
+El cliente implementa dos comandos de instalación, ambos con verificación SHA-256 obligatoria:
+
+### `plugin_install_from_registry(name, version)`
+
+Instalación de alto nivel desde el registry oficial. El cliente:
+
+1. Descarga `GET {REGISTRY}/plugins/{name}/{version}/meta.json` → hashes esperados
+2. Descarga `manifest.lua` y `main.lua` del registry
+3. Verifica SHA-256 de **ambos** archivos **antes** de escribir en disco
+4. Guarda en `~/.local/share/forja/plugins/{plugins|themes}/{name}/`
+5. Carga la VM Lua en el runtime (un único lock breve, sin await en medio)
 
 ```rust
-// Descarga desde registry oficial, nunca desde GitHub
-let package = registry.download("bracket-colorizer", "1.0.0").await?;
+let meta: RegistryMeta = client.get(&meta_url).send().await?.json().await?;
 
-// Recalcula hash SHA-256
-let computed_hash = sha256(&package.bytes);
-assert_eq!(computed_hash, package.metadata.hash);
+let manifest_src = client.get(&manifest_url).send().await?.text().await?;
+let main_src     = client.get(&main_url).send().await?.text().await?;
 
-// Verifica firma con clave pública del registry
-verify_signature(&package.bytes, &package.signature, &REGISTRY_PUBLIC_KEY)?;
+// Verificación ANTES de tocar disco — archivo alterado = rechazo
+verify_sha256(&manifest_src, &meta.manifest_sha256, "manifest.lua")?;
+verify_sha256(&main_src,     &meta.main_sha256,     "main.lua")?;
 
-// Si todo OK, instala
-plugin_host.install(package)?;
+// Solo si ambos hashes son válidos, se guarda y carga
+save_to_disk(&plugin_dir, &manifest_src, &main_src)?;
+load_plugin_from_dir(&mut host, &plugin_dir)
 ```
 
-Si el hash no coincide o la firma es inválida, la instalación es **rechazada silenciosamente** y se registra en logs.
+### `plugin_install_from_url(manifest_url, main_url, manifest_sha256, main_sha256)`
+
+Instalación de bajo nivel con URLs explícitas. Requiere que el llamante proporcione los hashes. Usado cuando el frontend ya conoce las URLs exactas (ej: respuesta del registry con URLs completas).
+
+```typescript
+// TypeScript (pluginClient.ts)
+await pluginInstallFromUrl(
+  "https://registry.forja.dev/plugins/formatter/1.0.0/manifest.lua",
+  "https://registry.forja.dev/plugins/formatter/1.0.0/main.lua",
+  "a3f9d2...",  // SHA-256 de manifest.lua
+  "b7c1e0..."   // SHA-256 de main.lua
+);
+```
+
+La verificación de hashes es **siempre obligatoria** en ambos comandos. No existe modo de bypass desde el cliente.
 
 ---
 
-## 8. Registry API (Endpoints Públicos)
+## 8. Switch de Seguridad — `FORJA_DEV_MODE`
+
+Por defecto, **solo se permiten URLs del registry oficial**. Para desarrollo/testing se puede activar el modo dev:
+
+| Modo | Configuración | URLs permitidas |
+|---|---|---|
+| **Producción** (default) | Sin env var | Solo `https://registry.forja.dev` |
+| **Desarrollo** | `FORJA_DEV_MODE=1` | Cualquier URL `https://` (GitHub raw, localhost, etc.) |
+
+```bash
+# Modo desarrollo — permite instalar plugins desde GitHub directamente
+FORJA_DEV_MODE=1 cargo tauri dev
+
+# Nunca usar en release builds
+```
+
+Cuando `FORJA_DEV_MODE` está activo, el backend imprime una advertencia en stderr para cada URL no-oficial:
+
+```
+[security] FORJA_DEV_MODE active — allowing unofficial source: https://raw.githubusercontent.com/...
+```
+
+**La verificación de hashes SHA-256 es obligatoria incluso en dev mode.** El switch solo controla qué dominios se aceptan, no si se valida la integridad del archivo.
+
+### Cambiar el registry (self-hosted)
+
+Para usar un registry propio, cambiar la constante en `src-tauri/src/plugin_host/mod.rs` y recompilar:
+
+```rust
+// Una sola línea — fuente única de verdad
+pub const OFFICIAL_REGISTRY: &str = "https://mi-registry.ejemplo.com";
+```
+
+---
+
+## 9. Registry API (Endpoints Públicos)
 
 ```
 GET  /plugins
@@ -242,17 +301,27 @@ GET  /plugins
 GET  /plugins/:name
      → detalle de un plugin (versiones, permisos, autor)
 
-GET  /plugins/:name/:version/download
-     → descarga del paquete firmado
+GET  /plugins/:name/:version/meta.json
+     → hashes SHA-256 para verificación de integridad
+     → { name, version, manifest_sha256, main_sha256, commit, approved }
+
+GET  /plugins/:name/:version/manifest.lua
+     → fuente del manifest
+
+GET  /plugins/:name/:version/main.lua
+     → fuente del plugin
 
 GET  /themes
      → lista de themes aprobados
 
-GET  /themes/:name/:version/download
-     → descarga del theme firmado
+GET  /themes/:name/:version/meta.json
+     → igual que plugins
+
+GET  /themes/:name/:version/{manifest.lua,main.lua}
+     → igual que plugins
 ```
 
-Respuesta ejemplo:
+Respuesta ejemplo de `/plugins`:
 ```json
 [
   {
@@ -262,14 +331,28 @@ Respuesta ejemplo:
     "description": "Colorize matching bracket pairs by nesting depth",
     "author":      "user",
     "permissions": ["buffer:read", "decorations:write"],
-    "approved":    true
+    "approved":    true,
+    "commit":      "a84f9d2"
   }
 ]
 ```
 
+Respuesta de `meta.json`:
+```json
+{
+  "name":             "bracket-pair-colorizer",
+  "version":          "1.0.0",
+  "commit":           "a84f9d2",
+  "manifest_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4...",
+  "main_sha256":      "b94d27b9934d3e08a52e52d7da7dabfa...",
+  "approved":         true,
+  "published_at":     "2026-04-30T12:00:00Z"
+}
+```
+
 ---
 
-## 9. Fases de Implementación del Registry
+## 10. Fases de Implementación del Registry
 
 ### Fase MVP
 - Formulario de envío (página pública simple)
@@ -294,7 +377,7 @@ Respuesta ejemplo:
 
 ---
 
-## 10. "Verified Publisher"
+## 11. "Verified Publisher"
 
 Después de varias versiones aprobadas sin incidentes, un autor puede recibir el badge de **Verified Publisher**. Esto:
 - Acelera el proceso de revisión (fast-track)
@@ -303,7 +386,7 @@ Después de varias versiones aprobadas sin incidentes, un autor puede recibir el
 
 ---
 
-## 11. Resumen de Seguridad
+## 12. Resumen de Seguridad
 
 | Capa | Mecanismo |
 |---|---|
@@ -311,6 +394,7 @@ Después de varias versiones aprobadas sin incidentes, un autor puede recibir el
 | Revisión por commit | Siempre tag/SHA, nunca branch |
 | Análisis automático | Scanner AST + detección de patrones |
 | Revisión humana | Panel de moderación privado |
-| Integridad del paquete | SHA-256 + firma del registry |
-| Instalación controlada | Solo desde registry oficial |
+| Integridad del paquete | SHA-256 verificado antes de escribir en disco |
+| URL origen | Solo `OFFICIAL_REGISTRY` (producción) · `FORJA_DEV_MODE` para dev |
+| Instalación controlada | Solo desde registry oficial (o self-hosted recompilando) |
 | Runtime | Sandbox Lua con mlua + límites de memoria/CPU |

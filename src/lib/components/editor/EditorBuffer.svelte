@@ -114,16 +114,38 @@
         }
     });
 
-    /** Rebuild bracket color ranges from the current buffer (debounced 400ms). */
+    /** Rebuild bracket color ranges from the current buffer (debounced 400ms).
+     *
+     * Text source priority:
+     *  1. All lines in lineCache → use cache directly (reflects unsaved edits).
+     *  2. File is clean (not dirty) but cache is incomplete (large file, not fully
+     *     scrolled) → read full content from disk for complete bracket analysis.
+     *  3. File is dirty and cache is incomplete → use cache as-is; brackets in
+     *     unloaded lines won't be colored (acceptable tradeoff for large dirty files).
+     */
     function scheduleBracketUpdate() {
         if (bracketUpdateHandle !== null) clearTimeout(bracketUpdateHandle);
         bracketUpdateHandle = setTimeout(async () => {
             bracketUpdateHandle = null;
             try {
-                const lines: string[] = [];
-                for (let i = 0; i < totalLines; i++) lines.push(lineCache.get(i) ?? "");
-                const text = lines.join("\n");
-                if (!text.trim()) return; // nothing to analyze
+                let text: string;
+                const allCached = lineCache.size >= totalLines;
+
+                if (allCached) {
+                    const lines: string[] = [];
+                    for (let i = 0; i < totalLines; i++) lines.push(lineCache.get(i) ?? "");
+                    text = lines.join("\n");
+                } else if (!isDirty) {
+                    // Large clean file: read full content from disk for complete analysis.
+                    text = await invoke<string>("read_file", { path: filePath });
+                } else {
+                    // Large dirty file: use partial cache (only loaded lines are available).
+                    const lines: string[] = [];
+                    for (let i = 0; i < totalLines; i++) lines.push(lineCache.get(i) ?? "");
+                    text = lines.join("\n");
+                }
+
+                if (!text.trim()) return;
                 const ranges = await pluginRunBracketProviders(text, language);
                 console.log("[bracket] ranges:", ranges.length, "lang:", language, "textLen:", text.length);
                 bracketRanges.set(ranges);

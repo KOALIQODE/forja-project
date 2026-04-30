@@ -447,3 +447,63 @@ interface PluginInfo {
 | `pluginLoading` | `writable<boolean>` | Indicador de carga |
 | `pluginList$` | `derived` | Solo plugins (kind = "plugin") |
 | `themeList$` | `derived` | Solo themes (kind = "theme") |
+
+---
+
+## 16. Instalación de Plugins desde el Registry
+
+### Comandos Tauri disponibles
+
+| Comando | Descripción |
+|---|---|
+| `plugin_install_from_registry(name, version)` | Instala desde el registry oficial con meta.json |
+| `plugin_install_from_url(manifest_url, main_url, manifest_sha256, main_sha256)` | Instala desde URLs explícitas (seguridad validada) |
+| `plugin_registry_info()` | Devuelve la URL del registry y si dev_mode está activo |
+
+### Flujo de instalación
+
+```
+pluginInstallFromRegistry("formatter", "1.0.0")
+         ↓
+   GET /plugins/formatter/1.0.0/meta.json   ← hashes SHA-256
+         ↓
+   GET /plugins/formatter/1.0.0/manifest.lua
+   GET /plugins/formatter/1.0.0/main.lua
+         ↓
+   verify_sha256(manifest) → OK
+   verify_sha256(main.lua) → OK
+         ↓
+   ~/.local/share/forja/plugins/plugins/formatter/
+     ├── manifest.lua
+     └── main.lua
+         ↓
+   load_plugin_from_dir() → Lua VM
+```
+
+### Dónde van los plugins instalados
+
+```
+~/.local/share/forja/plugins/      (Linux)
+~/Library/Application Support/forja/plugins/  (macOS)
+%APPDATA%\forja\plugins\           (Windows)
+  ├── plugins/
+  │    └── formatter/
+  │         ├── manifest.lua
+  │         └── main.lua
+  └── themes/
+       └── mi-theme/
+            ├── manifest.lua
+            └── main.lua
+```
+
+Los built-ins (`tokyo-night-dark`, `bracket-pair-colorizer`) se **seed** en este directorio en el primer arranque y luego se leen desde disco — nunca desde el binario.
+
+### Security switch
+
+```
+Sin FORJA_DEV_MODE   →  solo registry.forja.dev         (producción)
+FORJA_DEV_MODE=1     →  cualquier URL https://          (desarrollo)
+```
+
+Cambiar el registry: editar `OFFICIAL_REGISTRY` en `plugin_host/mod.rs` y recompilar. Ver `docs/PLUGIN_REGISTRY.md` para el detalle completo.
+
