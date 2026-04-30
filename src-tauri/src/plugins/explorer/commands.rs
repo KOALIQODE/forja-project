@@ -11,9 +11,30 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 use tauri::Emitter;
+
+/// How long (in seconds) a path registered via `register_save` is considered
+/// "ours" and therefore suppressed from re-emitting as a `file-changed` event.
+/// The OS can fire 2-3 events per write (MODIFY, CLOSE_WRITE, …) and the
+/// debouncer may split them across multiple 300 ms windows, so we need a window
+/// wider than one debounce period.
+const SAVE_SUPPRESS_SECS: u64 = 3;
+
+/// Paths recently saved by `write_file`, keyed by path → time of registration.
+/// The watcher suppresses `file-changed` events for any path whose entry is
+/// younger than SAVE_SUPPRESS_SECS instead of consuming a one-shot token.
+static PENDING_SAVES: LazyLock<Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Called by `write_file` (buffer plugin) just before writing to disk.
+/// Registers the path so the watcher can suppress the resulting OS events.
+pub fn register_save(path: &str) {
+    if let Ok(mut map) = PENDING_SAVES.lock() {
+        map.insert(path.to_string(), Instant::now());
+    }
+}
 
 /// Representa una entrada en el sistema de archivos (archivo o directorio).
 #[derive(Serialize, Debug, Clone)]
@@ -311,7 +332,19 @@ pub async fn watch_directory(path: String, app: tauri::AppHandle) -> Result<(), 
         move |res: Result<Vec<DebouncedEvent>, _>| {
             if let Ok(events) = res {
                 for event in events {
-                    let changed_path = event.path.to_string_lossy().to_string();
+                    let changed_path = simplify_path(&event.path);
+                    // Suppress events caused by our own `write_file` saves.
+                    // Use a time-window (not a one-shot token) so that multiple
+                    // OS events emitted for the same write (MODIFY + CLOSE_WRITE
+                    // can arrive in separate debounce windows) are all suppressed.
+                    if let Ok(mut pending) = PENDING_SAVES.lock() {
+                        if let Some(&registered_at) = pending.get(&changed_path) {
+                            if registered_at.elapsed() < Duration::from_secs(SAVE_SUPPRESS_SECS) {
+                                continue; // still within our save window — skip
+                            }
+                            pending.remove(&changed_path); // window expired, clean up
+                        }
+                    }
                     app.emit("file-changed", &changed_path).ok();
                 }
             }

@@ -10,6 +10,7 @@ mod language;
 mod highlight;
 
 use document::DocumentManager;
+use plugins::lsp::LspClientManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -17,6 +18,8 @@ pub fn run() {
         .setup(|app| {
             // Register DocumentManager as Tauri-managed state (Phase 1-3)
             app.manage(Mutex::new(DocumentManager::new()));
+            // Register LspClientManager as Tauri-managed state
+            app.manage(Mutex::new(LspClientManager::new()));
 
             let window = app.get_webview_window("main").unwrap();
 
@@ -85,6 +88,9 @@ pub fn run() {
             // LSP (Language Server Protocol)
             plugins::lsp::list_lsp_servers,
             plugins::lsp::install_lsp_server,
+            plugins::lsp::lsp_open_document,
+            plugins::lsp::lsp_change_document,
+            plugins::lsp::lsp_close_document,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

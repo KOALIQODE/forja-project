@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, State};
+use std::sync::Mutex;
+use super::client::LspClientManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LspServer {
@@ -119,6 +121,15 @@ fn registry() -> Vec<LspDef> {
             method: "cargo",
             binary: "taplo",
             install: Some(("cargo", &["install", "taplo-cli", "--locked"])),
+        },
+        LspDef {
+            id: "vscode-json-language-server",
+            name: "vscode-json-language-server",
+            language: "JSON",
+            description: "VS Code's JSON language server with JSON Schema validation",
+            method: "npm",
+            binary: "vscode-json-language-server",
+            install: Some(("npm", &["install", "-g", "vscode-langservers-extracted"])),
         },
         LspDef {
             id: "vscode-css-language-server",
@@ -251,4 +262,45 @@ pub async fn install_lsp_server(app: AppHandle, id: String) -> Result<(), String
 
     let _ = app.emit("lsp-ready", &id);
     Ok(())
+}
+
+// ── LSP document lifecycle commands ──────────────────────────────────────────
+
+/// Opens a document in the LSP server for the given language.
+/// Spawns the server if it isn't running yet.
+#[tauri::command]
+pub async fn lsp_open_document(
+    app: AppHandle,
+    manager: State<'_, Mutex<LspClientManager>>,
+    language: String,
+    uri: String,
+    content: String,
+) -> Result<(), String> {
+    let mut mgr = manager.lock().map_err(|e| format!("lock: {e}"))?;
+    mgr.ensure_session(&language, app)?;
+    mgr.did_open(&language, &uri, &content)
+}
+
+/// Notifies the LSP server that the document content changed (full-text sync).
+#[tauri::command]
+pub async fn lsp_change_document(
+    manager: State<'_, Mutex<LspClientManager>>,
+    language: String,
+    uri: String,
+    version: u64,
+    content: String,
+) -> Result<(), String> {
+    let mut mgr = manager.lock().map_err(|e| format!("lock: {e}"))?;
+    mgr.did_change(&language, &uri, version, &content)
+}
+
+/// Notifies the LSP server that a document was closed.
+#[tauri::command]
+pub async fn lsp_close_document(
+    manager: State<'_, Mutex<LspClientManager>>,
+    language: String,
+    uri: String,
+) -> Result<(), String> {
+    let mut mgr = manager.lock().map_err(|e| format!("lock: {e}"))?;
+    mgr.did_close(&language, &uri)
 }

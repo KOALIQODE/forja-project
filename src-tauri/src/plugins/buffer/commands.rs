@@ -1,3 +1,4 @@
+use crate::plugins::explorer::register_save;
 use crate::shared::file_index::FileIndex;
 use std::fs;
 use std::path::PathBuf;
@@ -62,6 +63,10 @@ pub async fn write_file(
 ) -> Result<(), String> {
     let clean_path = normalize_path(&path);
     let target_path = PathBuf::from(&clean_path);
+
+    // Register the path BEFORE writing so the watcher skips the resulting
+    // OS event (some filesystems emit 2-3 events per write).
+    register_save(&clean_path);
 
     fs::write(&target_path, &content)
         .map_err(|e| format!("Failed to write file at {}: {}", clean_path, e))?;

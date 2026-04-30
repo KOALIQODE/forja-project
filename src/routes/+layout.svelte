@@ -31,6 +31,15 @@
           return;
       }
 
+      // No interceptar shortcuts si el editor está en insert mode:
+      // el usuario está escribiendo y los caracteres deben llegar al editor.
+      const editorEl = document.querySelector('[data-buffer-ui]') as HTMLElement | null;
+      const editorHasFocus = editorEl && (document.activeElement === editorEl || editorEl.contains(document.activeElement));
+      const editorVimMode = editorEl?.dataset?.vimMode;
+      // "insert" = vim insert mode; undefined = vim disabled (always insert)
+      const editorIsInsertMode = editorHasFocus && (editorVimMode === 'insert' || editorVimMode === undefined);
+      if (editorIsInsertMode) return;
+
       // Tab Tab -> Search Files
       if (e.key === 'Tab') {
         const now = Date.now();

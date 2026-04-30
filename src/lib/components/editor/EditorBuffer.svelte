@@ -1,6 +1,7 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
     import { untrack, onMount } from "svelte";
+    import { get } from "svelte/store";
     import { listen } from "@tauri-apps/api/event"; 
 
     import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/constants";
@@ -27,6 +28,7 @@
     import StatusBar from "$lib/components/StatusBar.svelte";
     import { dialogState } from "../../stores/dialogStore";
     import { diagnosticsByFile, type Diagnostic } from "$lib/stores/diagnosticsStore";
+    import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "$lib/utils/lspClient";
 
     interface Props {
         filePath: string;
@@ -46,13 +48,15 @@
     let isLoading = $state(false); // Declare isLoading state
     let mouseLine = $state<number | null>(null);
     let cursorVisible = $state(true);
-    let vimMode = $state<VimMode>("normal");
+    let vimMode = $state<VimMode>(get(bufferPreferences).vimModeEnabled ? "normal" : "insert");
     let pendingCount = $state("");
     let pendingOperator = $state<"delete" | "change" | "yank" | null>(null);
     let pendingSequence = $state("");
     let commandLine = $state("");
     let visualAnchor = $state<CursorPosition | null>(null);
     let register = $state<VimRegister>({ text: "", linewise: false });
+    let lastFindChar = $state("");
+    let lastFindMotion = $state<"f" | "F" | "t" | "T" | "">(""); 
 
     let lineCache = new Map<number, string>();
     let tokenCache = new Map<number, Token[]>();
@@ -225,6 +229,11 @@
         cursorLine = snapshot.cursorLine;
         cursorChar = snapshot.cursorChar;
         normalizeCursor();
+        chunkRenderer.invalidateAll();
+        tokenCache.clear();
+        loadedChunks.clear();
+        pendingChunks.clear();
+        diffScheduler.updateCurrentContent(lineCache, totalLines);
         queueRedraw();
         if (highlightEnabled) {
             void rehighlightLoadedChunks();
@@ -236,6 +245,14 @@
         if (!snapshot) return;
 
         redoStack.push(cloneSnapshot());
+        restoreSnapshot(snapshot);
+        isDirty = true;
+    }
+
+    function redo() {
+        const snapshot = redoStack.pop();
+        if (!snapshot) return;
+        undoStack.push(cloneSnapshot());
         restoreSnapshot(snapshot);
         isDirty = true;
     }
@@ -529,14 +546,200 @@
         return [start, end];
     }
 
+    function findCharForward(ch: string, count: number, stop = false): number {
+        const line = getLine(cursorLine);
+        let found = 0;
+        for (let i = cursorChar + 1; i < line.length; i++) {
+            if (line[i] === ch) {
+                found++;
+                if (found === count) {
+                    return stop ? i - 1 : i;
+                }
+            }
+        }
+        return cursorChar;
+    }
+
+    function findCharBackward(ch: string, count: number, stop = false): number {
+        const line = getLine(cursorLine);
+        let found = 0;
+        for (let i = cursorChar - 1; i >= 0; i--) {
+            if (line[i] === ch) {
+                found++;
+                if (found === count) {
+                    return stop ? i + 1 : i;
+                }
+            }
+        }
+        return cursorChar;
+    }
+
+    function findMatchingBracket(line: number, char: number): CursorPosition | null {
+        const open = "({[";
+        const close = ")}]";
+        const lineText = getLine(line);
+        const startCh = lineText[char];
+        const isOpen = open.includes(startCh);
+        const matchCh = isOpen ? close[open.indexOf(startCh)] : open[close.indexOf(startCh)];
+        let depth = 0;
+        if (isOpen) {
+            for (let l = line; l < totalLines; l++) {
+                const text = getLine(l);
+                const startC = l === line ? char : 0;
+                for (let c = startC; c < text.length; c++) {
+                    if (text[c] === startCh) depth++;
+                    else if (text[c] === matchCh) {
+                        depth--;
+                        if (depth === 0) return { line: l, char: c };
+                    }
+                }
+            }
+        } else {
+            for (let l = line; l >= 0; l--) {
+                const text = getLine(l);
+                const startC = l === line ? char : text.length - 1;
+                for (let c = startC; c >= 0; c--) {
+                    if (text[c] === startCh) depth++;
+                    else if (text[c] === matchCh) {
+                        depth--;
+                        if (depth === 0) return { line: l, char: c };
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    function getTextObjectRange(
+        type: "i" | "a",
+        obj: string,
+    ): { start: CursorPosition; end: CursorPosition } | null {
+        if (obj === "w" || obj === "W") {
+            const line = getLine(cursorLine);
+            const testFn: (c: string) => boolean = obj === "W"
+                ? (c) => !/\s/.test(c)
+                : isWordChar;
+            let start = cursorChar;
+            while (start > 0 && testFn(line[start - 1])) start--;
+            let end = cursorChar;
+            while (end < line.length && testFn(line[end])) end++;
+            if (type === "a") {
+                while (end < line.length && /\s/.test(line[end])) end++;
+            }
+            return {
+                start: { line: cursorLine, char: start },
+                end: { line: cursorLine, char: end },
+            };
+        }
+
+        const pairs: Record<string, [string, string]> = {
+            "(": ["(", ")"], ")": ["(", ")"],
+            "[": ["[", "]"], "]": ["[", "]"],
+            "{": ["{", "}"], "}": ["{", "}"],
+            "<": ["<", ">"], ">": ["<", ">"],
+            '"': ['"', '"'],
+            "'": ["'", "'"],
+            "`": ["`", "`"],
+        };
+
+        const pair = pairs[obj];
+        if (!pair) return null;
+
+        const [openCh, closeCh] = pair;
+        const samePair = openCh === closeCh;
+
+        let openLine = cursorLine, openChar = -1;
+        let closeLinePos = cursorLine, closeChar = -1;
+
+        if (samePair) {
+            const line = getLine(cursorLine);
+            for (let i = 0; i < line.length; i++) {
+                if (line[i] === openCh && i < cursorChar) {
+                    openChar = i;
+                }
+            }
+            for (let i = cursorChar; i < line.length; i++) {
+                if (line[i] === openCh && i > openChar) {
+                    closeChar = i;
+                    break;
+                }
+            }
+            if (openChar < 0 || closeChar < 0) return null;
+            openLine = cursorLine; closeLinePos = cursorLine;
+        } else {
+            for (let l = cursorLine; l >= 0; l--) {
+                const line = getLine(l);
+                const startC = l === cursorLine ? cursorChar : line.length - 1;
+                for (let c = startC; c >= 0; c--) {
+                    if (line[c] === openCh) {
+                        openLine = l; openChar = c; break;
+                    }
+                }
+                if (openChar >= 0) break;
+            }
+            if (openChar < 0) return null;
+            let depth = 0;
+            for (let l = openLine; l < totalLines; l++) {
+                const line = getLine(l);
+                const startC = l === openLine ? openChar : 0;
+                for (let c = startC; c < line.length; c++) {
+                    if (line[c] === openCh) depth++;
+                    else if (line[c] === closeCh) {
+                        depth--;
+                        if (depth === 0) {
+                            closeLinePos = l; closeChar = c; break;
+                        }
+                    }
+                }
+                if (closeChar >= 0) break;
+            }
+            if (closeChar < 0) return null;
+        }
+
+        if (type === "i") {
+            return {
+                start: { line: openLine, char: openChar + 1 },
+                end: { line: closeLinePos, char: closeChar },
+            };
+        } else {
+            return {
+                start: { line: openLine, char: openChar },
+                end: { line: closeLinePos, char: closeChar + 1 },
+            };
+        }
+    }
+
+    const INDENT_STR = "    "; // 4 spaces
+
+    async function indentLines(startLine: number, endLine: number, direction: 1 | -1) {
+        await mutateDocument(() => {
+            for (let i = startLine; i <= endLine; i++) {
+                const line = getLine(i);
+                if (direction === 1) {
+                    setLine(i, INDENT_STR + line);
+                } else {
+                    if (line.startsWith(INDENT_STR)) setLine(i, line.slice(INDENT_STR.length));
+                    else if (line.startsWith("\t")) setLine(i, line.slice(1));
+                    else setLine(i, line.replace(/^ {1,4}/, ""));
+                }
+            }
+        });
+    }
+
     async function refreshHighlightsAfterEdit() {
         // Phase 7: mark only the affected chunk dirty instead of rehighlighting everything
         const affectedChunkId = Math.floor(cursorLine / CHUNK_SIZE);
         chunkRenderer.markDirty(affectedChunkId);
 
         if (docBridge.isOpen()) {
-            // Phase 6: use backend AST for visible-range tokens (fast, incremental)
-            await highlightViewportViaDocBridge();
+            // Phase 6: use backend AST for visible-range tokens (fast, incremental).
+            // Falls back to highlight_syntax when the bridge returns no tokens
+            // (e.g. no WASM grammar installed for this language).
+            const bridgeProducedTokens = await highlightViewportViaDocBridge();
+            if (!bridgeProducedTokens && highlightEnabled) {
+                const lines = getCachedLinesForChunk(affectedChunkId);
+                if (lines) await highlightChunk(lines, affectedChunkId * CHUNK_SIZE);
+            }
         } else if (highlightEnabled) {
             // Fallback: rehighlight only the affected chunk
             const lines = getCachedLinesForChunk(affectedChunkId);
@@ -547,14 +750,25 @@
 
     async function mutateDocument(mutation: () => void) {
         pushUndoSnapshot();
+        const preMutationLines = totalLines;
         mutation();
         normalizeCursor();
-        if (vimMode !== "insert") {
+        if (vimModeEnabled && vimMode !== "insert") {
             normalizeNormalCursor();
         }
         isDirty = true;
-        // Phase 4: mark the affected chunk as needing re-render
-        chunkRenderer.markDirty(Math.floor(cursorLine / CHUNK_SIZE));
+        // Mark all chunks from the edit point onwards dirty when line count changes
+        // (line insertions/deletions shift content across chunk boundaries).
+        const editChunk = Math.floor(cursorLine / CHUNK_SIZE);
+        if (totalLines !== preMutationLines) {
+            chunkRenderer.invalidateAll();
+        } else {
+            chunkRenderer.markDirty(editChunk);
+        }
+        // Trigger an immediate redraw so the edit appears in the next frame
+        // (without this, the text only redraws after the async highlight completes,
+        // causing a 50-500ms delay where nothing appears on screen).
+        queueRedraw();
         await refreshHighlightsAfterEdit();
         // Diff: notify incremental edit (±5 lines window around cursor)
         diffScheduler.notifyEdit(
@@ -793,9 +1007,15 @@
                 startLine: start,
                 endLine: end,
             });
-    
+
+            // Only populate lines that aren't already in lineCache.
+            // In-memory edits (set via mutateDocument) take priority over stale
+            // backend content that arrives asynchronously after the edit.
             fetched.forEach((line, idx) => {
-                lineCache.set(start + idx, line);
+                const lineNum = start + idx;
+                if (!lineCache.has(lineNum)) {
+                    lineCache.set(lineNum, line);
+                }
             });
             
             console.log("chunk loaded", {
@@ -876,6 +1096,11 @@
     /**
      * Phase 3 / Phase 6 — highlights only the visible viewport using the backend AST.
      * Much cheaper than rehighlighting all loaded chunks: only N visible lines are queried.
+     *
+     * Returns true only if the bridge actually produced tokens. Lines inside the
+     * visible range that the bridge has no data for get their stale tokenCache
+     * entries removed so the canvas falls back to plain-text rendering from
+     * lineCache (instead of showing outdated highlighted text after an edit).
      */
     async function highlightViewportViaDocBridge(): Promise<boolean> {
         if (!docBridge.isOpen() || !canvas || !scrollContainer) return false;
@@ -886,11 +1111,21 @@
         );
         const lineTokens = await docBridge.getTokensForRange(startLine, endLine, lineCache);
         if (!lineTokens) return false;
-        for (const [line, tokens] of lineTokens) {
-            tokenCache.set(line, tokens);
-            chunkRenderer.markDirty(Math.floor(line / CHUNK_SIZE));
+
+        // Apply fresh tokens and evict stale tokens for lines the bridge has
+        // no data for (e.g. no WASM grammar installed, or no matching node).
+        // Without this, old tokenCache entries shadow lineCache edits.
+        for (let i = startLine; i <= endLine; i++) {
+            const tokens = lineTokens.get(i);
+            if (tokens !== undefined) {
+                tokenCache.set(i, tokens);
+                chunkRenderer.markDirty(Math.floor(i / CHUNK_SIZE));
+            } else {
+                tokenCache.delete(i);
+            }
         }
-        return true;
+
+        return lineTokens.size > 0;
     }
 
     async function rehighlightLoadedChunks(): Promise<boolean> {
@@ -1113,8 +1348,7 @@
         const lastChunkId = Math.floor(Math.max(endLine - 1, startLine) / CHUNK_SIZE);
 
         for (let chunkId = firstChunkId; chunkId <= lastChunkId; chunkId++) {
-            // Phase 7: skip dirty re-renders when over budget (cursor still updates)
-            if (chunkRenderer.isDirty(chunkId) && !overBudget) {
+            if (chunkRenderer.isDirty(chunkId)) {
                 chunkRenderer.renderChunk(
                     chunkId,
                     chunkConfig,
@@ -1452,6 +1686,21 @@
                     start,
                     end: { line: cursorLine, char: Math.min(cursorChar + count + 1, lineLength(cursorLine)) },
                 };
+            case "j":
+                return {
+                    start: { line: cursorLine, char: 0 },
+                    end: { line: Math.min(cursorLine + count, totalLines - 1), char: lineLength(Math.min(cursorLine + count, totalLines - 1)) },
+                };
+            case "k":
+                return {
+                    start: { line: Math.max(cursorLine - count, 0), char: 0 },
+                    end: { line: cursorLine, char: lineLength(cursorLine) },
+                };
+            case "G":
+                return {
+                    start: { line: cursorLine, char: 0 },
+                    end: { line: totalLines - 1, char: lineLength(totalLines - 1) },
+                };
             default:
                 return null;
         }
@@ -1459,6 +1708,30 @@
 
     async function applyPendingOperator(motion: string) {
         if (!pendingOperator) return;
+
+        // Text object: accumulate "i"/"a" modifier, then handle on the object char
+        if ((motion === "i" || motion === "a") && !pendingSequence.includes(motion)) {
+            pendingSequence += motion;
+            syncVimStatus();
+            return;
+        }
+        if (pendingSequence.endsWith("i") || pendingSequence.endsWith("a")) {
+            const insideOrAround = pendingSequence.slice(-1) as "i" | "a";
+            const objChar = motion;
+            const textObjRange = getTextObjectRange(insideOrAround, objChar);
+            if (textObjRange) {
+                if (pendingOperator === "yank") {
+                    yankRange(textObjRange.start, textObjRange.end);
+                } else {
+                    const shouldInsert = pendingOperator === "change";
+                    await deleteRange(textObjRange.start, textObjRange.end);
+                    if (shouldInsert) enterInsertMode();
+                    else normalizeNormalCursor();
+                }
+            }
+            clearPendingState();
+            return;
+        }
 
         const count = getCount();
 
@@ -1649,6 +1922,51 @@
             return;
         }
 
+        if (e.key === "o") {
+            e.preventDefault();
+            if (visualAnchor) {
+                const oldAnchor = clonePosition(visualAnchor);
+                visualAnchor = currentPosition();
+                setCursor(oldAnchor.line, oldAnchor.char);
+            }
+            return;
+        }
+
+        if (e.key === ">" || e.key === "<") {
+            e.preventDefault();
+            const visualRange = getVisualBounds();
+            if (visualRange) {
+                const [vStart, vEnd] = visualRange;
+                await indentLines(vStart.line, vEnd.line, e.key === ">" ? 1 : -1);
+            }
+            enterNormalMode();
+            return;
+        }
+
+        if (e.key === "~") {
+            e.preventDefault();
+            const visualRange = getVisualBounds();
+            if (visualRange) {
+                const [vStart, vEnd] = visualRange;
+                await mutateDocument(() => {
+                    for (let l = vStart.line; l <= vEnd.line; l++) {
+                        const line = getLine(l);
+                        const from = l === vStart.line ? vStart.char : 0;
+                        const to = l === vEnd.line ? vEnd.char + 1 : line.length;
+                        const toggled =
+                            line.slice(0, from) +
+                            line.slice(from, to).split("").map((c) =>
+                                c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()
+                            ).join("") +
+                            line.slice(to);
+                        setLine(l, toggled);
+                    }
+                });
+            }
+            enterNormalMode();
+            return;
+        }
+
         await handleNormalModeKeyDown(e);
     }
 
@@ -1664,6 +1982,72 @@
         if (pendingOperator) {
             e.preventDefault();
             await applyPendingOperator(key);
+            return;
+        }
+
+        if (pendingSequence === "r") {
+            e.preventDefault();
+            if (key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                await mutateDocument(() => {
+                    const line = getLine(cursorLine);
+                    if (cursorChar < line.length) {
+                        setLine(cursorLine, line.slice(0, cursorChar) + key + line.slice(cursorChar + 1));
+                    }
+                });
+            }
+            clearPendingState();
+            return;
+        }
+
+        if (pendingSequence === "z") {
+            e.preventDefault();
+            if (scrollContainer) {
+                if (key === "z") {
+                    scrollContainer.scrollTop = Math.max(0, cursorLine * editorLineHeight - scrollContainer.clientHeight / 2);
+                } else if (key === "t") {
+                    scrollContainer.scrollTop = cursorLine * editorLineHeight;
+                } else if (key === "b") {
+                    scrollContainer.scrollTop = Math.max(0, (cursorLine + 1) * editorLineHeight - scrollContainer.clientHeight);
+                }
+                queueRedraw();
+            }
+            clearPendingState();
+            return;
+        }
+
+        if (pendingSequence === "f" || pendingSequence === "F" || pendingSequence === "t" || pendingSequence === "T") {
+            e.preventDefault();
+            if (key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                const cnt = getCount();
+                const motion = pendingSequence as "f" | "F" | "t" | "T";
+                lastFindChar = key;
+                lastFindMotion = motion;
+                if (motion === "f") setNormalCursor(cursorLine, findCharForward(key, cnt));
+                else if (motion === "F") setNormalCursor(cursorLine, findCharBackward(key, cnt));
+                else if (motion === "t") setNormalCursor(cursorLine, findCharForward(key, cnt, true));
+                else if (motion === "T") setNormalCursor(cursorLine, findCharBackward(key, cnt, true));
+            }
+            clearPendingState();
+            return;
+        }
+
+        if (pendingSequence === ">") {
+            e.preventDefault();
+            if (key === ">") {
+                const cnt = getCount();
+                await indentLines(cursorLine, Math.min(cursorLine + cnt - 1, totalLines - 1), 1);
+            }
+            clearPendingState();
+            return;
+        }
+
+        if (pendingSequence === "<") {
+            e.preventDefault();
+            if (key === "<") {
+                const cnt = getCount();
+                await indentLines(cursorLine, Math.min(cursorLine + cnt - 1, totalLines - 1), -1);
+            }
+            clearPendingState();
             return;
         }
 
@@ -1694,6 +2078,41 @@
         const hadCount = countPrefix !== "";
         const count = getCount();
         clearPendingState();
+
+        if (e.ctrlKey && key === "r") {
+            e.preventDefault();
+            for (let i = 0; i < count; i++) redo();
+            clearPendingState();
+            return;
+        }
+
+        if (e.ctrlKey && (key === "d" || key === "u")) {
+            e.preventDefault();
+            if (scrollContainer) {
+                const halfPage = Math.floor(scrollContainer.clientHeight / editorLineHeight / 2);
+                const delta = key === "d" ? halfPage : -halfPage;
+                const newLine = Math.max(0, Math.min(totalLines - 1, cursorLine + delta));
+                setCursor(newLine, cursorChar);
+                normalizeNormalCursor();
+                ensureCursorVisible();
+            }
+            clearPendingState();
+            return;
+        }
+
+        if (e.ctrlKey && (key === "f" || key === "b")) {
+            e.preventDefault();
+            if (scrollContainer) {
+                const fullPage = Math.floor(scrollContainer.clientHeight / editorLineHeight) - 1;
+                const delta = key === "f" ? fullPage : -fullPage;
+                const newLine = Math.max(0, Math.min(totalLines - 1, cursorLine + delta));
+                setCursor(newLine, cursorChar);
+                normalizeNormalCursor();
+                ensureCursorVisible();
+            }
+            clearPendingState();
+            return;
+        }
 
         switch (key) {
             case "0":
@@ -1802,7 +2221,7 @@
                 break;
             case "u":
                 e.preventDefault();
-                undo();
+                for (let i = 0; i < count; i++) undo();
                 break;
             case "v":
                 e.preventDefault();
@@ -1847,6 +2266,116 @@
                     char: lineLength(cursorLine),
                 });
                 enterInsertMode();
+                break;
+            case "s":
+                e.preventDefault();
+                await deleteCharAtCursor(count);
+                enterInsertMode();
+                break;
+            case "S":
+                e.preventDefault();
+                await mutateDocument(() => {
+                    register = { text: getLine(cursorLine), linewise: false };
+                    setLine(cursorLine, "");
+                    cursorChar = 0;
+                });
+                enterInsertMode();
+                break;
+            case "J": {
+                e.preventDefault();
+                const joinCount = Math.max(count, 1);
+                await mutateDocument(() => {
+                    for (let n = 0; n < joinCount && cursorLine < totalLines - 1; n++) {
+                        const cur = getLine(cursorLine);
+                        const next = getLine(cursorLine + 1);
+                        const joined = cur + (next.trimStart() ? " " + next.trimStart() : "");
+                        setLine(cursorLine, joined);
+                        shiftLinesUp(cursorLine + 1, 1);
+                        totalLines--;
+                        cursorChar = cur.length;
+                    }
+                });
+                break;
+            }
+            case "~": {
+                e.preventDefault();
+                await mutateDocument(() => {
+                    const line = getLine(cursorLine);
+                    let newLine = line;
+                    for (let i = 0; i < count && cursorChar + i < line.length; i++) {
+                        const ch = line[cursorChar + i];
+                        const toggled = ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase();
+                        newLine = newLine.slice(0, cursorChar + i) + toggled + newLine.slice(cursorChar + i + 1);
+                    }
+                    setLine(cursorLine, newLine);
+                    cursorChar = Math.min(cursorChar + count, Math.max(lineLength(cursorLine) - 1, 0));
+                });
+                break;
+            }
+            case "%": {
+                e.preventDefault();
+                const lineText = getLine(cursorLine);
+                const openBrackets = "({[";
+                const closeBrackets = ")}]";
+                const ch = lineText[cursorChar];
+                if (ch && (openBrackets.includes(ch) || closeBrackets.includes(ch))) {
+                    const matchResult = findMatchingBracket(cursorLine, cursorChar);
+                    if (matchResult) setNormalCursor(matchResult.line, matchResult.char);
+                }
+                break;
+            }
+            case "r":
+                e.preventDefault();
+                pendingSequence = "r";
+                syncVimStatus();
+                break;
+            case "z":
+                e.preventDefault();
+                pendingSequence = "z";
+                syncVimStatus();
+                break;
+            case "f":
+            case "F":
+            case "t":
+            case "T":
+                e.preventDefault();
+                pendingSequence = key;
+                pendingCount = countPrefix;
+                syncVimStatus();
+                break;
+            case ";":
+                e.preventDefault();
+                if (lastFindChar && lastFindMotion) {
+                    if (lastFindMotion === "f") setNormalCursor(cursorLine, findCharForward(lastFindChar, count));
+                    else if (lastFindMotion === "F") setNormalCursor(cursorLine, findCharBackward(lastFindChar, count));
+                    else if (lastFindMotion === "t") setNormalCursor(cursorLine, findCharForward(lastFindChar, count, true));
+                    else if (lastFindMotion === "T") setNormalCursor(cursorLine, findCharBackward(lastFindChar, count, true));
+                    queueRedraw();
+                }
+                break;
+            case ",":
+                e.preventDefault();
+                if (lastFindChar && lastFindMotion) {
+                    const reversed: Record<string, "f" | "F" | "t" | "T"> = { f: "F", F: "f", t: "T", T: "t" };
+                    const rev = reversed[lastFindMotion];
+                    if (rev === "f") setNormalCursor(cursorLine, findCharForward(lastFindChar, count));
+                    else if (rev === "F") setNormalCursor(cursorLine, findCharBackward(lastFindChar, count));
+                    else if (rev === "t") setNormalCursor(cursorLine, findCharForward(lastFindChar, count, true));
+                    else if (rev === "T") setNormalCursor(cursorLine, findCharBackward(lastFindChar, count, true));
+                    queueRedraw();
+                }
+                break;
+            case ">":
+                e.preventDefault();
+                pendingSequence = ">";
+                pendingCount = countPrefix;
+                syncVimStatus();
+                break;
+            case "<":
+                e.preventDefault();
+                pendingSequence = "<";
+                pendingCount = countPrefix;
+                syncVimStatus();
                 break;
         }
     }
@@ -1943,27 +2472,46 @@
     
     let isSaving = $state(false);
     let isDirty = $state(false);
+    let lspVersion = 1;
 
-    let lastSaveTime = 0;
+    // Suppress file-changed watcher events triggered by our own save.
+    // A boolean flag is set for SAVE_DEBOUNCE_MS after every successful write,
+    // handling filesystems that emit 3+ change events per write operation.
+    const SAVE_DEBOUNCE_MS = 3000;
+    let suppressExternalReload = false;
+    let saveDebounceHandle: ReturnType<typeof setTimeout> | null = null;
 
     async function saveFile() {
         if (!isDirty || isSaving) return true;
         isSaving = true;
-        lastSaveTime = Date.now(); // ← ANTES del invoke, no después
+
+        // Arm the suppression window before the write so any watcher event
+        // fired during or immediately after the write is ignored.
+        suppressExternalReload = true;
+        if (saveDebounceHandle !== null) clearTimeout(saveDebounceHandle);
+        saveDebounceHandle = setTimeout(() => {
+            suppressExternalReload = false;
+            saveDebounceHandle = null;
+        }, SAVE_DEBOUNCE_MS);
         
         try {
             let lines: string[] = [];
             for (let i = 0; i < totalLines; i++) {
                 lines.push(lineCache.get(i) ?? "");
             }
-            const content = lines.join("\n"); // ← join con \n no con ""
+            const content = lines.join("\n");
             await invoke("write_file", { path: filePath, content });
             isDirty = false;
             void fetchBlame();
+            void lspChangeDocument(language, filePath, ++lspVersion, content);
             return true;
         } catch (e) {
             console.error("Save failed:", e);
-            lastSaveTime = 0; // resetear si falló
+            // Release the suppression immediately on error so external changes
+            // are not accidentally blocked.
+            if (saveDebounceHandle !== null) clearTimeout(saveDebounceHandle);
+            saveDebounceHandle = null;
+            suppressExternalReload = false;
             return false;
         } finally {
             isSaving = false;
@@ -2019,6 +2567,7 @@
     });
     
     function resetAndLoad(path: string) {
+        console.trace("[EditorBuffer] resetAndLoad called for:", path);
         lineCache.clear();
         tokenCache.clear();
         pendingChunks.clear();
@@ -2051,6 +2600,10 @@
         hunkPreviewVisible = false;
     
         if (scrollContainer) scrollContainer.scrollTop = 0;
+
+        // Restore keyboard focus so the user can type immediately after
+        // the buffer is (re-)loaded.
+        if (editorContainer) editorContainer.focus();
     
         currentFilePath = path;
     
@@ -2081,6 +2634,15 @@
                 firstChunkLines.push(lineCache.get(i) ?? '');
             }
             void docBridge.open(path, firstChunkLines.join('\n'), language);
+
+            // LSP: open document for language-server diagnostics
+            try {
+                const fullContent = await invoke<string>('read_file', { path });
+                lspVersion = 1;
+                void lspOpenDocument(language, path, fullContent);
+            } catch (e) {
+                console.warn('[LSP] Could not open document:', e);
+            }
 
             const visibleLines = Math.ceil(scrollContainer?.clientHeight ?? 600 / editorLineHeight);
             const chunksNeeded = Math.ceil((visibleLines * 3) / CHUNK_SIZE);
@@ -2137,8 +2699,15 @@
     onMount(() => {
         requestAnimationFrame(draw);
         startFetchLoop();
-        resetAndLoad(filePath); // ← This was added previously to fix another issue
-    
+        // Only load here if the $effect below hasn't already loaded (order of
+        // $effect vs onMount in Svelte 5 is not guaranteed on first render).
+        if (!currentFilePath) {
+            resetAndLoad(filePath);
+        }
+
+        // Give the editor keyboard focus so the user can type immediately
+        // without needing to click first.
+        editorContainer?.focus();
         const blinkInterval = setInterval(() => {
             cursorVisible = !cursorVisible;
             queueRedraw();
@@ -2184,13 +2753,16 @@
 
             unlistenFileChanged = await listen("file-changed", async (event: any) => {
                 const changedPath = event.payload;
-            
-                if (Date.now() - lastSaveTime < 2000) return;
-            
-                if (changedPath === filePath) {
-                    console.log("External change detected, reloading file.");
-                    resetAndLoad(filePath);
-                }
+                console.log("[file-changed] path:", changedPath, "| filePath:", filePath, "| match:", changedPath === filePath, "| suppressed:", suppressExternalReload);
+
+                if (changedPath !== filePath) return;
+
+                // Ignore events caused by our own save (covers multiple watcher
+                // events per write that some filesystems emit).
+                if (suppressExternalReload) return;
+
+                console.log("[file-changed] External change detected, reloading file.");
+                resetAndLoad(filePath);
             });
             
             // Nuevo: escuchar guardado propio — solo refrescar explorer, NO el buffer
@@ -2218,10 +2790,8 @@
 
             // Escuchar foco de ventana
             unlistenFocus = await listen("tauri://focus", async () => {
-                console.log("Window focused, checking for updates.");
-                // Simplemente refrescar total lines por si acaso, 
-                // pero no resetear todo a menos que file-changed lo pida
-                await fetchTotalLines();
+                // Only trigger a visual refresh on focus — do NOT reset totalLines
+                // from disk, as that would corrupt in-memory edits.
                 queueRedraw();
             });
         })(); // Ejecutar inmediatamente
@@ -2243,6 +2813,10 @@
             window.removeEventListener('go-to-line', handleGoToLine);
             // Phase 3 bridge: release backend document state
             void docBridge.close();
+            // LSP: close document
+            void lspCloseDocument(language, filePath);
+            // Clear the save-debounce timer so it doesn't fire after teardown
+            if (saveDebounceHandle !== null) clearTimeout(saveDebounceHandle);
         };
     });
     
@@ -2265,6 +2839,7 @@
     bind:this={editorContainer}
     class="relative h-full w-full bg-[#0d0d0d] flex flex-col font-mono text-sm overflow-hidden"
     data-buffer-ui
+    data-vim-mode={vimMode}
     role="textbox"
     aria-label="Code editor"
     aria-multiline="true"
