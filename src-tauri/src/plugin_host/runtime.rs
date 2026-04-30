@@ -22,6 +22,8 @@ pub struct BracketRange {
 /// Each plugin gets its own `PluginRuntime` — no shared globals.
 pub struct PluginRuntime {
     pub manifest: PluginManifest,
+    /// Absolute path to the plugin directory on disk (used for reload/re-enable).
+    pub dir_path: Option<String>,
     lua: Lua,
 }
 
@@ -221,7 +223,7 @@ impl PluginRuntime {
             .exec()
             .map_err(|e| format!("plugin load error: {}", e))?;
 
-        Ok(Self { manifest, lua })
+        Ok(Self { manifest, dir_path: None, lua })
     }
 
     // ── Public runtime methods ────────────────────────────────────────────

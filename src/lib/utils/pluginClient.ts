@@ -8,6 +8,8 @@ export interface PluginInfo {
     kind: "plugin" | "theme";
     permissions: string[];
     commands: string[];
+    /** Absolute path to the plugin directory on disk. Empty if loaded from raw source. */
+    dir_path: string;
 }
 
 export interface ThemeColors {
@@ -57,6 +59,21 @@ export interface EventResult {
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
+
+/** Load all built-in plugins embedded in the binary (tokyo-night-dark + bracket-pair-colorizer). */
+export async function pluginLoadBuiltins(): Promise<string[]> {
+    return invoke<string[]>("plugin_load_builtins");
+}
+
+/** Scan ~/.local/share/forja/plugins/ and load every valid plugin found at runtime. */
+export async function pluginScanUserPlugins(): Promise<string[]> {
+    return invoke<string[]>("plugin_scan_user_plugins");
+}
+
+/** Load a plugin from an absolute directory path on disk (marketplace installer). */
+export async function pluginLoadFromPath(path: string): Promise<string> {
+    return invoke<string>("plugin_load_from_path", { path });
+}
 
 /** Load a plugin from its manifest source and main source strings. */
 export async function pluginLoad(

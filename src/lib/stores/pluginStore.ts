@@ -1,107 +1,96 @@
+import { writable, derived, get } from "svelte/store";
 import {
+    pluginLoadBuiltins,
     pluginLoad,
     pluginList,
     pluginUnload,
     pluginGetThemes,
+    pluginScanUserPlugins,
     type PluginInfo,
     type ThemeDefinition,
     type BracketRange,
 } from "$lib/utils/pluginClient";
 import { applyTheme } from "$lib/utils/themeEngine";
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// ── Core writable stores ──────────────────────────────────────────────────────
 
-let loadedPlugins = $state<PluginInfo[]>([]);
-let activeTheme = $state<ThemeDefinition | null>(null);
-let bracketRanges = $state<BracketRange[]>([]);
-let isLoading = $state(false);
-let lastError = $state<string | null>(null);
+export const loadedPlugins = writable<PluginInfo[]>([]);
+export const activeTheme   = writable<ThemeDefinition | null>(null);
+export const bracketRanges = writable<BracketRange[]>([]);
+export const pluginLoading = writable(false);
+export const pluginError   = writable<string | null>(null);
 
-// ── Derived ───────────────────────────────────────────────────────────────────
+// ── Derived stores ────────────────────────────────────────────────────────────
 
-const plugins = $derived(loadedPlugins.filter((p) => p.kind === "plugin"));
-const themes = $derived(loadedPlugins.filter((p) => p.kind === "theme"));
-const allCommands = $derived(
-    loadedPlugins.flatMap((p) =>
-        p.commands.map((cmd) => ({ plugin: p.name, command: cmd }))
-    )
+export const pluginList$  = derived(loadedPlugins, ($p) => $p.filter((p) => p.kind === "plugin"));
+export const themeList$   = derived(loadedPlugins, ($p) => $p.filter((p) => p.kind === "theme"));
+export const allCommands$ = derived(loadedPlugins, ($p) =>
+    $p.flatMap((p) => p.commands.map((cmd) => ({ plugin: p.name, command: cmd })))
 );
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 
-/** Load a plugin from raw Lua source strings. */
-async function loadPlugin(manifestSrc: string, mainSrc: string): Promise<string | null> {
-    isLoading = true;
-    lastError = null;
+/** Initialize built-in plugins then scan user plugin directory. */
+export async function initPlugins(): Promise<void> {
+    pluginLoading.set(true);
+    pluginError.set(null);
+    try {
+        // Load built-ins (reads from ~/.local/share/forja/plugins/builtin/)
+        await pluginLoadBuiltins();
+        // Load user-installed plugins (reads from ~/.local/share/forja/plugins/)
+        await pluginScanUserPlugins();
+        await refreshPlugins();
+        await applyFirstTheme();
+    } catch (e) {
+        pluginError.set(String(e));
+    } finally {
+        pluginLoading.set(false);
+    }
+}
+
+/** Load a plugin from raw Lua source strings (used by the marketplace installer). */
+export async function installPlugin(manifestSrc: string, mainSrc: string): Promise<string | null> {
+    pluginLoading.set(true);
+    pluginError.set(null);
     try {
         const name = await pluginLoad(manifestSrc, mainSrc);
-        await refresh();
+        await refreshPlugins();
         return name;
     } catch (e) {
-        lastError = String(e);
+        pluginError.set(String(e));
         return null;
     } finally {
-        isLoading = false;
+        pluginLoading.set(false);
     }
 }
 
 /** Unload a plugin by name. */
-async function unloadPlugin(name: string): Promise<void> {
+export async function unloadPlugin(name: string): Promise<void> {
     await pluginUnload(name);
-    await refresh();
-    // If the active theme was from this plugin, clear it
-    if (activeTheme && activeTheme.name === name) {
-        activeTheme = null;
+    await refreshPlugins();
+    if (get(activeTheme)?.name === name) activeTheme.set(null);
+}
+
+/** Refresh plugin list from backend. */
+export async function refreshPlugins(): Promise<void> {
+    loadedPlugins.set(await pluginList());
+}
+
+/** Apply the first registered theme from loaded plugins. */
+export async function applyFirstTheme(): Promise<void> {
+    const themes = await pluginGetThemes();
+    if (themes.length > 0) {
+        activeTheme.set(themes[0]);
+        applyTheme(themes[0]);
     }
 }
 
-/** Refresh the list of loaded plugins from the backend. */
-async function refresh(): Promise<void> {
-    loadedPlugins = await pluginList();
-}
-
-/** Load and apply the first registered theme. */
-async function loadActiveTheme(): Promise<void> {
-    const allThemes = await pluginGetThemes();
-    if (allThemes.length > 0) {
-        activeTheme = allThemes[0];
-        applyTheme(activeTheme);
-    }
-}
-
-/** Activate a specific theme by name from already-loaded plugins. */
-async function activateTheme(themeName: string): Promise<void> {
-    const allThemes = await pluginGetThemes();
-    const found = allThemes.find((t) => t.name === themeName);
+/** Activate a specific theme by name. */
+export async function activateThemeByName(name: string): Promise<void> {
+    const themes = await pluginGetThemes();
+    const found = themes.find((t) => t.name === name);
     if (found) {
-        activeTheme = found;
+        activeTheme.set(found);
         applyTheme(found);
     }
 }
-
-/** Update bracket ranges for the current buffer/language. */
-function setBracketRanges(ranges: BracketRange[]): void {
-    bracketRanges = ranges;
-}
-
-// ── Store export ──────────────────────────────────────────────────────────────
-
-export const pluginStore = {
-    // State (read-only via getters)
-    get loadedPlugins() { return loadedPlugins; },
-    get plugins() { return plugins; },
-    get themes() { return themes; },
-    get activeTheme() { return activeTheme; },
-    get bracketRanges() { return bracketRanges; },
-    get allCommands() { return allCommands; },
-    get isLoading() { return isLoading; },
-    get lastError() { return lastError; },
-
-    // Actions
-    loadPlugin,
-    unloadPlugin,
-    refresh,
-    loadActiveTheme,
-    activateTheme,
-    setBracketRanges,
-};

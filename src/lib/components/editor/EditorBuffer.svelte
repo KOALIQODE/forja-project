@@ -29,6 +29,9 @@
     import { dialogState } from "../../stores/dialogStore";
     import { diagnosticsByFile, type Diagnostic } from "$lib/stores/diagnosticsStore";
     import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "$lib/utils/lspClient";
+    import { pluginRunBracketProviders, pluginEmitEvent, type BracketRange } from "$lib/utils/pluginClient";
+    import { activeTheme, bracketRanges } from "$lib/stores/pluginStore";
+    import { bracketRangesToColors } from "$lib/utils/themeEngine";
 
     interface Props {
         filePath: string;
@@ -57,6 +60,30 @@
     let register = $state<VimRegister>({ text: "", linewise: false });
     let lastFindChar = $state("");
     let lastFindMotion = $state<"f" | "F" | "t" | "T" | "">(""); 
+
+    // ── Bracket pair colorizer state ─────────────────────────────────────────────
+    let bracketColors = $state<Array<{ start: number; finish: number; color: string }>>([]);
+    let bracketUpdateHandle: ReturnType<typeof setTimeout> | null = null;
+
+    /** Rebuild bracket color ranges from the current buffer (debounced 400ms). */
+    function scheduleBracketUpdate() {
+        if (bracketUpdateHandle !== null) clearTimeout(bracketUpdateHandle);
+        bracketUpdateHandle = setTimeout(async () => {
+            bracketUpdateHandle = null;
+            try {
+                const lines: string[] = [];
+                for (let i = 0; i < totalLines; i++) lines.push(lineCache.get(i) ?? "");
+                const text = lines.join("\n");
+                const ranges = await pluginRunBracketProviders(text, language);
+                bracketRanges.set(ranges);
+                const palette = get(activeTheme)?.brackets ?? [];
+                bracketColors = palette.length > 0 ? bracketRangesToColors(ranges, palette) : [];
+                queueRedraw();
+            } catch {
+                // plugin not loaded yet — silent
+            }
+        }, 400);
+    } 
 
     let lineCache = new Map<number, string>();
     let tokenCache = new Map<number, Token[]>();
@@ -979,6 +1006,7 @@
             });
             console.log(`fetchTotalLines: ${count} lines for ${filePath}`);
             totalLines = count;
+            scheduleBracketUpdate();
             return count;
         } catch (e) {
             console.error("Failed to get total lines:", e);
@@ -1471,6 +1499,51 @@
 
         // Phase 7: track frame duration for next budget check
         lastFrameDuration = performance.now() - frameStart;
+
+        // ── Pass 4: bracket pair color underlines ────────────────────────────────
+        if (bracketColors.length > 0) {
+            // Build a char-offset → line/col lookup from the lineCache
+            // We only paint brackets visible in the current viewport
+            const viewportStart = startLine;
+            const viewportEnd = endLine;
+
+            // Pre-compute cumulative char offsets for visible lines
+            const lineOffsets: number[] = [];
+            let offset = 0;
+            for (let l = 0; l < totalLines; l++) {
+                lineOffsets.push(offset);
+                offset += (lineCache.get(l) ?? "").length + 1; // +1 for \n
+            }
+
+            ctx.save();
+            ctx.lineWidth = 1.5;
+            for (const { start, finish, color } of bracketColors) {
+                // Map char offset → line/col
+                const paintChar = (charOffset: number) => {
+                    // Binary-search line
+                    let lo = 0, hi = lineOffsets.length - 1;
+                    while (lo < hi) {
+                        const mid = (lo + hi + 1) >> 1;
+                        if (lineOffsets[mid] <= charOffset) lo = mid; else hi = mid - 1;
+                    }
+                    const line = lo;
+                    if (line < viewportStart || line >= viewportEnd) return;
+                    const col = charOffset - lineOffsets[line];
+                    const lineText = lineCache.get(line) ?? "";
+                    const x = contentStartX + metricsCache.measure(ctx, lineText.slice(0, col), editorFont);
+                    const charWidth = metricsCache.measure(ctx, lineText[col] ?? " ", editorFont);
+                    const y = (line - startLine) * editorLineHeight + yOffset + editorLineHeight - 2;
+                    ctx.strokeStyle = color;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + charWidth, y);
+                    ctx.stroke();
+                };
+                paintChar(start - 1); // Lua is 1-based
+                paintChar(finish - 1);
+            }
+            ctx.restore();
+        }
 
         requestAnimationFrame(draw);
     }
@@ -2504,6 +2577,9 @@
             isDirty = false;
             void fetchBlame();
             void lspChangeDocument(language, filePath, ++lspVersion, content);
+            // Notify Lua plugins about the save event
+            void pluginEmitEvent("on_save", content, language, filePath);
+            scheduleBracketUpdate();
             return true;
         } catch (e) {
             console.error("Save failed:", e);

@@ -38,14 +38,14 @@ Tauri Commands / Svelte UI
 
 ```
 src-tauri/src/plugin_host/
- ├── manifest_loader.rs      # Carga y valida manifest.lua
- ├── permission_validator.rs # Valida permisos declarados vs. usados
- ├── lua_runtime.rs          # VM Lua aislada por plugin (mlua)
- ├── event_bus.rs            # Cola serial de eventos
+ ├── manifest.rs      # Carga y valida manifest.lua
+ ├── permissions.rs   # Valida permisos declarados vs. usados
+ ├── runtime.rs       # VM Lua aislada por plugin (mlua)
+ ├── event_bus.rs     # Cola serial de eventos
+ ├── mod.rs           # PluginHost state + Tauri commands
  └── api/
-      ├── buffer.rs          # API buffer:read / buffer:write
-      ├── commands.rs        # editor.command()
-      └── themes.rs          # editor.register_theme()
+      ├── mod.rs
+      └── themes.rs   # ThemeDefinition struct
 ```
 
 ---
@@ -393,3 +393,57 @@ No se pretende compatibilidad 1:1 con la API de Neovim. El objetivo es **familia
 | `vim.keymap.set` | `editor.keymap()` *(fase futura)* |
 
 Esto permite que autores Lua se adapten rápidamente sin cargar la complejidad del runtime de Neovim.
+
+---
+
+## 15. Gestión de Plugins desde la UI
+
+El modal **Extensions** (accesible desde la barra de estado o paleta de comandos) expone tres pestañas:
+
+### Pestaña Plugins
+- Lista todos los plugins Lua activos en tiempo de ejecución
+- Muestra: nombre, versión, permisos como badges con color semántico, comandos registrados
+- Botón **Disable**: llama a `plugin_unload(name)` — desactiva sin reiniciar el editor
+- Para **re-activar**: el plugin debe recargarse desde disco via `plugin_load_from_path(dir_path)` (campo expuesto en `PluginInfo`)
+
+### Pestaña Themes
+- Lista todos los temas Lua registrados
+- Botón **Activate**: aplica el tema inmediatamente via `activateThemeByName(name)` → convierte colores a CSS vars en `:root`
+- El tema activo se resalta visualmente (borde violeta, badge "Active")
+- Solo un tema puede estar activo a la vez
+
+### Pestaña Language Servers
+- Lista los LSP servers disponibles (descarga bajo demanda)
+- Sin cambios respecto a la implementación anterior
+
+### Flujo de carga al inicio
+```
+App onMount
+   → initPlugins()
+      → plugin_load_builtins()     # seed + carga desde ~/.local/share/forja/plugins/
+      → plugin_scan_user_plugins() # escanea subdirs plugins/ y themes/
+      → refreshPlugins()           # actualiza store loadedPlugins
+      → applyFirstTheme()          # aplica el primer tema disponible
+```
+
+### Tipos TypeScript expuestos
+```typescript
+interface PluginInfo {
+  name: string;
+  version: string;
+  kind: "plugin" | "theme";
+  permissions: string[];
+  commands: string[];
+  dir_path: string; // ruta absoluta en disco — permite reload/re-enable
+}
+```
+
+### Stores Svelte
+| Store | Tipo | Descripción |
+|---|---|---|
+| `loadedPlugins` | `writable<PluginInfo[]>` | Lista de plugins activos |
+| `activeTheme` | `writable<ThemeDefinition \| null>` | Tema aplicado actualmente |
+| `bracketRanges` | `writable<BracketRange[]>` | Rangos del bracket colorizer |
+| `pluginLoading` | `writable<boolean>` | Indicador de carga |
+| `pluginList$` | `derived` | Solo plugins (kind = "plugin") |
+| `themeList$` | `derived` | Solo themes (kind = "theme") |

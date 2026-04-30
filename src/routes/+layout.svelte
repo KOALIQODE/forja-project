@@ -9,6 +9,7 @@
   import { get } from 'svelte/store';
   import "../app.css";
   import '@fontsource-variable/montserrat/wght.css';
+  import { initPlugins } from "$lib/stores/pluginStore";
 
   let { children }: { children: Snippet } = $props();
 
@@ -22,6 +23,9 @@
   let lastTabTime = 0;
 
   onMount(() => {
+    // Initialize built-in and user Lua plugins (theme + bracket colorizer)
+    initPlugins();
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const currentState = get(dialogState);
       
