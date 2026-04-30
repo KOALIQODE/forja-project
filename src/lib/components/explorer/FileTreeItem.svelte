@@ -236,7 +236,7 @@
         </div>
       {:else}
         {#each children as child}
-          <FileTreeItem entry={child} depth={depth + 1} {handleEntryClick} {onContextMenu} />
+          <svelte:self entry={child} depth={depth + 1} {handleEntryClick} {onContextMenu} />
         {/each}
       {/if}
     </div>

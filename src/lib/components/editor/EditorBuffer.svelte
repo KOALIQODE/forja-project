@@ -105,9 +105,11 @@
     });
 
     // Trigger bracket colorizer: fires when BOTH plugins are ready AND file has content.
-    // Using totalLines as reactive dependency covers: plugins ready first, file loads second.
+    // Both deps must be read unconditionally so Svelte 5 tracks them regardless of the condition.
     $effect(() => {
-        if ($pluginsReady && totalLines > 0) {
+        const ready = $pluginsReady;
+        const lines = totalLines; // read unconditionally so it's always a tracked dep
+        if (ready && lines > 0) {
             scheduleBracketUpdate();
         }
     });
@@ -848,6 +850,7 @@
         // (without this, the text only redraws after the async highlight completes,
         // causing a 50-500ms delay where nothing appears on screen).
         queueRedraw();
+        scheduleBracketUpdate();
         await refreshHighlightsAfterEdit();
         // Diff: notify incremental edit (±5 lines window around cursor)
         diffScheduler.notifyEdit(

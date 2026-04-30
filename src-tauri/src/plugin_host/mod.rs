@@ -180,7 +180,13 @@ impl PluginHost {
     pub fn run_bracket_providers(&self, text: &str, language: &str) -> Vec<BracketRange> {
         self.runtimes
             .values()
-            .flat_map(|r| r.run_bracket_providers(text, language).unwrap_or_default())
+            .flat_map(|r| {
+                r.run_bracket_providers(text, language)
+                    .unwrap_or_else(|e| {
+                        eprintln!("[plugin_host] bracket provider '{}' error: {}", r.manifest.name, e);
+                        vec![]
+                    })
+            })
             .collect()
     }
 }
@@ -219,7 +225,7 @@ pub fn plugin_load_builtins(
     let mut guard = host.lock().map_err(|e| format!("state lock error: {}", e))?;
     let mut loaded = Vec::new();
 
-    for (manifest_rel, _, main_rel, _) in BUILTIN_SEED {
+    for (manifest_rel, _, _main_rel, _) in BUILTIN_SEED {
         // Derive the plugin directory from the manifest path
         let plugin_dir = plugins_root
             .join(manifest_rel)

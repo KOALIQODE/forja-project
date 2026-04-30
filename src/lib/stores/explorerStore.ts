@@ -7,6 +7,8 @@ export interface FileEntry {
   is_ignored: boolean;
   extension?: string;
   git_status?: 'modified' | 'added' | 'renamed' | 'deleted' | 'untracked';
+  /** Tree depth for virtualized flat-list rendering */
+  depth?: number;
 }
 
 const PINNED_PATH_KEY = "forja-explorer-pinned-path";

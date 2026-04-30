@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { invoke } from "@tauri-apps/api/core";
+  import { get } from 'svelte/store';
   import { Search, File, List, Command, ChevronRight, X } from "@lucide/svelte";
   import { closeDialog } from "../../stores/dialogStore";
   import { currentProject } from "../../stores/projectStore";
@@ -23,8 +24,8 @@
 
   // Buffer results helper
   function getBuffers() {
-    const buffers = Array.from(openBuffers.get().values());
-    return buffers.map(b => ({
+    const buffers = Array.from(get(openBuffers).values());
+    return buffers.map((b: { filePath: string }) => ({
       name: b.filePath.split(/[/\\]/).pop(),
       path: b.filePath,
       is_dir: false,
