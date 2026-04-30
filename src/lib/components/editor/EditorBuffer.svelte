@@ -30,7 +30,7 @@
     import { diagnosticsByFile, type Diagnostic } from "$lib/stores/diagnosticsStore";
     import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "$lib/utils/lspClient";
     import { pluginRunBracketProviders, pluginEmitEvent, type BracketRange } from "$lib/utils/pluginClient";
-    import { activeTheme, bracketRanges, loadedPlugins } from "$lib/stores/pluginStore";
+    import { activeTheme, bracketRanges, loadedPlugins, pluginsReady } from "$lib/stores/pluginStore";
     import { bracketRangesToColors } from "$lib/utils/themeEngine";
 
     interface Props {
@@ -92,12 +92,22 @@
         const __ = editorBgColor;
         chunkRenderer?.invalidateAll();
         queueRedraw();
+        // Re-apply bracket colors with new theme palette (or fallback)
+        if (bracketRanges) {
+            const current = get(bracketRanges);
+            if (current.length > 0) {
+                const palette = $activeTheme?.brackets?.length
+                    ? $activeTheme.brackets
+                    : ["#f7768e", "#e0af68", "#9ece6a", "#7aa2f7", "#bb9af7", "#2ac3de"];
+                bracketColors = bracketRangesToColors(current, palette);
+            }
+        }
     });
 
-    // Trigger bracket colorizer when plugins first load
+    // Trigger bracket colorizer: fires when BOTH plugins are ready AND file has content.
+    // Using totalLines as reactive dependency covers: plugins ready first, file loads second.
     $effect(() => {
-        const plugins = $loadedPlugins;
-        if (plugins.length > 0 && totalLines > 0) {
+        if ($pluginsReady && totalLines > 0) {
             scheduleBracketUpdate();
         }
     });
@@ -111,16 +121,21 @@
                 const lines: string[] = [];
                 for (let i = 0; i < totalLines; i++) lines.push(lineCache.get(i) ?? "");
                 const text = lines.join("\n");
+                if (!text.trim()) return; // nothing to analyze
                 const ranges = await pluginRunBracketProviders(text, language);
+                console.log("[bracket] ranges:", ranges.length, "lang:", language, "textLen:", text.length);
                 bracketRanges.set(ranges);
-                const palette = get(activeTheme)?.brackets ?? [];
-                bracketColors = palette.length > 0 ? bracketRangesToColors(ranges, palette) : [];
+                // Use theme palette if available, otherwise fall back to built-in colors
+                const palette = get(activeTheme)?.brackets?.length
+                    ? get(activeTheme)!.brackets
+                    : ["#f7768e", "#e0af68", "#9ece6a", "#7aa2f7", "#bb9af7", "#2ac3de"];
+                bracketColors = bracketRangesToColors(ranges, palette);
                 queueRedraw();
-            } catch {
-                // plugin not loaded yet — silent
+            } catch (e) {
+                console.warn("[bracket] update failed:", e);
             }
         }, 400);
-    } 
+    }
 
     let lineCache = new Map<number, string>();
     let tokenCache = new Map<number, Token[]>();

@@ -19,6 +19,8 @@ export const activeTheme   = writable<ThemeDefinition | null>(null);
 export const bracketRanges = writable<BracketRange[]>([]);
 export const pluginLoading = writable(false);
 export const pluginError   = writable<string | null>(null);
+/** Becomes true once initPlugins() has fully completed (used to trigger bracket colorizer). */
+export const pluginsReady  = writable(false);
 
 // ── Derived stores ────────────────────────────────────────────────────────────
 
@@ -32,6 +34,7 @@ export const allCommands$ = derived(loadedPlugins, ($p) =>
 
 /** Initialize built-in plugins then scan user plugin directory. */
 export async function initPlugins(): Promise<void> {
+    pluginsReady.set(false);
     pluginLoading.set(true);
     pluginError.set(null);
     try {
@@ -45,6 +48,7 @@ export async function initPlugins(): Promise<void> {
         const list = get(loadedPlugins);
         console.log("[plugins] all loaded plugins:", list.map(p => `${p.name} (${p.kind})`));
 
+        // Only apply theme if user explicitly activated one before
         await applyFirstTheme();
         const theme = get(activeTheme);
         console.log("[plugins] active theme:", theme?.name ?? "none");
@@ -53,6 +57,8 @@ export async function initPlugins(): Promise<void> {
         pluginError.set(String(e));
     } finally {
         pluginLoading.set(false);
+        // Signal that plugins are fully ready — EditorBuffer listens to this
+        pluginsReady.set(true);
     }
 }
 
@@ -84,21 +90,23 @@ export async function refreshPlugins(): Promise<void> {
     loadedPlugins.set(await pluginList());
 }
 
-/** Apply the first registered theme from loaded plugins (respects user preference). */
+/** Apply theme only if user previously activated one (reads localStorage preference).
+ *  On first run (no preference saved), no theme is applied — user must activate manually. */
 export async function applyFirstTheme(): Promise<void> {
     const savedTheme = localStorage.getItem("forja:activeTheme");
-    // If user explicitly deactivated, don't re-apply
+    // No preference saved = first run, don't activate anything
+    if (!savedTheme) return;
+    // User explicitly deactivated
     if (savedTheme === "__none__") return;
 
     const themes = await pluginGetThemes();
     if (themes.length === 0) return;
 
-    const target = savedTheme
-        ? themes.find((t) => t.name === savedTheme) ?? themes[0]
-        : themes[0];
-
-    activeTheme.set(target);
-    applyTheme(target);
+    const target = themes.find((t) => t.name === savedTheme) ?? null;
+    if (target) {
+        activeTheme.set(target);
+        applyTheme(target);
+    }
 }
 
 /** Activate a specific theme by name. */

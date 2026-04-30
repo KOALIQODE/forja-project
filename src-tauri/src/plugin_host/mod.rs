@@ -22,15 +22,15 @@ use crate::plugin_host::runtime::{BracketRange, PluginRuntime};
 const BUILTIN_SEED: &[(&str, &str, &str, &str)] = &[
     (
         "themes/tokyo-night-dark/manifest.lua",
-        include_str!("../../../lua/themes/tokyo-night-dark/manifest.lua"),
+        include_str!("../../lua/themes/tokyo-night-dark/manifest.lua"),
         "themes/tokyo-night-dark/main.lua",
-        include_str!("../../../lua/themes/tokyo-night-dark/main.lua"),
+        include_str!("../../lua/themes/tokyo-night-dark/main.lua"),
     ),
     (
         "plugins/bracket-pair-colorizer/manifest.lua",
-        include_str!("../../../lua/plugins/bracket-pair-colorizer/manifest.lua"),
+        include_str!("../../lua/plugins/bracket-pair-colorizer/manifest.lua"),
         "plugins/bracket-pair-colorizer/main.lua",
-        include_str!("../../../lua/plugins/bracket-pair-colorizer/main.lua"),
+        include_str!("../../lua/plugins/bracket-pair-colorizer/main.lua"),
     ),
 ];
 
