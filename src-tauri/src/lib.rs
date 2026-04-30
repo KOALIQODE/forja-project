@@ -8,9 +8,11 @@ mod shared;
 mod document;
 mod language;
 mod highlight;
+mod plugin_host;
 
 use document::DocumentManager;
 use plugins::lsp::LspClientManager;
+use plugin_host::PluginHost;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -20,6 +22,8 @@ pub fn run() {
             app.manage(Mutex::new(DocumentManager::new()));
             // Register LspClientManager as Tauri-managed state
             app.manage(Mutex::new(LspClientManager::new()));
+            // Register PluginHost as Tauri-managed state
+            app.manage(Mutex::new(PluginHost::new()));
 
             let window = app.get_webview_window("main").unwrap();
 
@@ -91,6 +95,14 @@ pub fn run() {
             plugins::lsp::lsp_open_document,
             plugins::lsp::lsp_change_document,
             plugins::lsp::lsp_close_document,
+            // Plugin Host (Lua runtime)
+            plugin_host::plugin_load,
+            plugin_host::plugin_unload,
+            plugin_host::plugin_list,
+            plugin_host::plugin_execute_command,
+            plugin_host::plugin_emit_event,
+            plugin_host::plugin_get_themes,
+            plugin_host::plugin_run_bracket_providers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
