@@ -24,7 +24,9 @@
     pluginLoading,
     refreshPlugins,
     activateThemeByName,
+    unloadPlugin,
   } from "../../stores/pluginStore";
+  import { clearTheme } from "../../utils/themeEngine";
   import { pluginUnload, pluginLoadFromPath } from "../../utils/pluginClient";
   import type { PluginInfo } from "../../utils/pluginClient";
 
@@ -159,10 +161,18 @@
     await activateThemeByName(name);
   }
 
+  async function deactivateTheme() {
+    activeTheme.set(null);
+    clearTheme();
+    localStorage.setItem("forja:activeTheme", "__none__");
+  }
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   onMount(() => {
     loadServers();
+    // Ensure plugin store is up to date when modal opens
+    refreshPlugins();
 
     const unlistenStatus = listen('lsp-status', (event: any) => {
       const [id, msg] = event.payload;
@@ -361,10 +371,13 @@
                   <!-- Action -->
                   <div class="shrink-0">
                     {#if isActive}
-                      <div class="flex items-center gap-1.5 text-violet-400/60">
-                        <CheckCircle2 size={15} />
-                        <span class="text-[9px] font-bold uppercase tracking-wider">Active</span>
-                      </div>
+                      <button
+                        onclick={deactivateTheme}
+                        class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-violet-300/60 transition-all hover:bg-rose-500/20 hover:text-rose-400"
+                      >
+                        <PowerOff size={12} />
+                        Deactivate
+                      </button>
                     {:else}
                       <button
                         onclick={() => activateTheme(theme.name)}
@@ -377,14 +390,25 @@
                   </div>
                 </div>
 
-                <!-- Color swatches (if we have color info) -->
-                <div class="flex gap-1.5">
-                  {#each theme.permissions as perm}
-                    <span class="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
-                      {perm}
-                    </span>
-                  {/each}
-                </div>
+                <!-- Color swatches from active theme + syntax preview -->
+                {#if isActive && currentTheme}
+                  <div class="flex flex-wrap gap-1">
+                    {#each Object.entries({ bg: currentTheme.colors?.bg, fg: currentTheme.colors?.fg, keyword: currentTheme.syntax?.keyword, string: currentTheme.syntax?.string, comment: currentTheme.syntax?.comment, function: currentTheme.syntax?.function_name }).filter(([,v]) => !!v) as [label, color]}
+                      <div class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[8px] text-white/40" style="background: {color}18; border: 1px solid {color}30">
+                        <div class="h-2 w-2 rounded-full" style="background: {color}"></div>
+                        {label}
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="flex gap-1.5">
+                    {#each theme.permissions as perm}
+                      <span class="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
+                        {perm}
+                      </span>
+                    {/each}
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>

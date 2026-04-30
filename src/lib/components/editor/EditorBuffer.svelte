@@ -30,7 +30,7 @@
     import { diagnosticsByFile, type Diagnostic } from "$lib/stores/diagnosticsStore";
     import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "$lib/utils/lspClient";
     import { pluginRunBracketProviders, pluginEmitEvent, type BracketRange } from "$lib/utils/pluginClient";
-    import { activeTheme, bracketRanges } from "$lib/stores/pluginStore";
+    import { activeTheme, bracketRanges, loadedPlugins } from "$lib/stores/pluginStore";
     import { bracketRangesToColors } from "$lib/utils/themeEngine";
 
     interface Props {
@@ -64,6 +64,43 @@
     // ── Bracket pair colorizer state ─────────────────────────────────────────────
     let bracketColors = $state<Array<{ start: number; finish: number; color: string }>>([]);
     let bracketUpdateHandle: ReturnType<typeof setTimeout> | null = null;
+
+    // ── Reactive theme colors (canvas uses these instead of hardcoded values) ─────
+    let editorBgColor = $derived($activeTheme?.colors?.bg ?? '#0d0d0d');
+    let currentTokenColors = $derived.by(() => {
+        const s = $activeTheme?.syntax;
+        if (!s) return TOKEN_COLORS;
+        return {
+            ...TOKEN_COLORS,
+            Keyword:     s.keyword       ?? TOKEN_COLORS.Keyword,
+            Function:    s.function_name ?? TOKEN_COLORS.Function,
+            Type:        s.type          ?? TOKEN_COLORS.Type,
+            String:      s.string        ?? TOKEN_COLORS.String,
+            Comment:     s.comment       ?? TOKEN_COLORS.Comment,
+            Number:      s.number        ?? TOKEN_COLORS.Number,
+            Punctuation: s.punctuation   ?? TOKEN_COLORS.Punctuation,
+            Operator:    s.operator      ?? TOKEN_COLORS.Operator,
+            Variable:    s.variable      ?? TOKEN_COLORS.Variable,
+            Constant:    s.constant      ?? TOKEN_COLORS.Constant,
+            Attribute:   s.attribute     ?? TOKEN_COLORS.Attribute,
+        };
+    });
+
+    // Redraw canvas when theme changes — also invalidate chunk cache so syntax colors update
+    $effect(() => {
+        const _ = currentTokenColors;
+        const __ = editorBgColor;
+        chunkRenderer?.invalidateAll();
+        queueRedraw();
+    });
+
+    // Trigger bracket colorizer when plugins first load
+    $effect(() => {
+        const plugins = $loadedPlugins;
+        if (plugins.length > 0 && totalLines > 0) {
+            scheduleBracketUpdate();
+        }
+    });
 
     /** Rebuild bracket color ranges from the current buffer (debounced 400ms). */
     function scheduleBracketUpdate() {
@@ -1294,7 +1331,7 @@
         const yStart = yOffset;
 
         // ── Background ──────────────────────────────────────────────────────────
-        ctx.fillStyle = "#0d0d0d";
+        ctx.fillStyle = editorBgColor;
         ctx.fillRect(0, 0, rect.width, rect.height);
 
         // ── Pass 1: line backgrounds (active line, hover, selection) ────────────
@@ -1368,7 +1405,7 @@
             fontFamily: editorFontFamily,
             contentStartX,
             canvasWidth: rect.width,
-            tokenColors: TOKEN_COLORS,
+            tokenColors: currentTokenColors,
         };
 
         // Determine which chunks intersect the visible range
@@ -1500,14 +1537,9 @@
         // Phase 7: track frame duration for next budget check
         lastFrameDuration = performance.now() - frameStart;
 
-        // ── Pass 4: bracket pair color underlines ────────────────────────────────
+        // ── Pass 4: bracket pair colored characters ──────────────────────────────
         if (bracketColors.length > 0) {
-            // Build a char-offset → line/col lookup from the lineCache
-            // We only paint brackets visible in the current viewport
-            const viewportStart = startLine;
-            const viewportEnd = endLine;
-
-            // Pre-compute cumulative char offsets for visible lines
+            // Pre-compute cumulative char offsets for all lines (needed for offset→line lookup)
             const lineOffsets: number[] = [];
             let offset = 0;
             for (let l = 0; l < totalLines; l++) {
@@ -1516,31 +1548,35 @@
             }
 
             ctx.save();
-            ctx.lineWidth = 1.5;
+            ctx.font = editorFont;
+            ctx.textBaseline = "middle";
+
+            const paintBracketChar = (charOffset: number, color: string) => {
+                // Binary-search: find which line this offset belongs to
+                let lo = 0, hi = lineOffsets.length - 1;
+                while (lo < hi) {
+                    const mid = (lo + hi + 1) >> 1;
+                    if (lineOffsets[mid] <= charOffset) lo = mid; else hi = mid - 1;
+                }
+                const line = lo;
+                if (line < startLine || line >= endLine) return; // outside viewport
+                const col = charOffset - lineOffsets[line];
+                const lineText = lineCache.get(line) ?? "";
+                const ch = lineText[col];
+                if (!ch) return;
+                const x = contentStartX + metricsCache.measure(ctx, lineText.slice(0, col), editorFont);
+                const charWidth = metricsCache.measure(ctx, ch, editorFont);
+                const y = (line - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
+                // Erase background for this character, then redraw in bracket color
+                ctx.fillStyle = editorBgColor;
+                ctx.fillRect(x, y - editorLineHeight / 2, charWidth, editorLineHeight);
+                ctx.fillStyle = color;
+                ctx.fillText(ch, x, y);
+            };
+
             for (const { start, finish, color } of bracketColors) {
-                // Map char offset → line/col
-                const paintChar = (charOffset: number) => {
-                    // Binary-search line
-                    let lo = 0, hi = lineOffsets.length - 1;
-                    while (lo < hi) {
-                        const mid = (lo + hi + 1) >> 1;
-                        if (lineOffsets[mid] <= charOffset) lo = mid; else hi = mid - 1;
-                    }
-                    const line = lo;
-                    if (line < viewportStart || line >= viewportEnd) return;
-                    const col = charOffset - lineOffsets[line];
-                    const lineText = lineCache.get(line) ?? "";
-                    const x = contentStartX + metricsCache.measure(ctx, lineText.slice(0, col), editorFont);
-                    const charWidth = metricsCache.measure(ctx, lineText[col] ?? " ", editorFont);
-                    const y = (line - startLine) * editorLineHeight + yOffset + editorLineHeight - 2;
-                    ctx.strokeStyle = color;
-                    ctx.beginPath();
-                    ctx.moveTo(x, y);
-                    ctx.lineTo(x + charWidth, y);
-                    ctx.stroke();
-                };
-                paintChar(start - 1); // Lua is 1-based
-                paintChar(finish - 1);
+                paintBracketChar(start - 1, color);  // Lua is 1-based
+                paintBracketChar(finish - 1, color);
             }
             ctx.restore();
         }

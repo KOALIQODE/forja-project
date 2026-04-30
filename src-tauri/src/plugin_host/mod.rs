@@ -23,8 +23,8 @@ const BUILTIN_SEED: &[(&str, &str, &str, &str)] = &[
     (
         "themes/tokyo-night-dark/manifest.lua",
         include_str!("../../../lua/themes/tokyo-night-dark/manifest.lua"),
-        "themes/tokyo-night-dark/theme.lua",
-        include_str!("../../../lua/themes/tokyo-night-dark/theme.lua"),
+        "themes/tokyo-night-dark/main.lua",
+        include_str!("../../../lua/themes/tokyo-night-dark/main.lua"),
     ),
     (
         "plugins/bracket-pair-colorizer/manifest.lua",

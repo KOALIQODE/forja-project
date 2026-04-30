@@ -35,13 +35,21 @@ export async function initPlugins(): Promise<void> {
     pluginLoading.set(true);
     pluginError.set(null);
     try {
-        // Load built-ins (reads from ~/.local/share/forja/plugins/builtin/)
-        await pluginLoadBuiltins();
-        // Load user-installed plugins (reads from ~/.local/share/forja/plugins/)
-        await pluginScanUserPlugins();
+        const builtins = await pluginLoadBuiltins();
+        console.log("[plugins] builtins loaded:", builtins);
+
+        const userPlugins = await pluginScanUserPlugins();
+        console.log("[plugins] user plugins scanned:", userPlugins);
+
         await refreshPlugins();
+        const list = get(loadedPlugins);
+        console.log("[plugins] all loaded plugins:", list.map(p => `${p.name} (${p.kind})`));
+
         await applyFirstTheme();
+        const theme = get(activeTheme);
+        console.log("[plugins] active theme:", theme?.name ?? "none");
     } catch (e) {
+        console.error("[plugins] initPlugins error:", e);
         pluginError.set(String(e));
     } finally {
         pluginLoading.set(false);
@@ -76,13 +84,21 @@ export async function refreshPlugins(): Promise<void> {
     loadedPlugins.set(await pluginList());
 }
 
-/** Apply the first registered theme from loaded plugins. */
+/** Apply the first registered theme from loaded plugins (respects user preference). */
 export async function applyFirstTheme(): Promise<void> {
+    const savedTheme = localStorage.getItem("forja:activeTheme");
+    // If user explicitly deactivated, don't re-apply
+    if (savedTheme === "__none__") return;
+
     const themes = await pluginGetThemes();
-    if (themes.length > 0) {
-        activeTheme.set(themes[0]);
-        applyTheme(themes[0]);
-    }
+    if (themes.length === 0) return;
+
+    const target = savedTheme
+        ? themes.find((t) => t.name === savedTheme) ?? themes[0]
+        : themes[0];
+
+    activeTheme.set(target);
+    applyTheme(target);
 }
 
 /** Activate a specific theme by name. */
@@ -92,5 +108,6 @@ export async function activateThemeByName(name: string): Promise<void> {
     if (found) {
         activeTheme.set(found);
         applyTheme(found);
+        localStorage.setItem("forja:activeTheme", name);
     }
 }
