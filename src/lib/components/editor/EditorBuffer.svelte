@@ -7,6 +7,7 @@
     import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/constants";
     import { ChunkRenderer } from "$lib/utils/ChunkRenderer";
     import { TextMetricsCache } from "$lib/utils/TextMetricsCache";
+    import { WrapLayout } from "$lib/utils/WrapLayout";
     import { DocumentBridge } from "$lib/utils/documentBridge";
     import {
         DiffScheduler,
@@ -30,7 +31,7 @@
     import { diagnosticsByFile, type Diagnostic } from "$lib/stores/diagnosticsStore";
     import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "$lib/utils/lspClient";
     import { pluginRunBracketProviders, pluginEmitEvent, type BracketRange } from "$lib/utils/pluginClient";
-    import { activeTheme, bracketRanges, loadedPlugins, pluginsReady } from "$lib/stores/pluginStore";
+    import { activeTheme, bracketRanges, loadedPlugins, pluginsReady, pluginActivityVersion } from "$lib/stores/pluginStore";
     import { bracketRangesToColors } from "$lib/utils/themeEngine";
 
     interface Props {
@@ -111,6 +112,22 @@
         const lines = totalLines; // read unconditionally so it's always a tracked dep
         if (ready && lines > 0) {
             scheduleBracketUpdate();
+        }
+    });
+
+    // Re-run bracket analysis when a plugin is enabled/disabled at runtime.
+    $effect(() => {
+        const _v = $pluginActivityVersion;
+        if (_v > 0 && totalLines > 0) {
+            scheduleBracketUpdate();
+        }
+    });
+
+    // Clear bracket colors immediately when the store is emptied (e.g. plugin disabled).
+    $effect(() => {
+        if ($bracketRanges.length === 0) {
+            bracketColors = [];
+            queueRedraw();
         }
     });
 
@@ -210,6 +227,14 @@
     let gutterWidth = $derived(showLineNumbers ? Math.max(56, lineNumberDigits * 10 + 24) : 16);
     let lineNumberX = $derived(gutterWidth - 12);
     let contentStartX = $derived(gutterWidth + 8);
+
+    // ── Soft word wrap ───────────────────────────────────────────────────────────
+    let softWrapEnabled = $derived($bufferPreferences.softWrapEnabled);
+    const wrapLayout = new WrapLayout();
+    let wrapLayoutDirty = $state(true);
+    let lastWrapCharWidth = 0;
+    let lastWrapContentWidth = 0;
+    let visualRowCount = $state(0);
 
     let undoStack: EditorSnapshot[] = [];
     let redoStack: EditorSnapshot[] = [];
@@ -419,7 +444,10 @@
     function ensureCursorVisible() {
         if (!scrollContainer) return;
 
-        const top = cursorLine * editorLineHeight;
+        const visualRow = softWrapEnabled && wrapLayout.totalVisualRows > 0
+            ? wrapLayout.visualRowOfChar(cursorLine, cursorChar)
+            : cursorLine;
+        const top = visualRow * editorLineHeight;
         const bottom = top + editorLineHeight;
         const viewportTop = scrollContainer.scrollTop;
         const viewportBottom = viewportTop + scrollContainer.clientHeight;
@@ -871,6 +899,7 @@
         // Trigger an immediate redraw so the edit appears in the next frame
         // (without this, the text only redraws after the async highlight completes,
         // causing a 50-500ms delay where nothing appears on screen).
+        wrapLayoutDirty = true;
         queueRedraw();
         scheduleBracketUpdate();
         await refreshHighlightsAfterEdit();
@@ -1140,6 +1169,7 @@
             }
     
             loadedChunks.add(chunkId);
+            wrapLayoutDirty = true;
             // Phase 4: new lines loaded → mark chunk canvas as needing re-render
             chunkRenderer.markDirty(chunkId);
             // Diff: this chunk's lines are now in lineCache — re-run diff for this range
@@ -1361,11 +1391,40 @@
         const overBudget = lastFrameDuration > 14; // > 14ms ≈ below 60fps
 
         const scrollPos = untrack(() => currentScrollTop);
-        const startLine = Math.floor(scrollPos / editorLineHeight);
-        const endLine = Math.min(
-            startLine + Math.ceil(rect.height / editorLineHeight) + 1,
-            totalLines,
-        );
+
+        // ── Soft wrap: recompute layout when stale ───────────────────────────────
+        if (softWrapEnabled) {
+            const charWidth = metricsCache.getCharWidth(ctx, editorFont);
+            const contentWidth = rect.width - contentStartX - 8;
+            if (charWidth !== lastWrapCharWidth || contentWidth !== lastWrapContentWidth || wrapLayoutDirty) {
+                wrapLayout.compute(totalLines, (i) => lineCache.get(i), charWidth, contentWidth);
+                lastWrapCharWidth = charWidth;
+                lastWrapContentWidth = contentWidth;
+                wrapLayoutDirty = false;
+                visualRowCount = wrapLayout.totalVisualRows;
+            }
+        }
+
+        let startLine: number;
+        let endLine: number;
+        let startVisualRow: number;
+        if (softWrapEnabled && wrapLayout.totalVisualRows > 0) {
+            startVisualRow = Math.floor(scrollPos / editorLineHeight);
+            const endVisualRow = startVisualRow + Math.ceil(rect.height / editorLineHeight) + 1;
+            const { line: swStartLogical } = wrapLayout.visualToLogical(startVisualRow);
+            const { line: swEndLogical } = wrapLayout.visualToLogical(
+                Math.min(endVisualRow, wrapLayout.totalVisualRows - 1)
+            );
+            startLine = swStartLogical;
+            endLine = Math.min(swEndLogical + 1, totalLines);
+        } else {
+            startLine = Math.floor(scrollPos / editorLineHeight);
+            endLine = Math.min(
+                startLine + Math.ceil(rect.height / editorLineHeight) + 1,
+                totalLines,
+            );
+            startVisualRow = startLine;
+        }
         const yOffset = -(scrollPos % editorLineHeight);
         // Y pixel where startLine begins on the canvas
         const yStart = yOffset;
@@ -1381,51 +1440,91 @@
         ctx.textBaseline = "middle";
 
         for (let i = startLine; i < endLine; i++) {
-            const y = (i - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
+            if (softWrapEnabled) {
+                const firstVRow = wrapLayout.logicalToVisualRow(i);
+                const vCount = wrapLayout.visualRowCount(i);
+                for (let s = 0; s < vCount; s++) {
+                    const vRow = firstVRow + s;
+                    const y = (vRow - startVisualRow) * editorLineHeight + yOffset + editorLineHeight / 2;
+                    if (y + editorLineHeight / 2 < 0 || y - editorLineHeight / 2 > rect.height) continue;
 
-            if (highlightActiveLine && i === cursorLine) {
-                ctx.fillStyle = "rgba(52, 211, 153, 0.08)";
-                ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
-            }
+                    if (highlightActiveLine && i === cursorLine) {
+                        ctx.fillStyle = "rgba(52, 211, 153, 0.08)";
+                        ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
+                    }
 
-            if (i === mouseLine) {
-                ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
-                ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
-            }
+                    if (i === mouseLine) {
+                        ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+                        ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
+                    }
 
-            if (visualBounds) {
-                const [selectionStart, selectionEnd] = visualBounds;
-                if (i >= selectionStart.line && i <= selectionEnd.line) {
-                    const line = getLine(i);
-                    const sc = i === selectionStart.line ? selectionStart.char : 0;
-                    const ec = i === selectionEnd.line ? selectionEnd.char : line.length;
-                    // Phase 5: use metrics cache for selection bounds
-                    const highlightStart = contentStartX + metricsCache.measure(ctx, line.slice(0, sc), editorFont);
-                    const highlightEnd = contentStartX + metricsCache.measure(ctx, line.slice(0, Math.max(ec, sc)), editorFont);
-                    ctx.fillStyle = "rgba(52, 211, 153, 0.18)";
-                    ctx.fillRect(
-                        highlightStart,
-                        y - editorLineHeight / 2 + 2,
-                        Math.max(highlightEnd - highlightStart, 4),
-                        editorLineHeight - 4,
-                    );
+                    if (visualBounds) {
+                        const [selectionStart, selectionEnd] = visualBounds;
+                        if (i >= selectionStart.line && i <= selectionEnd.line) {
+                            ctx.fillStyle = "rgba(52, 211, 153, 0.18)";
+                            ctx.fillRect(contentStartX, y - editorLineHeight / 2 + 2, rect.width - contentStartX, editorLineHeight - 4);
+                        }
+                    }
+
+                    const _dBg = diagByLine.get(i);
+                    if (_dBg) {
+                        if (_dBg.severity === 'error') {
+                            ctx.fillStyle = "rgba(239, 68, 68, 0.07)";
+                        } else if (_dBg.severity === 'warning') {
+                            ctx.fillStyle = "rgba(245, 158, 11, 0.05)";
+                        } else {
+                            ctx.fillStyle = "rgba(96, 165, 250, 0.05)";
+                        }
+                        ctx.fillRect(gutterWidth, y - editorLineHeight / 2, rect.width - gutterWidth, editorLineHeight);
+                    }
                 }
-            }
+            } else {
+                const y = (i - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
 
-            // Diff: 3px gutter bar on the left edge for added / modified lines
-            // NOTE: drawn in Pass 1 as background; redrawn in Pass 3 to stay on top of blit
-
-            // Error Lens: subtle full-line background tint
-            const _dBg = diagByLine.get(i);
-            if (_dBg) {
-                if (_dBg.severity === 'error') {
-                    ctx.fillStyle = "rgba(239, 68, 68, 0.07)";
-                } else if (_dBg.severity === 'warning') {
-                    ctx.fillStyle = "rgba(245, 158, 11, 0.05)";
-                } else {
-                    ctx.fillStyle = "rgba(96, 165, 250, 0.05)";
+                if (highlightActiveLine && i === cursorLine) {
+                    ctx.fillStyle = "rgba(52, 211, 153, 0.08)";
+                    ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
                 }
-                ctx.fillRect(gutterWidth, y - editorLineHeight / 2, rect.width - gutterWidth, editorLineHeight);
+
+                if (i === mouseLine) {
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+                    ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
+                }
+
+                if (visualBounds) {
+                    const [selectionStart, selectionEnd] = visualBounds;
+                    if (i >= selectionStart.line && i <= selectionEnd.line) {
+                        const line = getLine(i);
+                        const sc = i === selectionStart.line ? selectionStart.char : 0;
+                        const ec = i === selectionEnd.line ? selectionEnd.char : line.length;
+                        // Phase 5: use metrics cache for selection bounds
+                        const highlightStart = contentStartX + metricsCache.measure(ctx, line.slice(0, sc), editorFont);
+                        const highlightEnd = contentStartX + metricsCache.measure(ctx, line.slice(0, Math.max(ec, sc)), editorFont);
+                        ctx.fillStyle = "rgba(52, 211, 153, 0.18)";
+                        ctx.fillRect(
+                            highlightStart,
+                            y - editorLineHeight / 2 + 2,
+                            Math.max(highlightEnd - highlightStart, 4),
+                            editorLineHeight - 4,
+                        );
+                    }
+                }
+
+                // Diff: 3px gutter bar on the left edge for added / modified lines
+                // NOTE: drawn in Pass 1 as background; redrawn in Pass 3 to stay on top of blit
+
+                // Error Lens: subtle full-line background tint
+                const _dBg = diagByLine.get(i);
+                if (_dBg) {
+                    if (_dBg.severity === 'error') {
+                        ctx.fillStyle = "rgba(239, 68, 68, 0.07)";
+                    } else if (_dBg.severity === 'warning') {
+                        ctx.fillStyle = "rgba(245, 158, 11, 0.05)";
+                    } else {
+                        ctx.fillStyle = "rgba(96, 165, 250, 0.05)";
+                    }
+                    ctx.fillRect(gutterWidth, y - editorLineHeight / 2, rect.width - gutterWidth, editorLineHeight);
+                }
             }
         }
 
@@ -1439,136 +1538,299 @@
         }
 
         // ── Pass 2: blit OffscreenCanvas text chunks (Phase 4) ─────────────────
-        const chunkConfig = {
-            lineHeight: editorLineHeight,
-            fontSize: editorFontSize,
-            fontFamily: editorFontFamily,
-            contentStartX,
-            canvasWidth: rect.width,
-            tokenColors: currentTokenColors,
-        };
+        // Skipped when soft wrap is active — text is drawn directly in Pass 3.
+        if (!softWrapEnabled) {
+            const chunkConfig = {
+                lineHeight: editorLineHeight,
+                fontSize: editorFontSize,
+                fontFamily: editorFontFamily,
+                contentStartX,
+                canvasWidth: rect.width,
+                tokenColors: currentTokenColors,
+            };
 
-        // Determine which chunks intersect the visible range
-        const firstChunkId = Math.floor(startLine / CHUNK_SIZE);
-        const lastChunkId = Math.floor(Math.max(endLine - 1, startLine) / CHUNK_SIZE);
+            // Determine which chunks intersect the visible range
+            const firstChunkId = Math.floor(startLine / CHUNK_SIZE);
+            const lastChunkId = Math.floor(Math.max(endLine - 1, startLine) / CHUNK_SIZE);
 
-        for (let chunkId = firstChunkId; chunkId <= lastChunkId; chunkId++) {
-            if (chunkRenderer.isDirty(chunkId)) {
-                chunkRenderer.renderChunk(
-                    chunkId,
-                    chunkConfig,
-                    (i) => lineCache.get(i),
-                    (i) => (highlightEnabled ? tokenCache.get(i) : undefined),
-                    totalLines
-                );
+            for (let chunkId = firstChunkId; chunkId <= lastChunkId; chunkId++) {
+                if (chunkRenderer.isDirty(chunkId)) {
+                    chunkRenderer.renderChunk(
+                        chunkId,
+                        chunkConfig,
+                        (i) => lineCache.get(i),
+                        (i) => (highlightEnabled ? tokenCache.get(i) : undefined),
+                        totalLines
+                    );
+                }
+                chunkRenderer.blit(ctx, chunkId, startLine, endLine, yStart, editorLineHeight);
             }
-            chunkRenderer.blit(ctx, chunkId, startLine, endLine, yStart, editorLineHeight);
         }
 
         // ── Pass 3: overlays — diff bars, line numbers, cursor, blame ─────────
         for (let i = startLine; i < endLine; i++) {
-            const y = (i - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
+            if (softWrapEnabled) {
+                // ── Soft-wrap path: render text + overlays per visual sub-row ──
+                const line = lineCache.get(i);
+                const charsPerRow = wrapLayout.charsPerRow;
+                const firstVRow = wrapLayout.logicalToVisualRow(i);
+                const vCount = wrapLayout.visualRowCount(i);
+                const charWidth = metricsCache.getCharWidth(ctx, editorFont);
+                const tokens = highlightEnabled ? tokenCache.get(i) : undefined;
 
-            // Diff: 4px gutter bar at left edge (drawn on top of chunk blit)
-            const diffDeco = viewportDiffCache.getDecoration(i);
-            if (diffDeco) {
-                ctx.fillStyle = diffDeco.color;
-                ctx.fillRect(0, (i - startLine) * editorLineHeight + yOffset, 4, editorLineHeight);
-            }
-
-            if (showLineNumbers) {
-                ctx.fillStyle = "#3a3a3a";
-                ctx.textAlign = "right";
-                const lineNumberText = vimModeEnabled && vimMode !== "insert"
-                    ? Math.abs(i - cursorLine).toString()
-                    : (i + 1).toString();
-                ctx.fillText(lineNumberText, lineNumberX, y);
-            }
-
-            ctx.textAlign = "left";
-            const line = lineCache.get(i);
-            if (line === undefined) continue;
-
-            if (i === cursorLine && cursorVisible) {
-                // Phase 5: use metrics cache for cursor position
-                const cursorX = contentStartX + metricsCache.measure(ctx, line.substring(0, cursorChar), editorFont);
-
-                if (vimModeEnabled && vimMode !== "insert") {
-                    const char = line[cursorChar] || " ";
-                    const charWidth = metricsCache.measure(ctx, char, editorFont);
-                    ctx.fillStyle = "rgba(52, 211, 153, 0.6)";
-                    ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, charWidth, editorLineHeight - 4);
-                    ctx.fillStyle = "#ffffff";
-                    ctx.fillText(char, cursorX, y);
-                } else {
-                    ctx.fillStyle = "#34d399";
-                    ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
-                }
-            }
-
-            // Git blame ghost text on active line
-            if (i === cursorLine && blameCache[i]) {
-                const blame = blameCache[i];
-                // Phase 5: estimate line content width for blame placement
-                const tokens = highlightEnabled ? tokenCache.get(i) : null;
-                let lineWidth = 0;
+                // Pre-compute cumulative char start for each token
+                const tokenStarts: number[] = [];
                 if (tokens) {
-                    for (const t of tokens) lineWidth += metricsCache.measure(ctx, t.text, editorFont);
-                } else {
-                    lineWidth = metricsCache.measure(ctx, line, editorFont);
+                    let off = 0;
+                    for (const t of tokens) { tokenStarts.push(off); off += t.text.length; }
                 }
-                const blameFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
-                ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
-                ctx.font = blameFont;
-                const blameText = blame.author
-                    ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`
-                    : `  • ${blame.summary}`;
-                ctx.fillText(blameText, contentStartX + lineWidth + 20, y);
-                ctx.font = editorFont;
-            }
 
-            // ── Error Lens: gutter indicator dot + inline message ─────────────────
-            const _diag = diagByLine.get(i);
-            if (_diag) {
-                // Gutter dot (right edge of gutter, above the line number)
-                const _dotColor = _diag.severity === 'error'
-                    ? 'rgba(239, 68, 68, 0.85)'
-                    : _diag.severity === 'warning'
-                    ? 'rgba(245, 158, 11, 0.80)'
-                    : 'rgba(96, 165, 250, 0.70)';
-                ctx.fillStyle = _dotColor;
-                ctx.beginPath();
-                ctx.arc(8, y, 2.5, 0, Math.PI * 2);
-                ctx.fill();
+                for (let s = 0; s < vCount; s++) {
+                    const vRow = firstVRow + s;
+                    const rowY = (vRow - startVisualRow) * editorLineHeight + yOffset + editorLineHeight / 2;
+                    if (rowY + editorLineHeight / 2 < 0 || rowY - editorLineHeight / 2 > rect.height) continue;
 
-                // Inline message (skip cursor line when blame is visible to avoid overlap)
-                const _hasBlame = i === cursorLine && blameCache[i];
-                if (!_hasBlame) {
-                    const _lTokens = highlightEnabled ? tokenCache.get(i) : null;
-                    let _lw = 0;
-                    if (_lTokens) {
-                        for (const t of _lTokens) _lw += metricsCache.measure(ctx, t.text, editorFont);
-                    } else {
-                        _lw = metricsCache.measure(ctx, line, editorFont);
-                    }
-                    const _msgX = contentStartX + _lw + 32;
-                    if (_msgX < rect.width - 40) {
-                        const _diagFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
-                        ctx.font = _diagFont;
-                        if (_diag.severity === 'error') {
-                            ctx.fillStyle = "rgba(239, 68, 68, 0.60)";
-                        } else if (_diag.severity === 'warning') {
-                            ctx.fillStyle = "rgba(245, 158, 11, 0.60)";
-                        } else {
-                            ctx.fillStyle = "rgba(96, 165, 250, 0.55)";
+                    // Diff: 4px gutter bar (only on first sub-row)
+                    if (s === 0) {
+                        const diffDeco = viewportDiffCache.getDecoration(i);
+                        if (diffDeco) {
+                            ctx.fillStyle = diffDeco.color;
+                            ctx.fillRect(0, (vRow - startVisualRow) * editorLineHeight + yOffset, 4, editorLineHeight);
                         }
-                        const _prefix = _diag.severity === 'error' ? '⛔ '
-                            : _diag.severity === 'warning' ? '⚠ ' : '› ';
-                        const _raw = _diag.message.length > 80
-                            ? _diag.message.slice(0, 80) + '…'
-                            : _diag.message;
-                        ctx.fillText(_prefix + _raw, _msgX, y);
+                    }
+
+                    // Line number (only on first sub-row)
+                    if (showLineNumbers) {
+                        ctx.textAlign = "right";
+                        if (s === 0) {
+                            ctx.fillStyle = "#3a3a3a";
+                            const lineNumberText = vimModeEnabled && vimMode !== "insert"
+                                ? Math.abs(i - cursorLine).toString()
+                                : (i + 1).toString();
+                            ctx.fillText(lineNumberText, lineNumberX, rowY);
+                        }
+                    }
+                    ctx.textAlign = "left";
+
+                    if (line === undefined) {
+                        if (s === 0) {
+                            ctx.fillStyle = '#1a1a1a';
+                            ctx.fillRect(contentStartX, rowY - 2, 80, 4);
+                        }
+                        continue;
+                    }
+
+                    const sliceStart = s * charsPerRow;
+                    const sliceEnd = Math.min((s + 1) * charsPerRow, line.length);
+
+                    // Text rendering
+                    if (tokens && tokens.length > 0) {
+                        for (let ti = 0; ti < tokens.length; ti++) {
+                            const token = tokens[ti];
+                            const tokenStart = tokenStarts[ti];
+                            const tokenEnd = tokenStart + token.text.length;
+                            if (tokenEnd <= sliceStart || tokenStart >= sliceEnd) continue;
+                            const clipStart = Math.max(tokenStart, sliceStart);
+                            const clipEnd = Math.min(tokenEnd, sliceEnd);
+                            const tokenText = token.text.slice(clipStart - tokenStart, clipEnd - tokenStart);
+                            if (!tokenText) continue;
+                            ctx.fillStyle = currentTokenColors[token.token_type] ?? currentTokenColors['Unknown'] ?? '#d4d4d4';
+                            ctx.fillText(tokenText, contentStartX + (clipStart - sliceStart) * charWidth, rowY);
+                        }
+                    } else {
+                        ctx.fillStyle = '#cccccc';
+                        ctx.fillText(line.slice(sliceStart, sliceEnd), contentStartX, rowY);
+                    }
+
+                    // Cursor
+                    if (i === cursorLine && cursorVisible) {
+                        const cursorSubRow = Math.floor(cursorChar / charsPerRow);
+                        if (cursorSubRow === s) {
+                            const cx = contentStartX + (cursorChar % charsPerRow) * charWidth;
+                            if (vimModeEnabled && vimMode !== "insert") {
+                                const ch = line[cursorChar] || " ";
+                                ctx.fillStyle = "rgba(52, 211, 153, 0.6)";
+                                ctx.fillRect(cx, rowY - editorLineHeight / 2 + 2, charWidth, editorLineHeight - 4);
+                                ctx.fillStyle = "#ffffff";
+                                ctx.fillText(ch, cx, rowY);
+                            } else {
+                                ctx.fillStyle = "#34d399";
+                                ctx.fillRect(cx, rowY - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
+                            }
+                        }
+                    }
+
+                    // Git blame ghost text (only on first sub-row, cursor line)
+                    if (s === 0 && i === cursorLine && blameCache[i]) {
+                        const blame = blameCache[i];
+                        const blameTokens = highlightEnabled ? tokenCache.get(i) : null;
+                        let lineWidth = 0;
+                        if (blameTokens) {
+                            for (const t of blameTokens) lineWidth += metricsCache.measure(ctx, t.text, editorFont);
+                        } else {
+                            lineWidth = metricsCache.measure(ctx, line, editorFont);
+                        }
+                        const blameFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
+                        ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
+                        ctx.font = blameFont;
+                        const blameText = blame.author
+                            ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`
+                            : `  • ${blame.summary}`;
+                        ctx.fillText(blameText, contentStartX + lineWidth + 20, rowY);
                         ctx.font = editorFont;
+                    }
+
+                    // Error Lens (only on first sub-row)
+                    if (s === 0) {
+                        const _diag = diagByLine.get(i);
+                        if (_diag) {
+                            const _dotColor = _diag.severity === 'error'
+                                ? 'rgba(239, 68, 68, 0.85)'
+                                : _diag.severity === 'warning'
+                                ? 'rgba(245, 158, 11, 0.80)'
+                                : 'rgba(96, 165, 250, 0.70)';
+                            ctx.fillStyle = _dotColor;
+                            ctx.beginPath();
+                            ctx.arc(8, rowY, 2.5, 0, Math.PI * 2);
+                            ctx.fill();
+
+                            const _hasBlame = i === cursorLine && blameCache[i];
+                            if (!_hasBlame) {
+                                const _lTokens = highlightEnabled ? tokenCache.get(i) : null;
+                                let _lw = 0;
+                                if (_lTokens) {
+                                    for (const t of _lTokens) _lw += metricsCache.measure(ctx, t.text, editorFont);
+                                } else {
+                                    _lw = metricsCache.measure(ctx, line, editorFont);
+                                }
+                                const _msgX = contentStartX + _lw + 32;
+                                if (_msgX < rect.width - 40) {
+                                    const _diagFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
+                                    ctx.font = _diagFont;
+                                    if (_diag.severity === 'error') {
+                                        ctx.fillStyle = "rgba(239, 68, 68, 0.60)";
+                                    } else if (_diag.severity === 'warning') {
+                                        ctx.fillStyle = "rgba(245, 158, 11, 0.60)";
+                                    } else {
+                                        ctx.fillStyle = "rgba(96, 165, 250, 0.55)";
+                                    }
+                                    const _prefix = _diag.severity === 'error' ? '⛔ '
+                                        : _diag.severity === 'warning' ? '⚠ ' : '› ';
+                                    const _raw = _diag.message.length > 80
+                                        ? _diag.message.slice(0, 80) + '…'
+                                        : _diag.message;
+                                    ctx.fillText(_prefix + _raw, _msgX, rowY);
+                                    ctx.font = editorFont;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // ── Hard-wrap / no-wrap path (original) ──────────────────────────
+                const y = (i - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
+
+                // Diff: 4px gutter bar at left edge (drawn on top of chunk blit)
+                const diffDeco = viewportDiffCache.getDecoration(i);
+                if (diffDeco) {
+                    ctx.fillStyle = diffDeco.color;
+                    ctx.fillRect(0, (i - startLine) * editorLineHeight + yOffset, 4, editorLineHeight);
+                }
+
+                if (showLineNumbers) {
+                    ctx.fillStyle = "#3a3a3a";
+                    ctx.textAlign = "right";
+                    const lineNumberText = vimModeEnabled && vimMode !== "insert"
+                        ? Math.abs(i - cursorLine).toString()
+                        : (i + 1).toString();
+                    ctx.fillText(lineNumberText, lineNumberX, y);
+                }
+
+                ctx.textAlign = "left";
+                const line = lineCache.get(i);
+                if (line === undefined) continue;
+
+                if (i === cursorLine && cursorVisible) {
+                    // Phase 5: use metrics cache for cursor position
+                    const cursorX = contentStartX + metricsCache.measure(ctx, line.substring(0, cursorChar), editorFont);
+
+                    if (vimModeEnabled && vimMode !== "insert") {
+                        const char = line[cursorChar] || " ";
+                        const charWidth = metricsCache.measure(ctx, char, editorFont);
+                        ctx.fillStyle = "rgba(52, 211, 153, 0.6)";
+                        ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, charWidth, editorLineHeight - 4);
+                        ctx.fillStyle = "#ffffff";
+                        ctx.fillText(char, cursorX, y);
+                    } else {
+                        ctx.fillStyle = "#34d399";
+                        ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
+                    }
+                }
+
+                // Git blame ghost text on active line
+                if (i === cursorLine && blameCache[i]) {
+                    const blame = blameCache[i];
+                    // Phase 5: estimate line content width for blame placement
+                    const tokens = highlightEnabled ? tokenCache.get(i) : null;
+                    let lineWidth = 0;
+                    if (tokens) {
+                        for (const t of tokens) lineWidth += metricsCache.measure(ctx, t.text, editorFont);
+                    } else {
+                        lineWidth = metricsCache.measure(ctx, line, editorFont);
+                    }
+                    const blameFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
+                    ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
+                    ctx.font = blameFont;
+                    const blameText = blame.author
+                        ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`
+                        : `  • ${blame.summary}`;
+                    ctx.fillText(blameText, contentStartX + lineWidth + 20, y);
+                    ctx.font = editorFont;
+                }
+
+                // ── Error Lens: gutter indicator dot + inline message ─────────────────
+                const _diag = diagByLine.get(i);
+                if (_diag) {
+                    // Gutter dot (right edge of gutter, above the line number)
+                    const _dotColor = _diag.severity === 'error'
+                        ? 'rgba(239, 68, 68, 0.85)'
+                        : _diag.severity === 'warning'
+                        ? 'rgba(245, 158, 11, 0.80)'
+                        : 'rgba(96, 165, 250, 0.70)';
+                    ctx.fillStyle = _dotColor;
+                    ctx.beginPath();
+                    ctx.arc(8, y, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Inline message (skip cursor line when blame is visible to avoid overlap)
+                    const _hasBlame = i === cursorLine && blameCache[i];
+                    if (!_hasBlame) {
+                        const _lTokens = highlightEnabled ? tokenCache.get(i) : null;
+                        let _lw = 0;
+                        if (_lTokens) {
+                            for (const t of _lTokens) _lw += metricsCache.measure(ctx, t.text, editorFont);
+                        } else {
+                            _lw = metricsCache.measure(ctx, line, editorFont);
+                        }
+                        const _msgX = contentStartX + _lw + 32;
+                        if (_msgX < rect.width - 40) {
+                            const _diagFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
+                            ctx.font = _diagFont;
+                            if (_diag.severity === 'error') {
+                                ctx.fillStyle = "rgba(239, 68, 68, 0.60)";
+                            } else if (_diag.severity === 'warning') {
+                                ctx.fillStyle = "rgba(245, 158, 11, 0.60)";
+                            } else {
+                                ctx.fillStyle = "rgba(96, 165, 250, 0.55)";
+                            }
+                            const _prefix = _diag.severity === 'error' ? '⛔ '
+                                : _diag.severity === 'warning' ? '⚠ ' : '› ';
+                            const _raw = _diag.message.length > 80
+                                ? _diag.message.slice(0, 80) + '…'
+                                : _diag.message;
+                            ctx.fillText(_prefix + _raw, _msgX, y);
+                            ctx.font = editorFont;
+                        }
                     }
                 }
             }
@@ -1606,7 +1868,9 @@
                 if (!ch) return;
                 const x = contentStartX + metricsCache.measure(ctx, lineText.slice(0, col), editorFont);
                 const charWidth = metricsCache.measure(ctx, ch, editorFont);
-                const y = (line - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
+                const y = softWrapEnabled
+                    ? (wrapLayout.visualRowOfChar(line, col) - startVisualRow) * editorLineHeight + yOffset + editorLineHeight / 2
+                    : (line - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
                 // Erase background for this character, then redraw in bracket color
                 ctx.fillStyle = editorBgColor;
                 ctx.fillRect(x, y - editorLineHeight / 2, charWidth, editorLineHeight);
@@ -1618,7 +1882,103 @@
                 paintBracketChar(start - 1, color);  // Lua is 1-based
                 paintBracketChar(finish - 1, color);
             }
+
             ctx.restore();
+        }
+
+        // ── Pass 5: bracket match highlight (works with or without plugin) ──────
+        {
+            const OPEN  = new Set(['{', '(', '[']);
+            const CLOSE = new Set(['}', ')', ']']);
+            const PAIRS: Record<string, string> = {
+                '{': '}', '(': ')', '[': ']',
+                '}': '{', ')': '(', ']': '[',
+            };
+
+            const curLineText = lineCache.get(cursorLine) ?? "";
+            const ch = curLineText[cursorChar];
+
+            let matchLine = -1;
+            let matchCol  = -1;
+
+            if (ch && (OPEN.has(ch) || CLOSE.has(ch))) {
+                const isOpen = OPEN.has(ch);
+                let depth = 0;
+
+                if (isOpen) {
+                    scan_fwd:
+                    for (let l = cursorLine; l < totalLines; l++) {
+                        const text = lineCache.get(l) ?? "";
+                        const c0 = l === cursorLine ? cursorChar : 0;
+                        for (let c = c0; c < text.length; c++) {
+                            const t = text[c];
+                            if (t === ch)         depth++;
+                            else if (t === PAIRS[ch]) { depth--; if (depth === 0) { matchLine = l; matchCol = c; break scan_fwd; } }
+                        }
+                    }
+                } else {
+                    scan_bwd:
+                    for (let l = cursorLine; l >= 0; l--) {
+                        const text = lineCache.get(l) ?? "";
+                        const c0 = l === cursorLine ? cursorChar : text.length - 1;
+                        for (let c = c0; c >= 0; c--) {
+                            const t = text[c];
+                            if (t === ch)         depth++;
+                            else if (t === PAIRS[ch]) { depth--; if (depth === 0) { matchLine = l; matchCol = c; break scan_bwd; } }
+                        }
+                    }
+                }
+            }
+
+            if (matchLine !== -1) {
+                // Use the bracket-colorizer color for this pair when available
+                let pairColor = "#34d399";
+                if (bracketColors.length > 0) {
+                    const lineOffsets2: number[] = [];
+                    let off = 0;
+                    for (let l = 0; l < totalLines; l++) {
+                        lineOffsets2.push(off);
+                        off += (lineCache.get(l) ?? "").length + 1;
+                    }
+                    const curOff = (lineOffsets2[cursorLine] ?? 0) + cursorChar + 1;
+                    const matOff = (lineOffsets2[matchLine]  ?? 0) + matchCol  + 1;
+                    const found  = bracketColors.find(
+                        (b) => (b.start === curOff || b.finish === curOff) &&
+                               (b.start === matOff  || b.finish === matOff)
+                    );
+                    if (found) pairColor = found.color;
+                }
+
+                ctx.save();
+                ctx.font = editorFont;
+                ctx.textBaseline = "middle";
+
+                const drawBox = (bLine: number, bCol: number, isActive: boolean) => {
+                    if (bLine < startLine || bLine >= endLine) return;
+                    const text = lineCache.get(bLine) ?? "";
+                    const bch  = text[bCol];
+                    if (!bch) return;
+                    const x  = contentStartX + metricsCache.measure(ctx, text.slice(0, bCol), editorFont);
+                    const cw = metricsCache.measure(ctx, bch, editorFont);
+                    const y  = softWrapEnabled
+                        ? (wrapLayout.visualRowOfChar(bLine, bCol) - startVisualRow) * editorLineHeight + yOffset + editorLineHeight / 2
+                        : (bLine - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
+                    if (isActive) {
+                        ctx.fillStyle = pairColor + "44";
+                        ctx.fillRect(x, y - editorLineHeight / 2 + 2, cw, editorLineHeight - 4);
+                        ctx.fillStyle = "#ffffff";
+                        ctx.fillText(bch, x, y);
+                    }
+                    ctx.strokeStyle = pairColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeRect(x + 0.5, y - editorLineHeight / 2 + 2.5, cw - 1, editorLineHeight - 5);
+                };
+
+                drawBox(cursorLine, cursorChar, true);
+                drawBox(matchLine,  matchCol,  false);
+
+                ctx.restore();
+            }
         }
 
         requestAnimationFrame(draw);
@@ -1671,11 +2031,26 @@
         const y = e.clientY - rect.top;
 
         const scrollPos = currentScrollTop;
-        const clickedLine = Math.floor((y + scrollPos) / editorLineHeight);
+
+        let clickedLine: number;
+        let charOffset = 0;
+
+        if (softWrapEnabled && wrapLayout.totalVisualRows > 0) {
+            const clickedVisualRow = Math.floor((y + scrollPos) / editorLineHeight);
+            const clamped = Math.max(0, Math.min(clickedVisualRow, wrapLayout.totalVisualRows - 1));
+            const { line, subRow } = wrapLayout.visualToLogical(clamped);
+            clickedLine = line;
+            charOffset = subRow * wrapLayout.charsPerRow;
+        } else {
+            clickedLine = Math.floor((y + scrollPos) / editorLineHeight);
+        }
 
         if (clickedLine >= 0 && clickedLine < totalLines) {
             cursorVisible = true;
             const lineText = getLine(clickedLine);
+            const rowText = softWrapEnabled
+                ? lineText.slice(charOffset, charOffset + wrapLayout.charsPerRow)
+                : lineText;
 
             const ctx = canvas.getContext("2d");
             if (ctx) {
@@ -1683,10 +2058,8 @@
                 let bestChar = 0;
                 let minDiff = Infinity;
 
-                for (let i = 0; i <= lineText.length; i++) {
-                    const width = ctx.measureText(
-                        lineText.substring(0, i),
-                    ).width;
+                for (let i = 0; i <= rowText.length; i++) {
+                    const width = ctx.measureText(rowText.substring(0, i)).width;
                     const diff = Math.abs(x - (contentStartX + width));
                     if (diff < minDiff) {
                         minDiff = diff;
@@ -1694,11 +2067,13 @@
                     }
                 }
 
+                const finalChar = charOffset + bestChar;
+
                 if (vimMode === "insert") {
-                    setCursor(clickedLine, bestChar);
+                    setCursor(clickedLine, finalChar);
                 } else {
                     enterNormalMode();
-                    setNormalCursor(clickedLine, bestChar);
+                    setNormalCursor(clickedLine, finalChar);
                 }
             }
         }
@@ -1774,6 +2149,41 @@
         const length = lineLength(cursorLine);
         const target = length > 0 ? Math.max(0, Math.min(cursorChar + delta, length - 1)) : 0;
         setNormalCursor(cursorLine, target);
+    }
+
+    function moveHorizontalWrap(delta: number) {
+        let line = cursorLine;
+        let char = cursorChar;
+        let remaining = Math.abs(delta);
+        const dir = delta > 0 ? 1 : -1;
+
+        while (remaining > 0) {
+            const len = lineLength(line);
+            if (dir > 0) {
+                if (char < len - 1) {
+                    char = Math.min(char + remaining, len - 1);
+                    remaining = 0;
+                } else if (line < totalLines - 1) {
+                    line++;
+                    char = 0;
+                    remaining--;
+                } else {
+                    break;
+                }
+            } else {
+                if (char > 0) {
+                    char = Math.max(char - remaining, 0);
+                    remaining = 0;
+                } else if (line > 0) {
+                    line--;
+                    char = Math.max(lineLength(line) - 1, 0);
+                    remaining--;
+                } else {
+                    break;
+                }
+            }
+        }
+        setNormalCursor(line, char);
     }
 
     function moveToFirstLine() {
@@ -1978,12 +2388,20 @@
         }
 
         if (e.key === "ArrowLeft") {
-            setCursor(cursorLine, Math.max(cursorChar - 1, 0));
+            if (cursorChar > 0) {
+                setCursor(cursorLine, cursorChar - 1);
+            } else if (cursorLine > 0) {
+                setCursor(cursorLine - 1, lineLength(cursorLine - 1));
+            }
             return;
         }
 
         if (e.key === "ArrowRight") {
-            setCursor(cursorLine, Math.min(cursorChar + 1, lineLength(cursorLine)));
+            if (cursorChar < lineLength(cursorLine)) {
+                setCursor(cursorLine, cursorChar + 1);
+            } else if (cursorLine < totalLines - 1) {
+                setCursor(cursorLine + 1, 0);
+            }
             return;
         }
 
@@ -2281,12 +2699,12 @@
             case "h":
             case "ArrowLeft":
                 e.preventDefault();
-                moveHorizontal(-count);
+                moveHorizontalWrap(-count);
                 break;
             case "l":
             case "ArrowRight":
                 e.preventDefault();
-                moveHorizontal(count);
+                moveHorizontalWrap(count);
                 break;
             case "j":
             case "ArrowDown":
@@ -2742,6 +3160,8 @@
         chunkRenderer.clear();
         // Phase 5: discard stale metrics (font may change between files)
         metricsCache.invalidateAll();
+        // Soft wrap: recompute for new file
+        wrapLayoutDirty = true;
         // Phase 3 bridge: close previous document (no-op if not open)
         void docBridge.close();
         // Diff: reset all diff state for the new file (keeps onDiffReady callbacks)
@@ -2878,6 +3298,7 @@
         });
 
         const resizeObserver = new ResizeObserver(() => {
+            wrapLayoutDirty = true;
             queueRedraw();
         });
 
@@ -3060,7 +3481,7 @@
         >
             <div
                 class="pointer-events-none w-full"
-                style="height: {totalLines * editorLineHeight}px"
+                style="height: {(softWrapEnabled ? visualRowCount : totalLines) * editorLineHeight}px"
             ></div>
         </div>
     </div>

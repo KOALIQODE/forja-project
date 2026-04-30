@@ -20,11 +20,15 @@
   import { closeDialog } from "../../stores/dialogStore";
   import {
     loadedPlugins,
+    knownPlugins,
+    disabledPluginNames,
     activeTheme,
     pluginLoading,
     refreshPlugins,
     activateThemeByName,
     unloadPlugin,
+    disablePlugin,
+    enablePlugin,
   } from "../../stores/pluginStore";
   import { clearTheme } from "../../utils/themeEngine";
   import { pluginUnload, pluginLoadFromPath } from "../../utils/pluginClient";
@@ -58,10 +62,11 @@
   let togglingPlugin = $state<string | null>(null);
 
   // Reactive from stores
-  let plugins = $derived($loadedPlugins.filter(p => p.kind === "plugin"));
+  let plugins = $derived($knownPlugins.filter(p => p.kind === "plugin"));
   let themes  = $derived($loadedPlugins.filter(p => p.kind === "theme"));
   let currentTheme = $derived($activeTheme);
   let isPluginsLoading = $derived($pluginLoading);
+  let disabled = $derived($disabledPluginNames);
 
   let filteredPlugins = $derived(
     plugins.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -135,10 +140,13 @@
   async function togglePlugin(plugin: PluginInfo) {
     togglingPlugin = plugin.name;
     try {
-      await pluginUnload(plugin.name);
-      await refreshPlugins();
+      if (disabled.has(plugin.name)) {
+        await enablePlugin(plugin);
+      } else {
+        await disablePlugin(plugin.name);
+      }
     } catch (e) {
-      console.error('disable plugin:', e);
+      console.error('toggle plugin:', e);
     } finally {
       togglingPlugin = null;
     }
@@ -243,7 +251,7 @@
     <!-- Tabs -->
     <div class="flex gap-1 border-b border-white/5 bg-white/[0.015] px-8 pt-3">
       {#each [
-        { id: 'plugins', label: 'Plugins', icon: Puzzle, count: plugins.length },
+        { id: 'plugins', label: 'Plugins', icon: Puzzle, count: plugins.filter(p => !disabled.has(p.name)).length },
         { id: 'themes',  label: 'Themes',  icon: Palette, count: themes.length },
         { id: 'lsp',     label: 'Language Servers', icon: Server, count: servers.filter(s => s.installed).length },
       ] as tab}
@@ -283,15 +291,19 @@
           </p>
           <div class="flex flex-col gap-3">
             {#each filteredPlugins as plugin (plugin.name)}
-              <div class="group flex items-start justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:border-white/10 hover:bg-white/[0.04]">
+              {@const isDisabled = disabled.has(plugin.name)}
+              <div class="group flex items-start justify-between gap-4 rounded-xl border p-5 transition-all {isDisabled ? 'border-white/5 bg-white/[0.01] opacity-60' : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'}">
                 <div class="flex min-w-0 items-start gap-4">
-                  <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/40 text-violet-400/50">
+                  <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/40 {isDisabled ? 'text-white/20' : 'text-violet-400/50'}">
                     <Puzzle size={20} />
                   </div>
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
-                      <h3 class="text-sm font-medium text-white">{plugin.name}</h3>
+                      <h3 class="text-sm font-medium {isDisabled ? 'text-white/40' : 'text-white'}">{plugin.name}</h3>
                       <span class="text-[9px] text-white/20">v{plugin.version}</span>
+                      {#if isDisabled}
+                        <span class="rounded-full bg-white/5 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/25">Disabled</span>
+                      {/if}
                     </div>
                     <div class="mt-1.5 flex flex-wrap gap-1">
                       {#each plugin.permissions as perm}
@@ -305,10 +317,19 @@
                     {/if}
                   </div>
                 </div>
-                <!-- Disable button -->
+                <!-- Enable / Disable toggle -->
                 <div class="mt-1 shrink-0">
                   {#if togglingPlugin === plugin.name}
                     <Loader2 size={16} class="animate-spin text-violet-500" />
+                  {:else if isDisabled}
+                    <button
+                      onclick={() => togglePlugin(plugin)}
+                      class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/30 transition-all hover:bg-emerald-500/20 hover:text-emerald-400"
+                      title="Enable plugin"
+                    >
+                      <Power size={12} />
+                      Enable
+                    </button>
                   {:else}
                     <button
                       onclick={() => togglePlugin(plugin)}
@@ -508,7 +529,8 @@
         {/if}
       </div>
       {#if activeTab === "plugins"}
-        <span>{plugins.length} plugin{plugins.length !== 1 ? 's' : ''} active</span>
+        {@const activeCount = plugins.filter(p => !disabled.has(p.name)).length}
+        <span>{activeCount} active · {plugins.length - activeCount} disabled</span>
       {:else if activeTab === "themes"}
         <span>{themes.length} theme{themes.length !== 1 ? 's' : ''} · {currentTheme ? currentTheme.name : 'none'} active</span>
       {:else}

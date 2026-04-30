@@ -6,6 +6,7 @@ import {
     pluginUnload,
     pluginGetThemes,
     pluginScanUserPlugins,
+    pluginLoadFromPath,
     type PluginInfo,
     type ThemeDefinition,
     type BracketRange,
@@ -15,12 +16,41 @@ import { applyTheme } from "$lib/utils/themeEngine";
 // ── Core writable stores ──────────────────────────────────────────────────────
 
 export const loadedPlugins = writable<PluginInfo[]>([]);
+/** All plugins/themes ever discovered (loaded + disabled). Preserved across disable/enable. */
+export const knownPlugins  = writable<PluginInfo[]>([]);
 export const activeTheme   = writable<ThemeDefinition | null>(null);
 export const bracketRanges = writable<BracketRange[]>([]);
 export const pluginLoading = writable(false);
 export const pluginError   = writable<string | null>(null);
 /** Becomes true once initPlugins() has fully completed (used to trigger bracket colorizer). */
 export const pluginsReady  = writable(false);
+/** Increments each time a plugin is loaded or unloaded at runtime — EditorBuffer uses this to re-run bracket analysis. */
+export const pluginActivityVersion = writable(0);
+
+// ── Disabled plugin names (persisted in localStorage) ────────────────────────
+
+const DISABLED_KEY = "forja:disabledPlugins";
+const DEFAULT_DISABLED = ["bracket-pair-colorizer"];
+
+function loadDisabledSet(): Set<string> {
+    try {
+        const saved = localStorage.getItem(DISABLED_KEY);
+        if (saved === null) {
+            // First run — disable bracket-pair-colorizer by default
+            localStorage.setItem(DISABLED_KEY, JSON.stringify(DEFAULT_DISABLED));
+            return new Set(DEFAULT_DISABLED);
+        }
+        return new Set(JSON.parse(saved) as string[]);
+    } catch {
+        return new Set(DEFAULT_DISABLED);
+    }
+}
+
+function saveDisabledSet(set: Set<string>): void {
+    localStorage.setItem(DISABLED_KEY, JSON.stringify([...set]));
+}
+
+export const disabledPluginNames = writable<Set<string>>(new Set());
 
 // ── Derived stores ────────────────────────────────────────────────────────────
 
@@ -37,6 +67,11 @@ export async function initPlugins(): Promise<void> {
     pluginsReady.set(false);
     pluginLoading.set(true);
     pluginError.set(null);
+
+    // Load disabled set from localStorage (first run defaults to bracket-pair-colorizer off)
+    const disabled = loadDisabledSet();
+    disabledPluginNames.set(disabled);
+
     try {
         const builtins = await pluginLoadBuiltins();
         console.log("[plugins] builtins loaded:", builtins);
@@ -44,11 +79,20 @@ export async function initPlugins(): Promise<void> {
         const userPlugins = await pluginScanUserPlugins();
         console.log("[plugins] user plugins scanned:", userPlugins);
 
+        // Capture full list BEFORE unloading disabled ones, so knownPlugins always has all info
+        const allLoaded = await pluginList();
+        knownPlugins.set(allLoaded);
+        loadedPlugins.set(allLoaded);
+
+        // Unload any plugins the user has previously disabled
+        for (const name of disabled) {
+            try { await pluginUnload(name); } catch { /* not loaded = already fine */ }
+        }
+
         await refreshPlugins();
         const list = get(loadedPlugins);
         console.log("[plugins] all loaded plugins:", list.map(p => `${p.name} (${p.kind})`));
 
-        // Only apply theme if user explicitly activated one before
         await applyFirstTheme();
         const theme = get(activeTheme);
         console.log("[plugins] active theme:", theme?.name ?? "none");
@@ -57,7 +101,6 @@ export async function initPlugins(): Promise<void> {
         pluginError.set(String(e));
     } finally {
         pluginLoading.set(false);
-        // Signal that plugins are fully ready — EditorBuffer listens to this
         pluginsReady.set(true);
     }
 }
@@ -69,6 +112,12 @@ export async function installPlugin(manifestSrc: string, mainSrc: string): Promi
     try {
         const name = await pluginLoad(manifestSrc, mainSrc);
         await refreshPlugins();
+        // Merge into knownPlugins if new
+        knownPlugins.update(known => {
+            const loaded = get(loadedPlugins);
+            const names = new Set(known.map(p => p.name));
+            return [...known, ...loaded.filter(p => !names.has(p.name))];
+        });
         return name;
     } catch (e) {
         pluginError.set(String(e));
@@ -76,6 +125,43 @@ export async function installPlugin(manifestSrc: string, mainSrc: string): Promi
     } finally {
         pluginLoading.set(false);
     }
+}
+
+/** Disable a plugin: unload it, persist to disabled set, clear bracket colors if needed. */
+export async function disablePlugin(name: string): Promise<void> {
+    await pluginUnload(name);
+    await refreshPlugins();
+    bracketRanges.set([]);
+    pluginActivityVersion.update(v => v + 1);
+    disabledPluginNames.update(set => {
+        const next = new Set(set);
+        next.add(name);
+        saveDisabledSet(next);
+        return next;
+    });
+    if (get(activeTheme)?.name === name) activeTheme.set(null);
+}
+
+/** Enable a plugin: remove from disabled set, reload it. */
+export async function enablePlugin(plugin: PluginInfo): Promise<void> {
+    try {
+        if (plugin.dir_path) {
+            await pluginLoadFromPath(plugin.dir_path);
+        } else {
+            // Builtin — reload all builtins; backend skips already-loaded ones
+            await pluginLoadBuiltins();
+        }
+    } catch (e) {
+        console.error("[plugins] enablePlugin error:", e);
+    }
+    await refreshPlugins();
+    pluginActivityVersion.update(v => v + 1);
+    disabledPluginNames.update(set => {
+        const next = new Set(set);
+        next.delete(plugin.name);
+        saveDisabledSet(next);
+        return next;
+    });
 }
 
 /** Unload a plugin by name. */
@@ -87,7 +173,13 @@ export async function unloadPlugin(name: string): Promise<void> {
 
 /** Refresh plugin list from backend. */
 export async function refreshPlugins(): Promise<void> {
-    loadedPlugins.set(await pluginList());
+    const list = await pluginList();
+    loadedPlugins.set(list);
+    // Merge any newly discovered plugins into knownPlugins
+    knownPlugins.update(known => {
+        const names = new Set(known.map(p => p.name));
+        return [...known, ...list.filter(p => !names.has(p.name))];
+    });
 }
 
 /** Apply theme only if user previously activated one (reads localStorage preference).

@@ -61,6 +61,7 @@ export interface BufferPreferences {
   vimModeEnabled: boolean;
   showLineNumbers: boolean;
   highlightActiveLine: boolean;
+  softWrapEnabled: boolean;
 }
 
 export const DEFAULT_PROGRAM_PREFERENCES: ProgramPreferences = {
@@ -77,6 +78,7 @@ export const DEFAULT_BUFFER_PREFERENCES: BufferPreferences = {
   vimModeEnabled: false,
   showLineNumbers: true,
   highlightActiveLine: true,
+  softWrapEnabled: true,
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -140,6 +142,10 @@ function sanitizeBufferPreferences(value: Partial<BufferPreferences>): BufferPre
       typeof value.highlightActiveLine === 'boolean'
         ? value.highlightActiveLine
         : DEFAULT_BUFFER_PREFERENCES.highlightActiveLine,
+    softWrapEnabled:
+      typeof value.softWrapEnabled === 'boolean'
+        ? value.softWrapEnabled
+        : DEFAULT_BUFFER_PREFERENCES.softWrapEnabled,
   };
 }
 
