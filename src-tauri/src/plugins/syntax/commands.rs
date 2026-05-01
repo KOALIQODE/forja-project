@@ -182,48 +182,87 @@ pub async fn highlight_syntax(
 }
 // ── Query helpers ─────────────────────────────────────────────────────────────
 
-fn official_query_url(lang: &str) -> String {
-    match lang {
-        "typescript" => "https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/master/typescript/queries/highlights.scm".to_string(),
-        "tsx"        => "https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/master/tsx/queries/highlights.scm".to_string(),
-        _ => format!("https://raw.githubusercontent.com/tree-sitter/tree-sitter-{}/master/queries/highlights.scm", lang),
-    }
+/// Build the raw-content URL for a language's highlight queries.
+/// Uses the actual GitHub repo from PARSER_REGISTRY instead of assuming tree-sitter/ org.
+fn query_url_for_branch(lang: &str, branch: &str) -> Option<String> {
+    use crate::parser::registry::PARSER_REGISTRY;
+    PARSER_REGISTRY.iter().find(|e| e.name == lang).map(|entry| {
+        format!(
+            "https://raw.githubusercontent.com/{}/{}/queries/highlights.scm",
+            entry.github_repo, branch
+        )
+    })
 }
 
-/// Download queries, preferring official tree-sitter repos (self-contained, no Lua predicates).
-/// Falls back to nvim-treesitter. Resolves `; inherits: X` by fetching parent queries.
+/// Download queries, preferring official tree-sitter repos.
+/// Resolves `; inherits: X` by fetching parent queries.
+/// TypeScript/TSX get JS base + TS-specific queries combined.
 async fn fetch_and_resolve_queries(client: &reqwest::Client, lang: &str) -> Result<String, String> {
-    // 1. Try official repo first
-    let raw = if let Ok(res) = client.get(&official_query_url(lang)).send().await {
-        if res.status().is_success() {
-            res.text().await.ok()
-        } else { None }
-    } else { None };
+    // TypeScript and TSX need JS base queries combined with TS-specific ones
+    if matches!(lang, "typescript" | "tsx") {
+        return fetch_typescript_queries(client, lang).await;
+    }
 
-    // 2. Fallback to nvim-treesitter
-    let raw = if let Some(r) = raw { r } else {
-        let nvim_url = format!(
-            "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries/{}/highlights.scm",
-            lang
-        );
-        match client.get(&nvim_url).send().await {
-            Ok(res) if res.status().is_success() => {
-                res.text().await.unwrap_or_default()
+    // Try master then main
+    for branch in &["master", "main"] {
+        if let Some(url) = query_url_for_branch(lang, branch) {
+            if let Ok(res) = client.get(&url).send().await {
+                if res.status().is_success() {
+                    if let Ok(text) = res.text().await {
+                        return Ok(resolve_query_inherits(client, &text).await);
+                    }
+                }
             }
-            _ => String::new(),
         }
-    };
+    }
 
-    // 3. Resolve "; inherits:" directives
-    Ok(resolve_query_inherits(client, &raw).await)
+    Ok(String::new())
+}
+
+/// Downloads combined JavaScript + TypeScript highlight queries.
+async fn fetch_typescript_queries(client: &reqwest::Client, lang: &str) -> Result<String, String> {
+    let mut combined = String::new();
+
+    for branch in &["master", "main"] {
+        if let Some(url) = query_url_for_branch("javascript", branch) {
+            if let Ok(res) = client.get(&url).send().await {
+                if res.status().is_success() {
+                    if let Ok(text) = res.text().await {
+                        combined.push_str(&format!("; === javascript base ===\n{}\n", text));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    use crate::parser::registry::PARSER_REGISTRY;
+    if let Some(entry) = PARSER_REGISTRY.iter().find(|e| e.name == "typescript") {
+        for branch in &["master", "main"] {
+            let url = format!(
+                "https://raw.githubusercontent.com/{}/{}/{}/queries/highlights.scm",
+                entry.github_repo, branch, lang
+            );
+            if let Ok(res) = client.get(&url).send().await {
+                if res.status().is_success() {
+                    if let Ok(text) = res.text().await {
+                        combined.push_str(&format!("; === {} specific ===\n{}\n", lang, text));
+                        return Ok(combined);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(combined)
 }
 
 async fn resolve_query_inherits(client: &reqwest::Client, src: &str) -> String {
     fn canon_lang(alias: &str) -> &str {
         match alias {
-            "ecma"              => "javascript",
+            "ecma"               => "javascript",
             "html_tags" | "html" => "html",
-            other               => other,
+            other                => other,
         }
     }
 
@@ -234,10 +273,15 @@ async fn resolve_query_inherits(client: &reqwest::Client, src: &str) -> String {
         if let Some(rest) = line.trim().strip_prefix("; inherits:") {
             for alias in rest.split(',').map(|s| s.trim()) {
                 let parent = canon_lang(alias);
-                if let Ok(res) = client.get(&official_query_url(parent)).send().await {
-                    if res.status().is_success() {
-                        if let Ok(text) = res.text().await {
-                            parent_blocks.push(text);
+                'branch: for branch in &["master", "main"] {
+                    if let Some(url) = query_url_for_branch(parent, branch) {
+                        if let Ok(res) = client.get(&url).send().await {
+                            if res.status().is_success() {
+                                if let Ok(text) = res.text().await {
+                                    parent_blocks.push(text);
+                                    break 'branch;
+                                }
+                            }
                         }
                     }
                 }

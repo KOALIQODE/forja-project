@@ -37,9 +37,11 @@ export interface Token {
 // ── Highlight name → TokenType mapping ───────────────────────────────────────
 
 const HIGHLIGHT_TO_TOKEN: Record<string, string> = {
+	// Base categories
 	keyword:     'Keyword',
 	function:    'Function',
 	method:      'Function',
+	constructor: 'Function',
 	type:        'Type',
 	class:       'Type',
 	string:      'String',
@@ -56,6 +58,10 @@ const HIGHLIGHT_TO_TOKEN: Record<string, string> = {
 	constant:    'Constant',
 	attribute:   'Attribute',
 	boolean:     'Boolean',
+	// Subcategory bases (dot-notation — matched via split('.')[0] below)
+	embedded:    'Unknown',
+	tag:         'Type',
+	namespace:   'Variable',
 };
 
 function highlightNameToTokenType(name: string): string {
@@ -232,13 +238,34 @@ export function spansToLineTokens(
 ): Map<number, Token[]> {
 	const result = new Map<number, Token[]>();
 
-	// Group single-line spans by line index
+	// Group spans by line. Multi-line spans (e.g. block comments) are split
+	// into per-line slices so every line gets its colour.
 	const byLine = new Map<number, TokenSpan[]>();
+
+	function addToLine(line: number, span: TokenSpan) {
+		if (line < startLine || line > endLine) return;
+		if (!byLine.has(line)) byLine.set(line, []);
+		byLine.get(line)!.push(span);
+	}
+
 	for (const span of spans) {
-		// Only include single-line spans (multi-line handled below)
-		if (span.start_line !== span.end_line) continue;
-		if (!byLine.has(span.start_line)) byLine.set(span.start_line, []);
-		byLine.get(span.start_line)!.push(span);
+		if (span.start_line === span.end_line) {
+			addToLine(span.start_line, span);
+		} else {
+			// Split multi-line span into one synthetic span per covered line
+			for (let li = span.start_line; li <= span.end_line; li++) {
+				const lineText = lineCache.get(li) ?? '';
+				const sc = li === span.start_line ? span.start_col : 0;
+				const ec = li === span.end_line ? span.end_col : lineText.length;
+				addToLine(li, {
+					...span,
+					start_line: li,
+					end_line: li,
+					start_col: sc,
+					end_col: ec,
+				});
+			}
+		}
 	}
 
 	for (let li = startLine; li <= endLine; li++) {
@@ -254,11 +281,12 @@ export function spansToLineTokens(
 		for (const span of lineSpans) {
 			const sc = Math.min(span.start_col, lineText.length);
 			const ec = Math.min(span.end_col, lineText.length);
+			if (ec <= pos) continue; // already covered by a prior span
 
 			if (sc > pos) {
 				tokens.push({ text: lineText.substring(pos, sc), token_type: 'Unknown' });
 			}
-			const text = lineText.substring(sc, ec);
+			const text = lineText.substring(Math.max(sc, pos), ec);
 			if (text) {
 				tokens.push({ text, token_type: highlightNameToTokenType(span.highlight_name) });
 			}

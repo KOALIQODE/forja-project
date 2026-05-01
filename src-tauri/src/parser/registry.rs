@@ -29,11 +29,11 @@ pub const PARSER_REGISTRY: &[ParserEntry] = &[
     ParserEntry { name: "bash",       github_repo: "tree-sitter/tree-sitter-bash",       has_prebuilt: false, requires_compilation: true },
     ParserEntry { name: "ruby",       github_repo: "tree-sitter/tree-sitter-ruby",       has_prebuilt: false, requires_compilation: true },
     ParserEntry { name: "php",        github_repo: "tree-sitter/tree-sitter-php",        has_prebuilt: false, requires_compilation: true },
-    ParserEntry { name: "markdown",   github_repo: "tree-sitter/tree-sitter-markdown",   has_prebuilt: false, requires_compilation: true },
+    ParserEntry { name: "markdown",   github_repo: "tree-sitter-grammars/tree-sitter-markdown", has_prebuilt: false, requires_compilation: true },
     // ── Community grammars ────────────────────────────────────────────────────
-    ParserEntry { name: "svelte",     github_repo: "tree-sitter-grammars/tree-sitter-svelte", has_prebuilt: false, requires_compilation: true },
+    ParserEntry { name: "svelte",     github_repo: "Himujjal/tree-sitter-svelte",           has_prebuilt: false, requires_compilation: true },
     ParserEntry { name: "vue",        github_repo: "ikatyang/tree-sitter-vue",               has_prebuilt: false, requires_compilation: true },
     ParserEntry { name: "toml",       github_repo: "ikatyang/tree-sitter-toml",               has_prebuilt: false, requires_compilation: true },
-    ParserEntry { name: "yaml",       github_repo: "ikatyang/tree-sitter-yaml",               has_prebuilt: false, requires_compilation: true },
+    ParserEntry { name: "yaml",       github_repo: "tree-sitter-grammars/tree-sitter-yaml",  has_prebuilt: false, requires_compilation: true },
     ParserEntry { name: "lua",        github_repo: "tree-sitter-grammars/tree-sitter-lua",    has_prebuilt: false, requires_compilation: true },
 ];

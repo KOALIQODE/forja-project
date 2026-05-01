@@ -111,6 +111,12 @@ impl ParserCompiler {
             eprintln!("⚠️  No queries/highlights.scm found in source for {}", parser_name);
         }
 
+        // ── Record which repo this binary was compiled from ───────────────────────
+        // Used by manager.rs to detect grammar repo changes and force recompilation.
+        let metadata_dir = self.cache_dir.join("metadata");
+        std::fs::create_dir_all(&metadata_dir).ok();
+        std::fs::write(metadata_dir.join(format!("{}.json", parser_name)), github_repo).ok();
+
         println!("✅ {parser_name} compiled → {}", final_path.display());
         Ok(final_path)
     }
@@ -216,9 +222,12 @@ impl ParserCompiler {
         args.push("-o".into());
         args.push(output.as_os_str().into());
 
-        // Hide all symbols except the tree_sitter_* entry points
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
-        args.push("-fvisibility=hidden".into());
+        // Note: intentionally NOT using -fvisibility=hidden here.
+        // Older tree-sitter grammars (pre-0.20 / no TS_PUBLIC macro) don't annotate
+        // their entry point with __attribute__((visibility("default"))), so hidden
+        // visibility would make tree_sitter_{lang} unreachable at runtime.
+        // The only symbol the loader needs is tree_sitter_{lang}; leaving it
+        // at default visibility costs nothing meaningful.
         #[cfg(target_os = "windows")]
         args.push("-DTREE_SITTER_HIDE_SYMBOLS".into());
 

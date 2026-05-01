@@ -104,22 +104,41 @@ impl ParserManager {
         };
 
         // ── Step 2: Resolve binary path ──────────────────────────────────────────
-        // If the binary is on disk but queries are missing, force a full recompile
-        // so we get the queries from the SAME source ZIP — guaranteeing they match.
+        // Force recompile when:
+        //   a) binary or queries are missing, OR
+        //   b) the registry now points to a different GitHub repo than what was compiled.
+        //      This prevents binary/query mismatches when grammars are updated in the registry.
+        let stored_repo = std::fs::read_to_string(self.cache_manager.metadata_path(parser_name))
+            .unwrap_or_default();
+        let repo_changed = stored_repo.trim() != entry.github_repo;
+
         let binary_path = if self.cache_manager.is_parser_installed(parser_name)
             && self.cache_manager.queries_path(parser_name).exists()
+            && !repo_changed
         {
-            // Both binary AND queries present — nothing to do
+            // Binary, queries, and grammar repo all match — nothing to do
             self.cache_manager.binary_path(parser_name)
         } else if let Some(p) = prebuilt_path {
-            p
+            if !repo_changed { p } else {
+                self.compiler.compile(parser_name, entry.github_repo).await?
+            }
         } else {
             // Compile from source; also extracts matching queries into the cache dir
             self.compiler.compile(parser_name, entry.github_repo).await?
         };
 
-        // Step 3: If queries are still missing (e.g. repo had no highlights.scm), download them
-        if !self.cache_manager.queries_path(parser_name).exists() {
+        // Step 3: download queries if:
+        //  a) file doesn't exist yet, OR
+        //  b) TypeScript/TSX — ZIP only has TS-specific subset; we must combine with JS, OR
+        //  c) The file still has an unresolved "; inherits:" directive (e.g. Svelte → HTML).
+        //     The compiler copies the raw ZIP queries which don't resolve inheritance.
+        let queries_path = self.cache_manager.queries_path(parser_name);
+        let needs_queries = !queries_path.exists()
+            || matches!(parser_name, "typescript" | "tsx")
+            || std::fs::read_to_string(&queries_path)
+                .map(|c| c.lines().any(|l| l.trim().starts_with("; inherits:")))
+                .unwrap_or(false);
+        if needs_queries {
             self.download_queries(parser_name).await?;
         }
 
@@ -139,50 +158,107 @@ impl ParserManager {
             .user_agent("Forja-Studio/1.0")
             .build()?;
 
-        // Prefer official tree-sitter repos — they are self-contained and match the WASM grammar
-        let official_url = self.official_query_url(parser_name);
-
-        if let Ok(res) = client.get(&official_url).send().await {
-            if res.status().is_success() {
-                let text = res.text().await?;
-                let resolved = self.resolve_inherits(&client, &text).await;
-                std::fs::write(&queries_path, &resolved)?;
-                println!("✅ Queries from official repo for {}", parser_name);
-                return Ok(());
-            }
+        // TypeScript and TSX use a grammar that extends JavaScript.
+        // The official TS highlights.scm only covers TS-specific nodes (35 lines);
+        // without the JavaScript base queries the vast majority of tokens
+        // (comments, strings, functions, numbers, operators…) go uncoloured.
+        // We always combine JS + TS queries for these two languages.
+        if matches!(parser_name, "typescript" | "tsx") {
+            return self.download_typescript_queries(&client, parser_name).await;
         }
 
-        // Fallback: nvim-treesitter (has Lua predicates + inherits, less ideal)
-        let nvim_url = format!(
-            "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries/{}/highlights.scm",
-            parser_name
-        );
-
-        if let Ok(res) = client.get(&nvim_url).send().await {
-            if res.status().is_success() {
-                let text = res.text().await?;
-                let resolved = self.resolve_inherits(&client, &text).await;
-                std::fs::write(&queries_path, &resolved)?;
-                println!("✅ Queries from nvim-treesitter for {}", parser_name);
-                return Ok(());
+        // Try master then main — official tree-sitter repos use master, some community
+        // repos use main.
+        for branch in &["master", "main"] {
+            let url = self.query_url_for_branch(parser_name, branch);
+            if let Ok(res) = client.get(&url).send().await {
+                if res.status().is_success() {
+                    let text = res.text().await?;
+                    let resolved = self.resolve_inherits(&client, &text).await;
+                    std::fs::write(&queries_path, &resolved)?;
+                    println!("✅ Queries downloaded for {} ({})", parser_name, branch);
+                    return Ok(());
+                }
             }
         }
 
         std::fs::write(&queries_path, "")?;
-        eprintln!("⚠️ Could not download queries for {}, using empty fallback", parser_name);
+        eprintln!("⚠️ No highlight queries found for {}, highlighting will be plain text", parser_name);
         Ok(())
     }
 
-    /// Returns the canonical URL for official tree-sitter queries.
-    /// TypeScript and TSX live in a subdirectory.
-    fn official_query_url(&self, parser_name: &str) -> String {
-        match parser_name {
-            "typescript" => "https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/master/typescript/queries/highlights.scm".to_string(),
-            "tsx" => "https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/master/tsx/queries/highlights.scm".to_string(),
-            _ => format!(
-                "https://raw.githubusercontent.com/tree-sitter/tree-sitter-{}/master/queries/highlights.scm",
-                parser_name
-            ),
+    /// Downloads combined JavaScript + TypeScript queries.
+    ///
+    /// The TypeScript tree-sitter grammar is a strict superset of JavaScript:
+    /// its AST contains all JavaScript node types (comment, string, function…)
+    /// plus TypeScript-specific ones (type_identifier, predefined_type…).
+    /// The official `typescript/queries/highlights.scm` only captures the
+    /// TS-specific additions, so we must prepend the full JavaScript queries
+    /// to get complete syntax highlighting.
+    async fn download_typescript_queries(
+        &self,
+        client: &reqwest::Client,
+        parser_name: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let queries_path = self.cache_manager.queries_path(parser_name);
+
+        let js_url = self.query_url_for_branch("javascript", "master");
+        let ts_url = self.query_url_for_branch(parser_name, "master");
+
+        let js_text: String = match client.get(js_url).send().await {
+            Ok(res) => res.text().await.unwrap_or_default(),
+            Err(_) => String::new(),
+        };
+
+        let ts_text: String = match client.get(&ts_url).send().await {
+            Ok(res) => res.text().await.unwrap_or_default(),
+            Err(_) => String::new(),
+        };
+
+        if js_text.is_empty() && ts_text.is_empty() {
+            std::fs::write(&queries_path, "")?;
+            eprintln!("⚠️ Could not download queries for {}", parser_name);
+            return Ok(());
+        }
+
+        let combined = format!(
+            "; === javascript base (inherited) ===\n{}\n\n; === typescript ===\n{}",
+            js_text.trim_end(),
+            ts_text.trim_end()
+        );
+        std::fs::write(&queries_path, &combined)?;
+        println!("✅ Combined JS + TS queries downloaded for {}", parser_name);
+        Ok(())
+    }
+
+    /// Builds the raw.githubusercontent.com URL for a language's highlight queries,
+    /// using the actual GitHub repo from PARSER_REGISTRY.
+    /// For alias names not in the registry (e.g. "javascript", "html"), falls back
+    /// to the canonical `tree-sitter/tree-sitter-{lang}` pattern.
+    fn query_url_for_branch(&self, parser_name: &str, branch: &str) -> String {
+        use crate::parser::registry::PARSER_REGISTRY;
+
+        let github_repo = PARSER_REGISTRY
+            .iter()
+            .find(|e| e.name == parser_name)
+            .map(|e| e.github_repo)
+            .unwrap_or_else(|| {
+                // For standard tree-sitter languages not in the user registry
+                // (e.g. "javascript" / "html" resolved from inherits directives)
+                // the canonical pattern applies.
+                ""  // handled below
+            });
+
+        if github_repo.is_empty() {
+            format!(
+                "https://raw.githubusercontent.com/tree-sitter/tree-sitter-{}/{}/queries/highlights.scm",
+                parser_name, branch
+            )
+        } else {
+            format!(
+                "https://raw.githubusercontent.com/{}/{}/queries/highlights.scm",
+                github_repo, branch
+            )
         }
     }
 
@@ -204,17 +280,9 @@ impl ParserManager {
         for line in src.lines() {
             let trimmed = line.trim();
             if let Some(rest) = trimmed.strip_prefix("; inherits:") {
-                // Download each inherited language's queries
                 for lang_alias in rest.split(',').map(|s| s.trim()) {
                     let lang = canonical(lang_alias);
-                    let url = match lang {
-                        "javascript" => "https://raw.githubusercontent.com/tree-sitter/tree-sitter-javascript/master/queries/highlights.scm".to_string(),
-                        "html" => "https://raw.githubusercontent.com/tree-sitter/tree-sitter-html/master/queries/highlights.scm".to_string(),
-                        _ => format!(
-                            "https://raw.githubusercontent.com/tree-sitter/tree-sitter-{}/master/queries/highlights.scm",
-                            lang
-                        ),
-                    };
+                    let url = self.query_url_for_branch(lang, "master");
 
                     if let Ok(res) = client.get(&url).send().await {
                         if res.status().is_success() {
