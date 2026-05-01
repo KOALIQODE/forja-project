@@ -17,6 +17,7 @@
         HunkPreviewEngine,
         DIFF_COLORS,
         type LineDiffResult,
+        type Hunk,
     } from "$lib/utils/diff";
     import {
         cursorPosition,
@@ -188,6 +189,8 @@
     let hunkPreviewVisible = $state(false);
     let hunkPreviewScreenX = $state(0);
     let hunkPreviewScreenY = $state(0);
+    // Reactive snapshot of hunks for the scrollbar mini-diff overlay.
+    let scrollbarHunks     = $state<readonly Hunk[]>([]);
 
     // State to track the currently loaded file path, to avoid redundant checks
     let currentFilePath = $state<string | null>(null);
@@ -1237,8 +1240,11 @@
             wrapLayoutDirty = true;
             // Phase 4: new lines loaded → mark chunk canvas as needing re-render
             chunkRenderer.markDirty(chunkId);
-            // Diff: this chunk's lines are now in lineCache — re-run diff for this range
-            diffScheduler.notifyEdit(lineCache, totalLines, start, end);
+            // Diff: update the line snapshot so the next real edit gets accurate data,
+            // but do NOT schedule a new diff here — chunk loading is not a user edit,
+            // and re-running diff on every scroll-triggered chunk load causes the
+            // overview-ruler markers to jump as unloaded lines shift from "baseline" to real.
+            diffScheduler.updateCurrentContent(lineCache, totalLines);
             queueRedraw();
     
         } catch (e) {
@@ -3243,6 +3249,7 @@
         diffScheduler.reset();
         viewportDiffCache.clear();
         hunkManager.clear();
+        scrollbarHunks = [];
         previewEngine.clearCache();
         hunkPreviewVisible = false;
     
@@ -3258,22 +3265,38 @@
             await refreshHighlightAvailability();
             void fetchBlame();
 
-            // Diff: tell scheduler about current line count before setting baseline,
-            // so initBaseline can immediately schedule a full diff.
-            diffScheduler.updateCurrentContent(lineCache, totalLines);
+            // Fetch git HEAD and full file content in parallel so that when
+            // initBaseline schedules its forced diff, lineCache is already
+            // populated with the real file content → accurate overview ruler
+            // markers from the very first diff instead of an empty/partial result.
+            const repoPath = path.substring(0, path.lastIndexOf('/'));
+            const [headResult, contentResult] = await Promise.allSettled([
+                invoke<string>('get_file_head_content', { repoPath, filePath: path }),
+                invoke<string>('read_file', { path }),
+            ]);
 
-            // Diff: init baseline from git HEAD content (or empty if not in a repo)
-            try {
-                const repoPath    = path.substring(0, path.lastIndexOf('/'));
-                const headContent = await invoke<string>('get_file_head_content', {
-                    repoPath,
-                    filePath: path,
+            // Pre-populate lineCache so the first diff sees the full file.
+            if (contentResult.status === 'fulfilled') {
+                const normalised = contentResult.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                savedContent = normalised;
+                isDirty = false;
+                lspVersion = 1;
+                void lspOpenDocument(language, path, contentResult.value);
+                const allLines = normalised.split('\n');
+                allLines.forEach((line, i) => {
+                    if (!lineCache.has(i)) lineCache.set(i, line);
                 });
-                diffScheduler.initBaseline(headContent, path);
-            } catch {
-                // New file or not tracked by git — empty baseline → all lines "added"
-                diffScheduler.initBaseline('', path);
+            } else {
+                console.warn('[LSP] Could not open document:', contentResult.reason);
             }
+
+            // Diff: update scheduler snapshot and init baseline.
+            // Because lineCache is fully populated above, the forced diff that
+            // initBaseline schedules will produce accurate hunk data for the
+            // entire file — no more "markers change while scrolling" artefact.
+            diffScheduler.updateCurrentContent(lineCache, totalLines);
+            const headContent = headResult.status === 'fulfilled' ? headResult.value : '';
+            diffScheduler.initBaseline(headContent, path);
 
             // Phase 3 bridge: open backend document for AST-based highlighting
             const firstChunkLines: string[] = [];
@@ -3281,18 +3304,6 @@
                 firstChunkLines.push(lineCache.get(i) ?? '');
             }
             void docBridge.open(path, firstChunkLines.join('\n'), language);
-
-            // LSP: open document for language-server diagnostics
-            try {
-                const fullContent = await invoke<string>('read_file', { path });
-                // Normalise line endings so savedContent matches what saveFile writes.
-                savedContent = fullContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-                isDirty = false;
-                lspVersion = 1;
-                void lspOpenDocument(language, path, fullContent);
-            } catch (e) {
-                console.warn('[LSP] Could not open document:', e);
-            }
 
             const visibleLines = Math.ceil(scrollContainer?.clientHeight ?? 600 / editorLineHeight);
             const chunksNeeded = Math.ceil((visibleLines * 3) / CHUNK_SIZE);
@@ -3372,6 +3383,7 @@
                 viewportDiffCache.update(result, startLine, endLine);
             }
             hunkManager.update(result, diffScheduler.baselineManager.getLines());
+            scrollbarHunks = hunkManager.getHunks();
             queueRedraw();
         });
 
@@ -3562,6 +3574,41 @@
                 style="height: {(softWrapEnabled ? visualRowCount : totalLines) * editorLineHeight}px"
             ></div>
         </div>
+
+        <!-- Diff markers overlay on vertical scrollbar track -->
+        <div class="scrollbar-diff-overlay" aria-hidden="true">
+            <!--
+                Render non-deleted hunks first, deleted last.
+                Deleted hunks (red) share the same topPct as their paired
+                added/modified hunk → deleted must be on top so it is visible.
+            -->
+            {#each [false, true] as renderDeleted}
+                {#each scrollbarHunks as hunk, i (renderDeleted ? `d${i}` : `a${i}`)}
+                    {#if (hunk.status === 'deleted') === renderDeleted}
+                        {@const anchorLine = hunk.status === 'deleted' ? hunk.afterLine + 1 : hunk.newStart}
+                        {@const spanLines  = hunk.status === 'deleted' ? 1 : (hunk.newEnd - hunk.newStart)}
+                        {@const topPct     = (anchorLine / totalLines) * 100}
+                        {@const heightPct  = Math.max(spanLines / totalLines * 100, 0.4)}
+                        {@const color      = DIFF_COLORS[hunk.status]}
+                        <div
+                            class="scrollbar-diff-mark"
+                            style="top:{topPct}%;height:{heightPct}%;background:{color};"
+                            role="button"
+                            tabindex="-1"
+                            aria-label="Jump to {hunk.status} hunk"
+                            onpointerdown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (scrollContainer) {
+                                    const targetY = anchorLine * editorLineHeight - scrollContainer.clientHeight / 2;
+                                    scrollContainer.scrollTop = Math.max(0, targetY);
+                                }
+                            }}
+                        ></div>
+                    {/if}
+                {/each}
+            {/each}
+        </div>
     </div>
 
     {#if vimMode === "command"}
@@ -3601,6 +3648,40 @@
     }
     .custom-scrollbar:hover::-webkit-scrollbar-thumb {
         background: #252525;
+    }
+
+    /* ── Scrollbar diff markers overlay ─────────────────────────────────────── */
+    /*
+     * z-index 11: just above the scrollContainer (z-index 10) so markers render
+     * on the track, but below the native scrollbar thumb which the browser always
+     * paints last inside its own stacking context.
+     * pointer-events: none on the container → only the marks themselves are interactive.
+     */
+    .scrollbar-diff-overlay {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 12px;
+        height: 100%;
+        pointer-events: none;
+        z-index: 11;
+        background: #0d0d0d;
+    }
+    .scrollbar-diff-mark {
+        position: absolute;
+        left: 1px;
+        right: 1px;
+        min-height: 2px;
+        border-radius: 2px;
+        opacity: 0.9;
+        pointer-events: auto;
+        cursor: pointer;
+        transition: none;
+    }
+    .scrollbar-diff-mark:hover {
+        opacity: 1;
+        left: 0;
+        right: 0;
     }
 
     /* ── Diff hunk preview popup ─────────────────────────────────────────────── */

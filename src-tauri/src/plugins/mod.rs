@@ -6,3 +6,4 @@ pub mod explorer;
 pub mod git;
 pub mod lsp;
 pub mod syntax;
+pub mod parser_manager;

@@ -9,6 +9,8 @@ mod document;
 mod language;
 mod highlight;
 mod plugin_host;
+mod models;
+mod parser;
 
 use document::DocumentManager;
 use plugins::lsp::LspClientManager;
@@ -24,6 +26,8 @@ pub fn run() {
             app.manage(Mutex::new(LspClientManager::new()));
             // Register PluginHost as Tauri-managed state
             app.manage(Mutex::new(PluginHost::new()));
+            // Register ParserManager as Tauri-managed state
+            app.manage(Mutex::new(crate::parser::manager::ParserManager::new().expect("Failed to init ParserManager")));
 
             let window = app.get_webview_window("main").unwrap();
 
@@ -77,6 +81,7 @@ pub fn run() {
             plugins::syntax::is_native_language,
             plugins::syntax::get_code_breadcrumb,
             plugins::syntax::highlight_syntax,
+            plugins::syntax::repair_parser_queries,
             // Document (Phase 1-3: stateful document management + highlight pipeline)
             plugins::document::open_document,
             plugins::document::apply_text_edit,
@@ -109,6 +114,13 @@ pub fn run() {
             plugin_host::plugin_install_from_registry,
             plugin_host::plugin_install_from_url,
             plugin_host::plugin_registry_info,
+            // Parser Manager
+            plugins::parser_manager::pm_list_parsers,
+            plugins::parser_manager::pm_get_parser_status,
+            plugins::parser_manager::pm_download_parser,
+            plugins::parser_manager::pm_download_or_compile_parser,
+            plugins::parser_manager::pm_repair_queries,
+            plugins::parser_manager::pm_repair_all_queries,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

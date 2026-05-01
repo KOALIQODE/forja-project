@@ -1,7 +1,5 @@
-use crate::shared::dynamic_parser::REGISTRY;
-use crate::shared::native_languages::get_native_language;
 use anyhow::{Context, Result};
-use tree_sitter::{Node, Parser, Point, WasmStore};
+use tree_sitter::{Node, Parser, Point};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CodeBreadcrumb {
@@ -34,50 +32,26 @@ impl CodeAnalyzer {
         line: usize,
         column: usize,
     ) -> Result<CodeBreadcrumb> {
-        let mut parser = Parser::new();
+        let cache = crate::parser::cache::CacheManager::new()
+            .map_err(|e| anyhow::anyhow!("CacheManager: {}", e))?;
+        let binary_path = cache.binary_path(language_name);
 
-        // Native-first: use compiled-in parser when available (no WASM I/O)
-        if let Some(lang) = get_native_language(language_name) {
-            parser.set_language(&lang).context("Failed to set native language")?;
-
-            let tree = parser
-                .parse(content, None)
-                .context("Native parser returned no tree")?;
-
-            let target_pos = Point { row: line, column };
-            let mut items = Vec::new();
-            collect_breadcrumbs(tree.root_node(), None, None, content, target_pos, &mut items);
-
-            return Ok(CodeBreadcrumb { items, line, column });
-        }
-
-        // WASM fallback for community languages
-        let wasm_path = REGISTRY.get_parser_lib_path(language_name);
-        if !wasm_path.exists() {
+        if !binary_path.exists() {
             anyhow::bail!(
-                "Parser for '{}' not installed. Call install_parser first.",
+                "Parser '{}' not installed — install via Grammar Hub.",
                 language_name
             );
         }
 
-        let wasm_bytes = std::fs::read(&wasm_path)
-            .with_context(|| format!("Failed to read wasm at {:?}", wasm_path))?;
+        let mut loader = crate::parser::loader::ParserLoader::new();
+        let lang = loader
+            .get_language(language_name, &binary_path)
+            .map_err(|e| anyhow::anyhow!("load '{}': {}", language_name, e))?;
 
-        // WasmStore y Parser viven juntos en este scope
-        let mut store = WasmStore::new(&REGISTRY.wasm_engine)
-            .context("Failed to create WasmStore")?;
+        let mut parser = Parser::new();
+        parser.set_language(&lang).context("set language")?;
 
-        let lang = store
-            .load_language(language_name, &wasm_bytes)
-            .with_context(|| format!("Failed to load language '{}'", language_name))?;
-
-        // store se pasa al parser — ambos viven en este frame
-        parser.set_wasm_store(store).context("Failed to set wasm store")?;
-        parser.set_language(&lang).context("Failed to set language")?;
-
-        let tree = parser
-            .parse(content, None)
-            .context("Failed to parse — parser may not have a language set")?;
+        let tree = parser.parse(content, None).context("parser returned no tree")?;
 
         let target_pos = Point { row: line, column };
         let mut items = Vec::new();

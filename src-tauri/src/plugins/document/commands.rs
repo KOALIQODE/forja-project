@@ -11,7 +11,7 @@
 
 use std::sync::Mutex;
 use tauri::State;
-use tree_sitter::{Query, WasmStore};
+use tree_sitter::Query;
 
 use crate::document::DocumentManager;
 use crate::highlight::{get_highlight_tokens, TokenSpan};
@@ -92,32 +92,29 @@ pub fn close_document(
 
 // ── Internal helper ───────────────────────────────────────────────────────────
 
-/// Tries to load the WASM language and compile its highlight query.
-/// Returns (None, None) if the parser is not installed — the document will
-/// still open but without syntax tree or highlighting.
+/// Tries to load the native language and compile its highlight query.
+/// Returns (None, None) if the parser is not installed.
 fn load_language_and_query(language: &str) -> (Option<tree_sitter::Language>, Option<Query>) {
-    let wasm_path = REGISTRY.get_parser_lib_path(language);
-    if !wasm_path.exists() {
+    use crate::parser::cache::CacheManager;
+    use crate::parser::loader::ParserLoader;
+
+    let cache = match CacheManager::new() {
+        Ok(c) => c,
+        Err(_) => return (None, None),
+    };
+
+    let bin_path = cache.binary_path(language);
+    if !bin_path.exists() {
         return (None, None);
     }
 
-    let wasm_bytes = match std::fs::read(&wasm_path) {
-        Ok(b) => b,
-        Err(_) => return (None, None),
-    };
-
-    let mut store = match WasmStore::new(&REGISTRY.wasm_engine) {
-        Ok(s) => s,
-        Err(_) => return (None, None),
-    };
-
-    let lang = match store.load_language(language, &wasm_bytes) {
+    let mut loader = ParserLoader::new();
+    let lang = match unsafe { loader.load_language(language, &bin_path) } {
         Ok(l) => l,
         Err(_) => return (None, None),
     };
 
-    // Compile the highlight query from the installed .scm file
-    let queries_path = REGISTRY.get_queries_path(language);
+    let queries_path = cache.queries_path(language);
     let query_opt = if queries_path.exists() {
         std::fs::read_to_string(&queries_path)
             .ok()

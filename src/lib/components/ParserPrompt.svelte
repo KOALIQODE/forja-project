@@ -55,7 +55,7 @@
         installProgress = 100;
       });
 
-      await invoke('install_parser', { language });
+      await invoke('pm_download_or_compile_parser', { parserName: language });
 
       installMessage = 'Ready';
       installProgress = 100;
@@ -89,7 +89,7 @@
 
   async function checkParser(language: string) {
     try {
-      const parsers = await invoke<ParserMetadata[]>('list_parsers');
+      const parsers = await invoke<{ language: string; installed: boolean }[]>('pm_list_parsers');
       const parser = parsers.find(p => p.language === language);
       
       if (parser) {

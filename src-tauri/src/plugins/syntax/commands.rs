@@ -49,9 +49,9 @@ pub async fn install_parser(app: tauri::AppHandle, language: String) -> Result<S
 
     let _ = app.emit("parser-download-start", &language);
 
-    let data_dir = app.path().app_data_dir()
-        .map_err(|e| ParserError::AppDataDirError(format!("Could not determine app data directory: {}", e)))?
-        .join("parsers");
+    // Use REGISTRY.parsers_dir so WASM files land in the same place
+    // the highlighter and is_language_installed() will look for them.
+    let data_dir = REGISTRY.parsers_dir.clone();
 
     let lang_dir = data_dir.join(&language);
     std::fs::create_dir_all(&lang_dir)
@@ -96,28 +96,13 @@ pub async fn install_parser(app: tauri::AppHandle, language: String) -> Result<S
             .map_err(|e| ParserError::WriteFileError(e.to_string()))?;
     }
 
-    // 2. Descargar queries (.scm)
+    // 2. Descargar queries (.scm) — repos oficiales primero (sin herencias ni predicados Lua)
     if !queries_path.exists() {
         let _ = app.emit("parser-status", (&language, "Fetching queries..."));
-        let scm_url = format!("https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries/{}/highlights.scm", language);
-        
-        let scm_res = client.get(&scm_url).send().await;
-        match scm_res {
-            Ok(res) if res.status().is_success() => {
-                let scm_text = res.text().await.map_err(|e| ParserError::DownloadError(e.to_string()))?;
-                std::fs::write(&queries_path, scm_text).map_err(|e| ParserError::WriteFileError(e.to_string()))?;
-            }
-            _ => {
-                // Si falla nvim-treesitter, intentamos el repo oficial
-                let alt_scm_url = format!("https://raw.githubusercontent.com/tree-sitter/tree-sitter-{}/master/queries/highlights.scm", language);
-                if let Ok(res) = client.get(&alt_scm_url).send().await {
-                    if res.status().is_success() {
-                        let scm_text = res.text().await.map_err(|e| ParserError::DownloadError(e.to_string()))?;
-                        std::fs::write(&queries_path, scm_text).map_err(|e| ParserError::WriteFileError(e.to_string()))?;
-                    }
-                }
-            }
-        }
+        let resolved = fetch_and_resolve_queries(&client, &language).await
+            .map_err(|e| ParserError::DownloadError(e.to_string()))?;
+        std::fs::write(&queries_path, resolved)
+            .map_err(|e| ParserError::WriteFileError(e.to_string()))?;
     }
 
     REGISTRY.enabled_languages.write().insert(language.clone());
@@ -133,8 +118,8 @@ pub async fn install_parser(app: tauri::AppHandle, language: String) -> Result<S
 }
 
 #[tauri::command]
-pub async fn is_native_language(language: String) -> bool {
-    crate::shared::native_languages::is_native(&language)
+pub async fn is_native_language(_language: String) -> bool {
+    false
 }
 
 #[tauri::command]
@@ -194,4 +179,110 @@ pub async fn highlight_syntax(
         .map_err(|e: anyhow::Error| e.to_string())?
         .highlight(&content, &language)
         .map_err(|e: anyhow::Error| e.to_string())
+}
+// ── Query helpers ─────────────────────────────────────────────────────────────
+
+fn official_query_url(lang: &str) -> String {
+    match lang {
+        "typescript" => "https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/master/typescript/queries/highlights.scm".to_string(),
+        "tsx"        => "https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/master/tsx/queries/highlights.scm".to_string(),
+        _ => format!("https://raw.githubusercontent.com/tree-sitter/tree-sitter-{}/master/queries/highlights.scm", lang),
+    }
+}
+
+/// Download queries, preferring official tree-sitter repos (self-contained, no Lua predicates).
+/// Falls back to nvim-treesitter. Resolves `; inherits: X` by fetching parent queries.
+async fn fetch_and_resolve_queries(client: &reqwest::Client, lang: &str) -> Result<String, String> {
+    // 1. Try official repo first
+    let raw = if let Ok(res) = client.get(&official_query_url(lang)).send().await {
+        if res.status().is_success() {
+            res.text().await.ok()
+        } else { None }
+    } else { None };
+
+    // 2. Fallback to nvim-treesitter
+    let raw = if let Some(r) = raw { r } else {
+        let nvim_url = format!(
+            "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries/{}/highlights.scm",
+            lang
+        );
+        match client.get(&nvim_url).send().await {
+            Ok(res) if res.status().is_success() => {
+                res.text().await.unwrap_or_default()
+            }
+            _ => String::new(),
+        }
+    };
+
+    // 3. Resolve "; inherits:" directives
+    Ok(resolve_query_inherits(client, &raw).await)
+}
+
+async fn resolve_query_inherits(client: &reqwest::Client, src: &str) -> String {
+    fn canon_lang(alias: &str) -> &str {
+        match alias {
+            "ecma"              => "javascript",
+            "html_tags" | "html" => "html",
+            other               => other,
+        }
+    }
+
+    let mut parent_blocks: Vec<String> = Vec::new();
+    let mut own_lines: Vec<&str> = Vec::new();
+
+    for line in src.lines() {
+        if let Some(rest) = line.trim().strip_prefix("; inherits:") {
+            for alias in rest.split(',').map(|s| s.trim()) {
+                let parent = canon_lang(alias);
+                if let Ok(res) = client.get(&official_query_url(parent)).send().await {
+                    if res.status().is_success() {
+                        if let Ok(text) = res.text().await {
+                            parent_blocks.push(text);
+                        }
+                    }
+                }
+            }
+        } else {
+            own_lines.push(line);
+        }
+    }
+
+    if parent_blocks.is_empty() {
+        return src.to_string();
+    }
+
+    let mut out = parent_blocks.join("\n");
+    out.push('\n');
+    out.push_str(&own_lines.join("\n"));
+    out
+}
+
+/// Re-download and resolve highlight queries for a language.
+/// Call this to fix broken/incompatible query files already on disk.
+#[tauri::command]
+pub async fn repair_parser_queries(app: tauri::AppHandle, language: String) -> Result<String, String> {
+    let queries_path = REGISTRY.get_queries_path(&language);
+
+    if queries_path.exists() {
+        std::fs::remove_file(&queries_path).map_err(|e| e.to_string())?;
+    }
+    if let Some(parent) = queries_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .user_agent("Forja-Studio/1.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let _ = app.emit("parser-status", (&language, "Repairing queries..."));
+
+    let resolved = fetch_and_resolve_queries(&client, &language).await?;
+    std::fs::write(&queries_path, &resolved).map_err(|e| e.to_string())?;
+
+    let _ = app.emit("parser-status", (&language, "Queries repaired"));
+    let _ = app.emit("parser-queries-repaired", &language);
+
+    Ok(format!("Queries repaired for '{}'", language))
 }

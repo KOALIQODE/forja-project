@@ -3,8 +3,7 @@ use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use tree_sitter::{Language, WasmStore};
-use tree_sitter::wasmtime::Engine;
+use tree_sitter::Language;
 
 lazy_static! {
     pub static ref REGISTRY: LanguageRegistry =
@@ -25,7 +24,6 @@ pub struct LanguageRegistry {
     pub parsers_dir: PathBuf,
     pub loaded_languages: RwLock<HashMap<String, Language>>,
     pub enabled_languages: RwLock<HashSet<String>>,
-    pub wasm_engine: Engine,
 }
 
 impl LanguageRegistry {
@@ -45,14 +43,11 @@ impl LanguageRegistry {
             HashSet::new()
         };
 
-        let wasm_engine = Engine::default();
-
         Ok(Self {
             config_dir,
             parsers_dir,
             loaded_languages: RwLock::new(HashMap::new()),
             enabled_languages: RwLock::new(enabled_languages),
-            wasm_engine,
         })
     }
 
@@ -78,46 +73,22 @@ impl LanguageRegistry {
     }
 
     pub fn get_metadata_list(&self) -> Vec<ParserMetadata> {
-        use crate::shared::native_languages::{is_native, NATIVE_LANGUAGES};
+        use crate::parser::registry::PARSER_REGISTRY;
+        use crate::parser::cache::CacheManager;
 
-        let mut list = Vec::new();
+        let cache = CacheManager::new().ok();
 
-        // ── Native languages (always installed, compiled into binary) ────────────
-        for (id, name) in NATIVE_LANGUAGES {
-            list.push(ParserMetadata {
-                name: name.to_string(),
-                language: id.to_string(),
-                installed: true,
-                is_native: true,
+        PARSER_REGISTRY.iter().map(|entry| {
+            let native_ready = cache.as_ref().map_or(false, |c| c.is_parser_ready(entry.name));
+            let wasm_ready = self.is_language_installed(entry.name);
+            ParserMetadata {
+                name: format!("tree-sitter-{}", entry.name),
+                language: entry.name.to_string(),
+                installed: native_ready || wasm_ready,
+                is_native: false,
                 size_mb: 0.0,
-            });
-        }
-
-        // ── Community languages (WASM — user must install) ───────────────────────
-        let community = [
-            ("svelte", "Svelte",  0.7),
-            ("cpp",    "C++",     0.8),
-            ("java",   "Java",    0.9),
-            ("ruby",   "Ruby",    0.6),
-            ("php",    "PHP",     0.7),
-            ("toml",   "TOML",    0.3),
-            ("yaml",   "YAML",    0.4),
-            ("bash",   "Bash",    0.4),
-            ("lua",    "Lua",     0.4),
-            ("c",      "C",       0.5),
-        ];
-        for (id, name, size) in community {
-            if !is_native(id) {
-                list.push(ParserMetadata {
-                    name: name.to_string(),
-                    language: id.to_string(),
-                    installed: self.is_language_installed(id),
-                    is_native: false,
-                    size_mb: size,
-                });
             }
-        }
-        list
+        }).collect()
     }
 
     pub fn load_language(&self, language: &str) -> Result<Language> {
@@ -126,28 +97,24 @@ impl LanguageRegistry {
             return Ok(lang.clone());
         }
 
-        // 2. Try loading from disk (Wasm)
-        let wasm_path = self.get_parser_lib_path(language);
-        if wasm_path.exists() {
-            let wasm_bytes = std::fs::read(&wasm_path)
-                .with_context(|| format!("Failed to read Wasm parser at {:?}", wasm_path))?;
-            
-            let mut store = WasmStore::new(&self.wasm_engine)?;
-            let lang = store.load_language(language, &wasm_bytes)
-                .with_context(|| format!("Failed to load Wasm language for {}", language))?;
-            
-            self.loaded_languages
-                .write()
-                .insert(language.to_string(), lang.clone());
-            
-            return Ok(lang);
+        // 2. Load from compiled native binary
+        use crate::parser::cache::CacheManager;
+        use crate::parser::loader::ParserLoader;
+
+        let cache = CacheManager::new()
+            .map_err(|e| anyhow::anyhow!("Failed to init CacheManager: {}", e))?;
+        let bin_path = cache.binary_path(language);
+
+        if !bin_path.exists() {
+            anyhow::bail!("Parser binary for '{}' not installed at {:?}", language, bin_path);
         }
 
-        anyhow::bail!(
-            "Parser Wasm library for {} not found at {:?}",
-            language,
-            wasm_path
-        );
+        let mut loader = ParserLoader::new();
+        let lang = unsafe { loader.load_language(language, &bin_path) }
+            .map_err(|e| anyhow::anyhow!("Failed to load native parser for '{}': {}", language, e))?;
+
+        self.loaded_languages.write().insert(language.to_string(), lang.clone());
+        Ok(lang)
     }
 
     // pub fn download_and_install(
