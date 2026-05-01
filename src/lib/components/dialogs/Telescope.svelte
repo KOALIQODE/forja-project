@@ -83,14 +83,23 @@
     }
   }
 
+  function escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   function highlightText(text: string, term: string) {
-    if (!term || mode === 'files') return text;
+    const safe = escapeHtml(text);
+    if (!term || mode === 'files') return safe;
     try {
-      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`(${escaped})`, 'gi');
-      return text.replace(regex, '<mark class="bg-emerald-500/20 text-emerald-400 rounded-sm px-0.5 border-b border-emerald-500/30">$1</mark>');
+      const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${escapedTerm})`, 'gi');
+      return safe.replace(regex, '<mark class="bg-emerald-500/20 text-emerald-400 rounded-sm px-0.5 border-b border-emerald-500/30">$1</mark>');
     } catch {
-      return text;
+      return safe;
     }
   }
 
