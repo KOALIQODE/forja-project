@@ -128,36 +128,59 @@ impl SyntaxHighlighter {
 
     /// Walk the AST to find embedded-language ranges.
     /// Returns (language_name, start_byte, end_byte) tuples.
-    /// Currently handles Svelte's <script> (JS) and <style> (CSS) blocks.
+    /// Handles:
+    ///   - Svelte: <script> (JS) and <style> (CSS) blocks
+    ///   - Markdown: `inline` nodes parsed by tree-sitter-markdown-inline
     fn find_injection_ranges(tree: &tree_sitter::Tree, language_name: &str) -> Vec<(String, usize, usize)> {
-        fn walk(node: tree_sitter::Node, out: &mut Vec<(String, usize, usize)>) {
-            let lang = match node.kind() {
-                "script_element" => Some("javascript"),
-                "style_element"  => Some("css"),
-                _ => None,
-            };
-            if let Some(inj_lang) = lang {
-                for i in 0..node.child_count() {
-                    if let Some(child) = node.child(i) {
-                        if child.kind() == "raw_text" {
-                            out.push((inj_lang.to_string(), child.start_byte(), child.end_byte()));
+        match language_name {
+            "svelte" => {
+                fn walk_svelte(node: tree_sitter::Node, out: &mut Vec<(String, usize, usize)>) {
+                    let lang = match node.kind() {
+                        "script_element" => Some("javascript"),
+                        "style_element"  => Some("css"),
+                        _ => None,
+                    };
+                    if let Some(inj_lang) = lang {
+                        for i in 0..node.child_count() {
+                            if let Some(child) = node.child(i) {
+                                if child.kind() == "raw_text" {
+                                    out.push((inj_lang.to_string(), child.start_byte(), child.end_byte()));
+                                }
+                            }
+                        }
+                    }
+                    for i in 0..node.child_count() {
+                        if let Some(child) = node.child(i) {
+                            walk_svelte(child, out);
                         }
                     }
                 }
+                let mut result = Vec::new();
+                walk_svelte(tree.root_node(), &mut result);
+                result
             }
-            for i in 0..node.child_count() {
-                if let Some(child) = node.child(i) {
-                    walk(child, out);
-                }
-            }
-        }
 
-        if language_name != "svelte" {
-            return vec![];
+            "markdown" => {
+                // The block parser leaves all inline content as `inline` nodes.
+                // Inject tree-sitter-markdown-inline for each of them.
+                fn walk_md(node: tree_sitter::Node, out: &mut Vec<(String, usize, usize)>) {
+                    if node.kind() == "inline" {
+                        out.push(("markdown_inline".to_string(), node.start_byte(), node.end_byte()));
+                        return; // no need to recurse inside
+                    }
+                    for i in 0..node.child_count() {
+                        if let Some(child) = node.child(i) {
+                            walk_md(child, out);
+                        }
+                    }
+                }
+                let mut result = Vec::new();
+                walk_md(tree.root_node(), &mut result);
+                result
+            }
+
+            _ => vec![],
         }
-        let mut result = Vec::new();
-        walk(tree.root_node(), &mut result);
-        result
     }
 
     /// Highlight `content[start..end]` with `lang`'s parser and write non-Unknown

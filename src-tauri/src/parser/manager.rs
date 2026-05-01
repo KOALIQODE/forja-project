@@ -6,6 +6,9 @@ use crate::parser::registry::{ParserEntry, PARSER_REGISTRY};
 use crate::parser::validator::BinaryValidator;
 use std::path::PathBuf;
 
+// Bundled queries — used as fallback when the GitHub download fails.
+const BUNDLED_TS_QUERIES: &str = include_str!("../../queries/typescript.scm");
+
 pub struct ParserManager {
     pub cache_manager: CacheManager,
     downloader: BinaryDownloader,
@@ -24,7 +27,9 @@ impl ParserManager {
     }
 
     pub fn get_all_parsers(&self) -> Vec<ParserInfo> {
-        PARSER_REGISTRY.iter().map(|entry| ParserInfo {
+        PARSER_REGISTRY.iter()
+            .filter(|entry| !entry.hidden)
+            .map(|entry| ParserInfo {
             name: format!("tree-sitter-{}", entry.name),
             language: entry.name.to_string(),
             version: "latest".to_string(),
@@ -120,18 +125,17 @@ impl ParserManager {
             self.cache_manager.binary_path(parser_name)
         } else if let Some(p) = prebuilt_path {
             if !repo_changed { p } else {
-                self.compiler.compile(parser_name, entry.github_repo).await?
+                self.compiler.compile(parser_name, entry.github_repo, entry.subdir).await?
             }
         } else {
             // Compile from source; also extracts matching queries into the cache dir
-            self.compiler.compile(parser_name, entry.github_repo).await?
+            self.compiler.compile(parser_name, entry.github_repo, entry.subdir).await?
         };
 
         // Step 3: download queries if:
         //  a) file doesn't exist yet, OR
-        //  b) TypeScript/TSX — ZIP only has TS-specific subset; we must combine with JS, OR
-        //  c) The file still has an unresolved "; inherits:" directive (e.g. Svelte → HTML).
-        //     The compiler copies the raw ZIP queries which don't resolve inheritance.
+        //  b) TypeScript/TSX — must combine JS base queries + TS-specific queries, OR
+        //  c) the file has an unresolved "; inherits:" directive (e.g. Svelte → HTML).
         let queries_path = self.cache_manager.queries_path(parser_name);
         let needs_queries = !queries_path.exists()
             || matches!(parser_name, "typescript" | "tsx")
@@ -140,6 +144,17 @@ impl ParserManager {
                 .unwrap_or(false);
         if needs_queries {
             self.download_queries(parser_name).await?;
+        }
+
+        // ── Step 4: auto-install companion parsers ───────────────────────────────
+        // markdown_inline is required for inline highlighting inside markdown files.
+        if parser_name == "markdown" && !self.cache_manager.is_parser_ready("markdown_inline") {
+            println!("📦 Installing markdown_inline companion...");
+            Box::pin(self.ensure_parser_available("markdown_inline", Box::new(|_, _| {}))).await
+                .unwrap_or_else(|e| {
+                    eprintln!("⚠️  markdown_inline companion failed: {}", e);
+                    self.cache_manager.binary_path("markdown_inline")
+                });
         }
 
         Ok(binary_path)
@@ -158,17 +173,15 @@ impl ParserManager {
             .user_agent("Forja-Studio/1.0")
             .build()?;
 
-        // TypeScript and TSX use a grammar that extends JavaScript.
-        // The official TS highlights.scm only covers TS-specific nodes (35 lines);
-        // without the JavaScript base queries the vast majority of tokens
-        // (comments, strings, functions, numbers, operators…) go uncoloured.
-        // We always combine JS + TS queries for these two languages.
+        // TypeScript/TSX: combine full JavaScript queries + TS-specific queries.
+        // TS grammar is a superset of JS — its highlights.scm only covers TS additions
+        // (type_identifier, type_annotation, etc.) so we must prepend JS queries for
+        // complete highlighting of strings, functions, comments, operators, etc.
         if matches!(parser_name, "typescript" | "tsx") {
             return self.download_typescript_queries(&client, parser_name).await;
         }
 
-        // Try master then main — official tree-sitter repos use master, some community
-        // repos use main.
+        // Try master then main — official tree-sitter repos use master, community repos use main.
         for branch in &["master", "main"] {
             let url = self.query_url_for_branch(parser_name, branch);
             if let Ok(res) = client.get(&url).send().await {
@@ -187,14 +200,9 @@ impl ParserManager {
         Ok(())
     }
 
-    /// Downloads combined JavaScript + TypeScript queries.
-    ///
-    /// The TypeScript tree-sitter grammar is a strict superset of JavaScript:
-    /// its AST contains all JavaScript node types (comment, string, function…)
-    /// plus TypeScript-specific ones (type_identifier, predefined_type…).
-    /// The official `typescript/queries/highlights.scm` only captures the
-    /// TS-specific additions, so we must prepend the full JavaScript queries
-    /// to get complete syntax highlighting.
+    /// Fetches JavaScript + TypeScript-specific queries and writes a combined file.
+    /// Falls back to the bundled typescript.scm (compiled into the binary) if the
+    /// GitHub download fails.
     async fn download_typescript_queries(
         &self,
         client: &reqwest::Client,
@@ -202,32 +210,56 @@ impl ParserManager {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let queries_path = self.cache_manager.queries_path(parser_name);
 
-        let js_url = self.query_url_for_branch("javascript", "master");
-        let ts_url = self.query_url_for_branch(parser_name, "master");
+        let mut js_text = String::new();
+        for branch in &["master", "main"] {
+            let url = self.query_url_for_branch("javascript", branch);
+            if let Ok(res) = client.get(&url).send().await {
+                if res.status().is_success() {
+                    js_text = res.text().await.unwrap_or_default();
+                    break;
+                }
+            }
+        }
 
-        let js_text: String = match client.get(js_url).send().await {
-            Ok(res) => res.text().await.unwrap_or_default(),
-            Err(_) => String::new(),
-        };
+        let mut ts_text = String::new();
+        for branch in &["master", "main"] {
+            let url = self.query_url_for_branch(parser_name, branch);
+            if let Ok(res) = client.get(&url).send().await {
+                if res.status().is_success() {
+                    let raw = res.text().await.unwrap_or_default();
+                    // Strip "; inherits:" lines — JS queries are prepended explicitly
+                    ts_text = raw
+                        .lines()
+                        .filter(|l| !l.trim().starts_with("; inherits:"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    break;
+                }
+            }
+        }
 
-        let ts_text: String = match client.get(&ts_url).send().await {
-            Ok(res) => res.text().await.unwrap_or_default(),
-            Err(_) => String::new(),
-        };
-
+        // If GitHub downloads failed, use the bundled queries (already combined JS+TS)
         if js_text.is_empty() && ts_text.is_empty() {
-            std::fs::write(&queries_path, "")?;
-            eprintln!("⚠️ Could not download queries for {}", parser_name);
+            println!("📦 Using bundled TypeScript queries");
+            std::fs::write(&queries_path, BUNDLED_TS_QUERIES)?;
+            return Ok(());
+        }
+
+        // If only TS-specific failed, use bundled as the TS portion
+        if ts_text.is_empty() {
+            println!("📦 TS-specific download failed, using bundled queries");
+            std::fs::write(&queries_path, BUNDLED_TS_QUERIES)?;
             return Ok(());
         }
 
         let combined = format!(
-            "; === javascript base (inherited) ===\n{}\n\n; === typescript ===\n{}",
+            "; === javascript (base) ===\n{}\n\n; === {} (specific) ===\n{}",
             js_text.trim_end(),
+            parser_name,
             ts_text.trim_end()
         );
         std::fs::write(&queries_path, &combined)?;
-        println!("✅ Combined JS + TS queries downloaded for {}", parser_name);
+        println!("✅ Combined JS + {} queries written", parser_name);
         Ok(())
     }
 
@@ -238,21 +270,20 @@ impl ParserManager {
     fn query_url_for_branch(&self, parser_name: &str, branch: &str) -> String {
         use crate::parser::registry::PARSER_REGISTRY;
 
-        let github_repo = PARSER_REGISTRY
-            .iter()
-            .find(|e| e.name == parser_name)
-            .map(|e| e.github_repo)
-            .unwrap_or_else(|| {
-                // For standard tree-sitter languages not in the user registry
-                // (e.g. "javascript" / "html" resolved from inherits directives)
-                // the canonical pattern applies.
-                ""  // handled below
-            });
+        let entry = PARSER_REGISTRY.iter().find(|e| e.name == parser_name);
+        let github_repo = entry.map(|e| e.github_repo).unwrap_or("");
+        let subdir = entry.and_then(|e| e.subdir);
 
         if github_repo.is_empty() {
             format!(
                 "https://raw.githubusercontent.com/tree-sitter/tree-sitter-{}/{}/queries/highlights.scm",
                 parser_name, branch
+            )
+        } else if let Some(sub) = subdir {
+            // For repos with multiple grammars, queries live under the subdir
+            format!(
+                "https://raw.githubusercontent.com/{}/{}/{}/queries/highlights.scm",
+                github_repo, branch, sub
             )
         } else {
             format!(

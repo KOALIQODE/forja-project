@@ -45,6 +45,7 @@ impl ParserCompiler {
         &self,
         parser_name: &str,
         github_repo: &str,
+        subdir: Option<&str>,
     ) -> Result<PathBuf, Box<dyn std::error::Error>> {
         println!("🔨 Compiling {parser_name} from {github_repo}");
         Self::validate_compilation_environment()
@@ -77,7 +78,7 @@ impl ParserCompiler {
 
         // ── Locate src/parser.c ─────────────────────────────────────────────────
         // Some repos (e.g. tree-sitter-typescript) nest the grammar in a subdir.
-        let src_dir = Self::find_src_dir(&project_dir, parser_name)
+        let src_dir = Self::find_src_dir(&project_dir, parser_name, subdir)
             .ok_or_else(|| CompilationError::InvalidSource(
                 format!("Could not find src/parser.c under {}", project_dir.display())
             ))?;
@@ -104,7 +105,7 @@ impl ParserCompiler {
         //   {project_dir}/queries/highlights.scm               (most repos)
         //   {project_dir}/{parser_name}/queries/highlights.scm  (TypeScript-style)
         let queries_dest = final_dir.join("highlights.scm");
-        if let Some(queries_src) = Self::find_queries_file(&project_dir, parser_name) {
+        if let Some(queries_src) = Self::find_queries_file(&project_dir, parser_name, subdir) {
             std::fs::copy(&queries_src, &queries_dest)?;
             println!("📋 {} queries extracted from source", parser_name);
         } else {
@@ -124,7 +125,17 @@ impl ParserCompiler {
     /// Recursively find the `src/` directory that contains `parser.c`.
     /// Handles flat layout (`project/src/parser.c`) and nested layout
     /// (`project/{lang}/src/parser.c`) used by tree-sitter-typescript.
-    fn find_src_dir(project_dir: &Path, parser_name: &str) -> Option<PathBuf> {
+    /// For split grammars (e.g. tree-sitter-markdown), explicitly prefers
+    /// the `tree-sitter-{name}/` subdir to avoid non-deterministic results.
+    fn find_src_dir(project_dir: &Path, parser_name: &str, subdir: Option<&str>) -> Option<PathBuf> {
+        // 0. Explicit subdir from registry (highest priority)
+        if let Some(sub) = subdir {
+            let explicit = project_dir.join(sub).join("src");
+            if explicit.join("parser.c").exists() {
+                return Some(explicit);
+            }
+        }
+
         // 1. Direct: project/src/parser.c
         let direct = project_dir.join("src");
         if direct.join("parser.c").exists() {
@@ -137,14 +148,26 @@ impl ParserCompiler {
             return Some(named);
         }
 
-        // 3. Scan one level of subdirs
+        // 2b. Prefixed subdir: project/tree-sitter-{parser_name}/src/parser.c
+        //     Handles split-grammar repos like tree-sitter-markdown where the
+        //     block and inline grammars live in separate subdirectories.
+        let prefixed = project_dir.join(format!("tree-sitter-{}", parser_name)).join("src");
+        if prefixed.join("parser.c").exists() {
+            return Some(prefixed);
+        }
+
+        // 3. Scan one level of subdirs (sorted for determinism)
         if let Ok(entries) = std::fs::read_dir(project_dir) {
-            for entry in entries.filter_map(Result::ok) {
-                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                    let candidate = entry.path().join("src");
-                    if candidate.join("parser.c").exists() {
-                        return Some(candidate);
-                    }
+            let mut dirs: Vec<PathBuf> = entries
+                .filter_map(Result::ok)
+                .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                .map(|e| e.path())
+                .collect();
+            dirs.sort();
+            for dir in dirs {
+                let candidate = dir.join("src");
+                if candidate.join("parser.c").exists() {
+                    return Some(candidate);
                 }
             }
         }
@@ -154,7 +177,15 @@ impl ParserCompiler {
 
     /// Locate `queries/highlights.scm` inside the extracted repo directory.
     /// Mirrors the same layout detection as `find_src_dir`.
-    fn find_queries_file(project_dir: &Path, parser_name: &str) -> Option<PathBuf> {
+    fn find_queries_file(project_dir: &Path, parser_name: &str, subdir: Option<&str>) -> Option<PathBuf> {
+        // 0. Explicit subdir from registry (highest priority)
+        if let Some(sub) = subdir {
+            let explicit = project_dir.join(sub).join("queries").join("highlights.scm");
+            if explicit.exists() {
+                return Some(explicit);
+            }
+        }
+
         // 1. Direct: project/queries/highlights.scm
         let direct = project_dir.join("queries").join("highlights.scm");
         if direct.exists() {
@@ -167,14 +198,27 @@ impl ParserCompiler {
             return Some(named);
         }
 
-        // 3. Scan one level of subdirs
+        // 2b. Prefixed subdir: project/tree-sitter-{parser_name}/queries/highlights.scm
+        let prefixed = project_dir
+            .join(format!("tree-sitter-{}", parser_name))
+            .join("queries")
+            .join("highlights.scm");
+        if prefixed.exists() {
+            return Some(prefixed);
+        }
+
+        // 3. Scan one level of subdirs (sorted for determinism)
         if let Ok(entries) = std::fs::read_dir(project_dir) {
-            for entry in entries.filter_map(Result::ok) {
-                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                    let candidate = entry.path().join("queries").join("highlights.scm");
-                    if candidate.exists() {
-                        return Some(candidate);
-                    }
+            let mut dirs: Vec<PathBuf> = entries
+                .filter_map(Result::ok)
+                .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                .map(|e| e.path())
+                .collect();
+            dirs.sort();
+            for dir in dirs {
+                let candidate = dir.join("queries").join("highlights.scm");
+                if candidate.exists() {
+                    return Some(candidate);
                 }
             }
         }
