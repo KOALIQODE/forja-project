@@ -7,6 +7,8 @@
   import { currentProject } from "../../stores/projectStore";
   import { openBuffer, openBuffers } from "../../stores/bufferStore";
   import { getFileIcon } from "../../utils/fileIcons";
+  import { activeTheme } from "../../stores/pluginStore";
+  import { TOKEN_COLORS } from "../../utils/constants";
 
   interface Props {
     mode: 'files' | 'grep' | 'buffers';
@@ -20,6 +22,7 @@
   let isLoading = $state(false);
   let inputElement = $state<HTMLInputElement | null>(null);
   let previewContent = $state<string>('');
+  let previewHighlightedHtml = $state<string>('');
   let previewLoading = $state(false);
 
   // Buffer results helper
@@ -83,6 +86,40 @@
     }
   }
 
+  // Build token color map from activeTheme, same as EditorBuffer does
+  let tokenColors = $derived.by(() => {
+    const s = $activeTheme?.syntax;
+    if (!s) return TOKEN_COLORS;
+    return {
+      ...TOKEN_COLORS,
+      Keyword:     s.keyword       ?? TOKEN_COLORS.Keyword,
+      Function:    s.function_name ?? TOKEN_COLORS.Function,
+      Type:        s.type          ?? TOKEN_COLORS.Type,
+      String:      s.string        ?? TOKEN_COLORS.String,
+      Comment:     s.comment       ?? TOKEN_COLORS.Comment,
+      Number:      s.number        ?? TOKEN_COLORS.Number,
+      Punctuation: s.punctuation   ?? TOKEN_COLORS.Punctuation,
+      Operator:    s.operator      ?? TOKEN_COLORS.Operator,
+      Variable:    s.variable      ?? TOKEN_COLORS.Variable,
+      Property:    s.variable      ?? TOKEN_COLORS.Property,
+      Constant:    s.constant      ?? TOKEN_COLORS.Constant,
+      Attribute:   s.attribute     ?? TOKEN_COLORS.Attribute,
+      Boolean:     s.constant      ?? TOKEN_COLORS.Boolean,
+    };
+  });
+
+  function tokenTypeToColor(tokenType: string): string {
+    return (tokenColors as Record<string, string>)[tokenType] ?? TOKEN_COLORS.Unknown;
+  }
+
+  function renderTokensToHtml(tokens: Array<{ text: string; token_type: string }>): string {
+    return tokens.map(token => {
+      const safe = escapeHtml(token.text);
+      const color = tokenTypeToColor(token.token_type);
+      return `<span style="color:${color}">${safe}</span>`;
+    }).join('');
+  }
+
   function escapeHtml(text: string): string {
     return text
       .replace(/&/g, '&amp;')
@@ -107,24 +144,41 @@
     const selected = results[selectedIdx];
     if (!selected) {
       previewContent = '';
+      previewHighlightedHtml = '';
       return;
     }
 
     previewLoading = true;
     try {
-      // Si es grep, centramos en la línea. Si es file, empezamos en 0.
       const start = selected.is_grep ? Math.max(0, (selected.line_num || 0) - 10) : 0;
       const end = start + 50;
-      
-      const content = await invoke<string[]>("read_file_lines", {
+
+      const lines = await invoke<string[]>("read_file_lines", {
         path: selected.path,
         startLine: start,
         endLine: end,
       });
-      
-      previewContent = content.join('\n');
+
+      const text = lines.join('\n');
+      previewContent = text;
+
+      try {
+        const lang = await invoke<string>('detect_language', { filePath: selected.path });
+        if (lang && lang !== 'unknown') {
+          const result = await invoke<{ tokens: Array<{ text: string; token_type: string }> }>(
+            'highlight_syntax',
+            { content: text, language: lang }
+          );
+          previewHighlightedHtml = renderTokensToHtml(result.tokens);
+        } else {
+          previewHighlightedHtml = escapeHtml(text);
+        }
+      } catch {
+        previewHighlightedHtml = escapeHtml(text);
+      }
     } catch (e) {
       previewContent = 'Error loading preview';
+      previewHighlightedHtml = 'Error loading preview';
     } finally {
       previewLoading = false;
     }
@@ -297,7 +351,7 @@
           <div class="flex h-full items-center justify-center">
             <div class="h-6 w-6 animate-spin rounded-full border border-emerald-500/10 border-t-emerald-500"></div>
           </div>
-        {:else if previewContent}
+        {:else if previewHighlightedHtml}
           <div class="absolute inset-0 flex flex-col overflow-hidden font-mono text-[12px] leading-relaxed">
             <div class="flex items-center gap-2 px-8 py-4 border-b border-white/5 bg-white/[0.01] text-white/20 text-[10px] tracking-[0.1em] uppercase">
               <File size={12} class="opacity-40" />
@@ -306,7 +360,7 @@
                 <span class="ml-auto text-emerald-500/30">L{results[selectedIdx].line_num + 1}</span>
               {/if}
             </div>
-            <pre class="flex-1 overflow-auto p-8 whitespace-pre custom-scrollbar text-white/40 selection:bg-emerald-500/20"><code>{@html highlightText(previewContent, query)}</code></pre>
+            <pre class="flex-1 overflow-auto p-8 whitespace-pre custom-scrollbar selection:bg-emerald-500/20"><code>{@html previewHighlightedHtml}</code></pre>
           </div>
         {:else}
           <div class="flex h-full flex-col items-center justify-center">
