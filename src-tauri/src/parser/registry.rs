@@ -1,3 +1,6 @@
+// SUPERSEDED — canonical implementation moved to `crate::infrastructure::parser::registry`.
+// This file is kept as historical reference and is NOT compiled (see parser/mod.rs shim).
+
 /// A parser that can be installed on demand.
 ///
 /// `has_prebuilt`:        a prebuilt shared-library asset exists on the GitHub release page.

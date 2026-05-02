@@ -55,9 +55,7 @@ pathdiff = "0.2"
 chrono = "0.4"
 git2 = { version = "0.20.3", features = ["vendored-libgit2"] }
 ignore = "0.4"
-glib = "0.18"
-gtk = "0.18"
-webkit2gtk = "2.0"
+
 streaming-iterator = "0.1"
 ropey = "1.6" # Added for efficient text buffer management
 
@@ -65,6 +63,11 @@ ropey = "1.6" # Added for efficient text buffer management
 mlua = { version = "0.10", features = ["lua54", "vendored", "send"] }
 sha2 = "0.10"
 hex = "0.4"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+glib = "0.18"
+gtk = "0.18"
+webkit2gtk = "2.0"
 
 [profile.release]
 opt-level = 3

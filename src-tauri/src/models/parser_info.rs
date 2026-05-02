@@ -23,6 +23,7 @@ pub struct DownloadProgress {
     pub status: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParserRegistry {
     pub parsers: Vec<ParserInfo>,

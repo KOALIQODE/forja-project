@@ -1,31 +1,11 @@
+// ── Canonical location: crate::domain::plugin ────────────────────────────────
+pub use crate::domain::plugin::{PluginKind, PluginManifest};
+// load_manifest stays here — it uses mlua (infrastructure concern)
+
 use mlua::prelude::*;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum PluginKind {
-    Plugin,
-    Theme,
-}
-
-impl std::fmt::Display for PluginKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PluginKind::Plugin => write!(f, "plugin"),
-            PluginKind::Theme => write!(f, "theme"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PluginManifest {
-    pub name: String,
-    pub version: String,
-    pub kind: PluginKind,
-    pub permissions: Vec<String>,
-}
-
-/// Parse a manifest.lua source string into a PluginManifest.
+/// Parse a manifest.lua source string into a [`PluginManifest`].
+///
 /// Uses a fresh, unrestricted Lua state — manifest parsing is offline, pre-install.
 pub fn load_manifest(manifest_src: &str) -> Result<PluginManifest, String> {
     let lua = Lua::new();
@@ -73,3 +53,48 @@ pub fn load_manifest(manifest_src: &str) -> Result<PluginManifest, String> {
         permissions,
     })
 }
+
+// SUPERSEDED — original implementation moved to crate::domain::plugin
+// Keep here as historical reference.
+//
+// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// #[serde(rename_all = "lowercase")]
+// pub enum PluginKind {
+//     Plugin,
+//     Theme,
+// }
+//
+// impl std::fmt::Display for PluginKind {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             PluginKind::Plugin => write!(f, "plugin"),
+//             PluginKind::Theme => write!(f, "theme"),
+//         }
+//     }
+// }
+//
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct PluginManifest {
+//     pub name: String,
+//     pub version: String,
+//     pub kind: PluginKind,
+//     pub permissions: Vec<String>,
+// }
+
+// TESTS MOVED — canonical tests live in `crate::infrastructure::plugin::runtime` and
+// `crate::domain::plugin` where the types are actually implemented.
+// The tests below are kept as commented reference only.
+//
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//
+//     #[test]
+//     fn load_manifest_parses_valid_lua() { ... }
+//
+//     #[test]
+//     fn load_manifest_defaults_kind_to_plugin() { ... }
+//
+//     #[test]
+//     fn plugin_kind_re_exported_from_domain() { ... }
+// }

@@ -1,3 +1,6 @@
+// SUPERSEDED — canonical implementation moved to `crate::infrastructure::parser::loader`.
+// This file is kept as historical reference and is NOT compiled (see parser/mod.rs shim).
+
 use libloading::Library;
 use std::collections::HashMap;
 use std::path::Path;
@@ -43,6 +46,7 @@ impl ParserLoader {
         Ok(language)
     }
 
+    #[allow(dead_code)]
     pub fn get_parser(
         &mut self,
         parser_name: &str,

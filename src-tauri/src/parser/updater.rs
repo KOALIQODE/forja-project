@@ -1,3 +1,7 @@
+// SUPERSEDED — canonical implementation moved to `crate::infrastructure::parser::updater`.
+// This file is kept as historical reference and is NOT compiled (see parser/mod.rs shim).
+
+#![allow(dead_code)]
 use crate::parser::downloader::BinaryDownloader;
 
 pub struct ParserUpdater {

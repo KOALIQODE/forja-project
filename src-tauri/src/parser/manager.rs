@@ -1,3 +1,6 @@
+// SUPERSEDED — canonical implementation moved to `crate::infrastructure::parser::manager`.
+// This file is kept as historical reference and is NOT compiled (see parser/mod.rs shim).
+
 use crate::models::parser_info::ParserInfo;
 use crate::parser::cache::CacheManager;
 use crate::parser::compiler::ParserCompiler;

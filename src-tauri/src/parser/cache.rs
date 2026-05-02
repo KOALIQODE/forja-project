@@ -1,3 +1,6 @@
+// SUPERSEDED — canonical implementation moved to `crate::infrastructure::parser::cache`.
+// This file is kept as historical reference and is NOT compiled (see parser/mod.rs shim).
+
 use std::path::PathBuf;
 use std::fs;
 

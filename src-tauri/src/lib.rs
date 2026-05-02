@@ -1,44 +1,146 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+//! Forja Studio — Tauri Application Entry Point
+//!
+//! # Architecture: Hexagonal (Ports & Adapters)
+//!
+//! ```text
+//! ┌──────────────────────────────────────────────────────────────┐
+//! │                    Svelte Frontend                           │
+//! │            invoke("command_name", { ...args })               │
+//! └────────────────────────────┬─────────────────────────────────┘
+//!                              │ Tauri IPC boundary
+//! ┌────────────────────────────▼─────────────────────────────────┐
+//! │   commands/          ← Inbound Adapters                      │
+//! │   buffer · diff · document · editor · explorer               │
+//! │   git · lsp · parser_manager · plugin_host · syntax          │
+//! └──────────────────────────┬───────────────────────────────────┘
+//!                            │ delegates to
+//! ┌──────────────────────────▼───────────────────────────────────┐
+//! │   application/       ← Use Cases (orchestration layer)       │
+//! │   document_service · parser_service · plugin_service         │
+//! └────────┬──────────────────────────────────────┬──────────────┘
+//!          │ defines / reads                       │ uses
+//! ┌────────▼────────────┐           ┌──────────────▼─────────────┐
+//! │   domain/           │           │   infrastructure/           │
+//! │   Pure business     │           │   Outbound adapters (I/O)   │
+//! │   logic — no I/O    │           │                             │
+//! │                     │           │   filesystem/  (mmap index) │
+//! │   char_diff         │           │   git/         (git2)       │
+//! │   document          │           │   lsp/         (JSON-RPC)   │
+//! │   highlight         │           │   parser/      (tree-sitter)│
+//! │   language          │           │   plugin/      (Lua runtime)│
+//! │   models            │           │   syntax/      (highlights) │
+//! │   parser_info       │           └────────────────────────────┘
+//! │   plugin            │
+//! └─────────────────────┘
+//! ```
+//!
+//! ## Bounded Context
+//! `plugin_host/` is a self-contained bounded context that owns the Lua VM
+//! lifecycle, security validation, and manifest parsing. Its internal helpers
+//! are `pub(crate)` so `commands/plugin_host.rs` can delegate to them.
+//!
+//! ## Module Map
+//!
+//! | Module | Role | Status |
+//! |--------|------|--------|
+//! | `commands/` | `#[tauri::command]` inbound adapters | ✅ Canonical |
+//! | `application/` | Use case orchestration | ✅ Canonical |
+//! | `domain/` | Pure entities and value objects | ✅ Canonical |
+//! | `infrastructure/` | Filesystem, Git, LSP, Parser, Plugin, Syntax | ✅ Canonical |
+//! | `plugin_host/` | `PluginHost` aggregator + helpers (bounded context, `mod.rs` not yet split) | ⚠ Migrating |
+//! | `plugin_host/manifest.rs` | Shim → `domain::plugin::{PluginManifest, PluginKind}` | ✅ Shim |
+//! | `plugin_host/permissions.rs` | Shim → `domain::plugin::{PermissionSet, ALL_PERMISSIONS}` | ✅ Shim |
+//! | `plugin_host/event_bus.rs` | Shim → `domain::plugin::{EventKind, EventPayload}` | ✅ Shim |
+//! | `plugin_host/runtime.rs` | Shim → `infrastructure::plugin::runtime::PluginRuntime` | ✅ Shim |
+//! | `plugin_host/api/themes.rs` | Shim → `infrastructure::plugin::themes::ThemeDefinition` | ✅ Shim |
+//! | `parser/` | Shim → `infrastructure::parser` | ✅ Shim |
+//! | `models/` | Shim → `domain::parser_info` | ✅ Shim |
+//! | `plugins/` | Legacy shims → `commands/` | ⚠ Legacy |
+//! | `shared/` | Legacy shims → `infrastructure/` + `domain/` | ⚠ Legacy |
+//! | `document/` | Legacy shim → `domain::document` | ⚠ Legacy |
+//! | `highlight/` | Legacy shim → `domain::highlight` | ⚠ Legacy |
+//! | `language/` | Legacy shim → `domain::language` | ⚠ Legacy |
+//!
+//! ## State Management
+//! Four shared states are registered at startup via `app.manage()`:
+//! - [`domain::document::DocumentManager`] — open editor buffers and parse trees
+//! - [`infrastructure::lsp::client::LspClientManager`] — active LSP sessions per language
+//! - [`plugin_host::PluginHost`] — loaded Lua plugin VMs
+//! - [`infrastructure::parser::manager::ParserManager`] — tree-sitter parser cache
+#[cfg(target_os = "linux")]
 use glib::ObjectExt;
 use std::sync::Mutex;
 use tauri::Manager;
 
-mod plugins;
-mod shared;
-mod document;
-mod language;
-mod highlight;
-mod plugin_host;
-mod models;
-mod parser;
+// ── Canonical hexagonal layers ────────────────────────────────────────────────
+mod application;   // Use cases: document_service, parser_service, plugin_service
+mod commands;      // Inbound adapters: all #[tauri::command] handlers
+mod domain;        // Pure business logic: entities, value objects, no I/O
+mod infrastructure; // Outbound adapters: filesystem, git, LSP, parser, plugin, syntax
 
-use document::DocumentManager;
-use plugins::lsp::LspClientManager;
+// ── Bounded contexts ──────────────────────────────────────────────────────────
+// plugin_host/ is a self-contained context: Lua VMs, manifest parsing, security.
+// Its #[tauri::command]s live in commands/plugin_host.rs; helpers are pub(crate).
+mod plugin_host;
+
+// ── Backward-compatibility shims ─────────────────────────────────────────────
+// These modules re-export from canonical locations so that legacy `crate::X`
+// references throughout the codebase continue to compile without modification.
+// They will be removed once all internal references are updated.
+mod models;   // shim → crate::domain::parser_info
+mod parser;   // shim → crate::infrastructure::parser
+
+// ── Legacy shim modules ───────────────────────────────────────────────────────
+// Pre-hexagonal modules kept alive as re-export shims for backward compat.
+// These are NOT compiled into any new code — only maintain old `crate::X` paths.
+mod plugins;   // shim → commands/
+mod shared;    // shim → infrastructure/ + domain/
+mod document;  // shim → domain::document
+mod highlight; // shim → domain::highlight
+mod language;  // shim → domain::language
+
+use domain::document::DocumentManager;
+use infrastructure::lsp::client::LspClientManager;
 use plugin_host::PluginHost;
 
+/// Application entry point. Configures and runs the Tauri runtime.
+///
+/// Responsibilities:
+/// 1. Register shared application state (`app.manage()`).
+/// 2. Apply platform-specific WebView tweaks (Linux: disable zoom gesture).
+/// 3. Register all `#[tauri::command]` handlers via `generate_handler!`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            // Register DocumentManager as Tauri-managed state (Phase 1-3)
+            // ── Register shared state ─────────────────────────────────────────
+            // Each state is wrapped in Mutex<T> for thread-safe access from
+            // async Tauri commands. Commands receive State<'_, Mutex<T>> params.
             app.manage(Mutex::new(DocumentManager::new()));
-            // Register LspClientManager as Tauri-managed state
             app.manage(Mutex::new(LspClientManager::new()));
-            // Register PluginHost as Tauri-managed state
             app.manage(Mutex::new(PluginHost::new()));
-            // Register ParserManager as Tauri-managed state
-            app.manage(Mutex::new(crate::parser::manager::ParserManager::new().expect("Failed to init ParserManager")));
+            app.manage(Mutex::new(
+                // Use canonical infrastructure path (parser/ shim re-exports this)
+                crate::infrastructure::parser::manager::ParserManager::new()
+                    .expect("Failed to init ParserManager"),
+            ));
 
             let window = app.get_webview_window("main").unwrap();
 
+            // ── Linux: disable WebKit2GTK pinch-zoom gesture ──────────────────
+            // The zoom gesture interferes with the code editor scroll behaviour.
+            // Only present on Linux; macOS/Windows handle zoom differently.
             #[cfg(target_os = "linux")]
             {
                 window.with_webview(|webview| {
                     let webview = webview.inner();
-
                     unsafe {
-                        if let Some(data) = webview.data::<glib::Object>("wk-view-zoom-gesture") {
-                            glib::gobject_ffi::g_signal_handlers_destroy(data.as_ptr().cast());
+                        if let Some(data) =
+                            webview.data::<glib::Object>("wk-view-zoom-gesture")
+                        {
+                            glib::gobject_ffi::g_signal_handlers_destroy(
+                                data.as_ptr().cast(),
+                            );
                         }
                     }
                 })?;
@@ -46,81 +148,83 @@ pub fn run() {
 
             Ok(())
         })
-        // PLUGINS FRAMEWORK TAURI
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // ── Command registry ──────────────────────────────────────────────────
+        // Every #[tauri::command] that the Svelte frontend may invoke() MUST
+        // be listed here. Missing entries silently fail at runtime.
         .invoke_handler(tauri::generate_handler![
             // Editor
-            plugins::editor::get_shortened_paths,
-            // Buffer (stateless file I/O)
-            plugins::buffer::read_file,
-            plugins::buffer::get_total_lines,
-            plugins::buffer::read_file_lines,
-            plugins::buffer::write_file,
+            commands::editor::get_shortened_paths,
+            // Buffer
+            commands::buffer::read_file,
+            commands::buffer::get_total_lines,
+            commands::buffer::read_file_lines,
+            commands::buffer::write_file,
             // Git
-            plugins::git::git_ahead_behind,
-            plugins::git::git_status_batch,
-            plugins::git::git_status_single,
-            plugins::git::git_branch,
-            plugins::git::git_blame,
+            commands::git::git_ahead_behind,
+            commands::git::git_status_batch,
+            commands::git::git_status_single,
+            commands::git::git_branch,
+            commands::git::git_blame,
             // Explorer
-            plugins::explorer::search_files,
-            plugins::explorer::search_in_files,
-            plugins::explorer::get_project_todos,
-            plugins::explorer::explore_directory,
-            plugins::explorer::watch_directory,
-            plugins::explorer::create_file,
-            plugins::explorer::create_directory,
-            plugins::explorer::rename_entry,
-            plugins::explorer::delete_entry,
-            plugins::explorer::list_directory_from_path,
-            // Syntax (WASM-based, stateless)
-            plugins::syntax::list_parsers,
-            plugins::syntax::install_parser,
-            plugins::syntax::detect_language,
-            plugins::syntax::is_native_language,
-            plugins::syntax::get_code_breadcrumb,
-            plugins::syntax::highlight_syntax,
-            plugins::syntax::repair_parser_queries,
-            // Document (Phase 1-3: stateful document management + highlight pipeline)
-            plugins::document::open_document,
-            plugins::document::apply_text_edit,
-            plugins::document::get_document_tokens,
-            plugins::document::close_document,
-            // Diff (Phase 5-6: git hunks, char diff, stage/revert)
-            plugins::diff::get_git_hunks,
-            plugins::diff::get_file_head_content,
-            plugins::diff::stage_hunk,
-            plugins::diff::revert_hunk,
-            plugins::diff::compute_char_diff,
-            plugins::diff::compute_hunk_preview,
-            // LSP (Language Server Protocol)
-            plugins::lsp::list_lsp_servers,
-            plugins::lsp::install_lsp_server,
-            plugins::lsp::lsp_open_document,
-            plugins::lsp::lsp_change_document,
-            plugins::lsp::lsp_close_document,
-            // Plugin Host (Lua runtime)
-            plugin_host::plugin_load_builtins,
-            plugin_host::plugin_scan_user_plugins,
-            plugin_host::plugin_load_from_path,
-            plugin_host::plugin_load,
-            plugin_host::plugin_unload,
-            plugin_host::plugin_list,
-            plugin_host::plugin_execute_command,
-            plugin_host::plugin_emit_event,
-            plugin_host::plugin_get_themes,
-            plugin_host::plugin_run_bracket_providers,
-            plugin_host::plugin_install_from_registry,
-            plugin_host::plugin_install_from_url,
-            plugin_host::plugin_registry_info,
+            commands::explorer::search_files,
+            commands::explorer::search_in_files,
+            commands::explorer::get_project_todos,
+            commands::explorer::explore_directory,
+            commands::explorer::watch_directory,
+            commands::explorer::create_file,
+            commands::explorer::create_directory,
+            commands::explorer::rename_entry,
+            commands::explorer::delete_entry,
+            commands::explorer::list_directory_from_path,
+            // Syntax
+            commands::syntax::list_parsers,
+            commands::syntax::install_parser,
+            commands::syntax::detect_language,
+            commands::syntax::is_native_language,
+            commands::syntax::get_code_breadcrumb,
+            commands::syntax::highlight_syntax,
+            commands::syntax::repair_parser_queries,
+            // Document
+            commands::document::open_document,
+            commands::document::apply_text_edit,
+            commands::document::get_document_tokens,
+            commands::document::close_document,
+            // Diff
+            commands::diff::get_git_hunks,
+            commands::diff::get_file_head_content,
+            commands::diff::stage_hunk,
+            commands::diff::revert_hunk,
+            commands::diff::compute_char_diff,
+            commands::diff::compute_hunk_preview,
+            // LSP
+            commands::lsp::list_lsp_servers,
+            commands::lsp::install_lsp_server,
+            commands::lsp::lsp_open_document,
+            commands::lsp::lsp_change_document,
+            commands::lsp::lsp_close_document,
+            // Plugin Host
+            commands::plugin_host::plugin_load_builtins,
+            commands::plugin_host::plugin_scan_user_plugins,
+            commands::plugin_host::plugin_load_from_path,
+            commands::plugin_host::plugin_load,
+            commands::plugin_host::plugin_unload,
+            commands::plugin_host::plugin_list,
+            commands::plugin_host::plugin_execute_command,
+            commands::plugin_host::plugin_emit_event,
+            commands::plugin_host::plugin_get_themes,
+            commands::plugin_host::plugin_run_bracket_providers,
+            commands::plugin_host::plugin_install_from_registry,
+            commands::plugin_host::plugin_install_from_url,
+            commands::plugin_host::plugin_registry_info,
             // Parser Manager
-            plugins::parser_manager::pm_list_parsers,
-            plugins::parser_manager::pm_get_parser_status,
-            plugins::parser_manager::pm_download_parser,
-            plugins::parser_manager::pm_download_or_compile_parser,
-            plugins::parser_manager::pm_repair_queries,
-            plugins::parser_manager::pm_repair_all_queries,
+            commands::parser_manager::pm_list_parsers,
+            commands::parser_manager::pm_get_parser_status,
+            commands::parser_manager::pm_download_parser,
+            commands::parser_manager::pm_download_or_compile_parser,
+            commands::parser_manager::pm_repair_queries,
+            commands::parser_manager::pm_repair_all_queries,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

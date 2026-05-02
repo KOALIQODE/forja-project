@@ -1,3 +1,7 @@
+// SUPERSEDED — canonical implementation moved to `crate::infrastructure::parser::validator`.
+// This file is kept as historical reference and is NOT compiled (see parser/mod.rs shim).
+
+#![allow(dead_code)]
 use sha2::{Sha256, Digest};
 use std::fs::File;
 use std::io::Read;

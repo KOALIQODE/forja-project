@@ -1,3 +1,6 @@
+// SUPERSEDED — canonical implementation moved to `crate::infrastructure::parser::downloader`.
+// This file is kept as historical reference and is NOT compiled (see parser/mod.rs shim).
+
 use futures_util::StreamExt;
 use reqwest::Client;
 use std::path::Path;
@@ -56,7 +59,7 @@ impl BinaryDownloader {
 
 #[derive(Debug, serde::Deserialize)]
 pub struct GitHubRelease {
-    pub tag_name: String,
+    #[allow(dead_code)] pub tag_name: String,
     pub assets: Vec<GitHubAsset>,
 }
 
@@ -64,5 +67,5 @@ pub struct GitHubRelease {
 pub struct GitHubAsset {
     pub name: String,
     pub browser_download_url: String,
-    pub size: u64,
+    #[allow(dead_code)] pub size: u64,
 }
