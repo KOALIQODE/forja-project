@@ -29,13 +29,31 @@ impl ParserCompiler {
         else { "parser.so" }
     }
 
+    /// Returns the platform-specific "install a C compiler" guidance shown to the user.
+    pub(crate) fn missing_compiler_message() -> &'static str {
+        if cfg!(target_os = "windows") {
+            "No C compiler found. Install Visual Studio Build Tools \
+             (https://aka.ms/vs/buildtools) and open a Developer Command Prompt, \
+             or install LLVM/Clang for Windows (https://releases.llvm.org)."
+        } else if cfg!(target_os = "macos") {
+            "No C compiler found. Install Xcode Command Line Tools: xcode-select --install"
+        } else {
+            "No C compiler (cc/gcc/clang) found. Install build-essential."
+        }
+    }
+
     pub fn validate_compilation_environment() -> Result<(), CompilationError> {
-        let cc_ok = Command::new("cc").arg("--version").output().is_ok()
+        let gcc_style_ok = Command::new("cc").arg("--version").output().is_ok()
             || Command::new("gcc").arg("--version").output().is_ok()
             || Command::new("clang").arg("--version").output().is_ok();
-        if !cc_ok {
+
+        // On Windows, also accept MSVC (cl.exe) — present in any VS Developer prompt.
+        let ok = gcc_style_ok
+            || (cfg!(target_os = "windows") && Command::new("cl").output().is_ok());
+
+        if !ok {
             return Err(CompilationError::MissingDependencies(
-                "No C compiler (cc/gcc/clang) found. Install build-essential (Linux) or Xcode CLI (macOS).".to_string(),
+                Self::missing_compiler_message().to_string(),
             ));
         }
         Ok(())
@@ -228,22 +246,46 @@ impl ParserCompiler {
 
     /// Invoke the system C/C++ compiler to produce a shared library.
     /// Uses `c++` when a C++ scanner is present; `cc` for pure-C parsers.
+    /// On Windows, falls back to MSVC (`cl.exe`) when no GCC-style compiler is found.
     fn compile_src(src_dir: &Path, output: &Path) -> Result<(), CompilationError> {
-        let parser_c  = src_dir.join("parser.c");
+        let parser_c   = src_dir.join("parser.c");
         let scanner_c  = src_dir.join("scanner.c");
         let scanner_cc = src_dir.join("scanner.cc");   // C++ scanner (e.g. rust, svelte)
 
         let has_cpp_scanner = scanner_cc.exists();
 
-        // Pick compiler
+        // On Windows: when no GCC-style compiler is in PATH, delegate to MSVC (cl.exe).
+        // MSVC uses completely different flags (/LD, /Fe:, etc.) and does not understand
+        // -shared, -fPIC, or -o, so we must handle it as a separate code path.
+        #[cfg(target_os = "windows")]
+        {
+            let has_gcc_style = if has_cpp_scanner {
+                Command::new("c++").arg("--version").output().is_ok()
+                    || Command::new("g++").arg("--version").output().is_ok()
+                    || Command::new("clang++").arg("--version").output().is_ok()
+            } else {
+                Command::new("cc").arg("--version").output().is_ok()
+                    || Command::new("gcc").arg("--version").output().is_ok()
+                    || Command::new("clang").arg("--version").output().is_ok()
+            };
+
+            if !has_gcc_style && Command::new("cl").output().is_ok() {
+                let sc  = if scanner_c.exists()  { Some(scanner_c.as_path())  } else { None };
+                let scc = if scanner_cc.exists() { Some(scanner_cc.as_path()) } else { None };
+                return Self::compile_src_msvc(src_dir, output, &parser_c, sc, scc);
+            }
+        }
+
+        // GCC / Clang path — valid on Linux, macOS, and Windows (MinGW / MSYS2).
         let compiler = if has_cpp_scanner {
-            // Need a C++ compiler for the C++ scanner
             if Command::new("c++").arg("--version").output().is_ok() { "c++" }
             else if Command::new("g++").arg("--version").output().is_ok() { "g++" }
             else if Command::new("clang++").arg("--version").output().is_ok() { "clang++" }
             else {
                 return Err(CompilationError::MissingDependencies(
-                    "No C++ compiler found (c++/g++/clang++). Install build-essential.".to_string(),
+                    "No C++ compiler found (c++/g++/clang++). \
+                     Install build-essential (Linux/WSL), Xcode CLI (macOS), \
+                     or Visual Studio Build Tools (Windows).".to_string(),
                 ));
             }
         } else {
@@ -309,6 +351,58 @@ impl ParserCompiler {
         Ok(())
     }
 
+    /// Compile tree-sitter parser source using MSVC (`cl.exe`).
+    ///
+    /// MSVC does not understand GCC-style flags (`-shared`, `-fPIC`, `-o`).
+    /// Instead it uses `/LD` (build a DLL) and `/Fe:<path>` (output name).
+    /// `cl.exe` handles both C and C++ files in the same invocation, so a
+    /// separate C++ compiler is not needed for parsers with `scanner.cc`.
+    ///
+    /// Requires the caller to run from a Visual Studio Developer Command Prompt
+    /// (or equivalent) so that `cl.exe` and its runtime libraries are in PATH.
+    #[cfg(target_os = "windows")]
+    fn compile_src_msvc(
+        src_dir: &Path,
+        output: &Path,
+        parser_c: &Path,
+        scanner_c: Option<&Path>,
+        scanner_cc: Option<&Path>,
+    ) -> Result<(), CompilationError> {
+        let mut args: Vec<std::ffi::OsString> = vec![
+            "/nologo".into(),
+            "/LD".into(),   // build a DLL
+            "/O2".into(),
+            format!("/I{}", src_dir.display()).into(),
+            "/DTREE_SITTER_HIDE_SYMBOLS".into(),
+            parser_c.as_os_str().into(),
+        ];
+
+        if let Some(sc)  = scanner_c  { args.push(sc.as_os_str().into()); }
+        if let Some(scc) = scanner_cc { args.push(scc.as_os_str().into()); }
+
+        // /Fe: sets the DLL output path
+        args.push(format!("/Fe:{}", output.display()).into());
+
+        println!("⚙  cl {}", args.iter().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" "));
+
+        let status = Command::new("cl")
+            .args(&args)
+            .status()
+            .map_err(|e| CompilationError::CompilationFailed(e.to_string()))?;
+
+        if !status.success() {
+            return Err(CompilationError::CompilationFailed(
+                format!(
+                    "cl.exe exited with {status}. \
+                     Make sure Forja Studio is launched from a Visual Studio \
+                     Developer Command Prompt (or Developer PowerShell)."
+                ),
+            ));
+        }
+
+        Ok(())
+    }
+
     async fn download_source_zip(
         client: &reqwest::Client,
         github_repo: &str,
@@ -366,10 +460,49 @@ mod tests {
         assert_eq!(ParserCompiler::canonical_binary_name(), "parser.dll");
     }
 
-    /// Verifies that a C compiler (cc/gcc/clang) is available in PATH.
+    /// Verifies that at least one supported C compiler is available in PATH.
     #[test]
     fn validate_compilation_environment_ok() {
         assert!(ParserCompiler::validate_compilation_environment().is_ok());
+    }
+
+    /// On Windows: cl.exe (MSVC) must be accepted as a valid C compiler.
+    /// Run from a Visual Studio Developer Command Prompt or Developer PowerShell.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_cl_exe_accepted_as_compiler() {
+        let result = ParserCompiler::validate_compilation_environment();
+        assert!(
+            result.is_ok(),
+            "Expected cl.exe, gcc (MinGW), or clang to be available on Windows. \
+             Install Visual Studio Build Tools: https://aka.ms/vs/buildtools"
+        );
+    }
+
+    /// Windows error message must mention the VS Build Tools install URL.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_missing_compiler_message_mentions_vs_build_tools() {
+        let msg = ParserCompiler::missing_compiler_message();
+        assert!(
+            msg.contains("aka.ms/vs"),
+            "Windows guidance should include the VS Build Tools URL, got: {msg}"
+        );
+        assert!(
+            msg.contains("Developer Command Prompt"),
+            "Windows guidance should mention Developer Command Prompt, got: {msg}"
+        );
+    }
+
+    /// Non-Windows platforms must NOT show a Windows-specific error message.
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn non_windows_missing_compiler_message_does_not_mention_vs() {
+        let msg = ParserCompiler::missing_compiler_message();
+        assert!(
+            !msg.contains("aka.ms/vs"),
+            "Non-Windows error should not mention VS Build Tools, got: {msg}"
+        );
     }
 
     #[test]

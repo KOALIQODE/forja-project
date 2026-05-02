@@ -95,8 +95,6 @@ mod parser;   // shim → crate::infrastructure::parser
 // These are NOT compiled into any new code — only maintain old `crate::X` paths.
 mod plugins;   // shim → commands/
 mod shared;    // shim → infrastructure/ + domain/
-mod document;  // shim → domain::document
-mod highlight; // shim → domain::highlight
 mod language;  // shim → domain::language
 
 use domain::document::DocumentManager;

@@ -6,9 +6,6 @@ use super::registry::{ParserEntry, PARSER_REGISTRY};
 use super::validator::BinaryValidator;
 use std::path::PathBuf;
 
-// Bundled queries — used as fallback when the GitHub download fails.
-const BUNDLED_TS_QUERIES: &str = include_str!("../../../queries/typescript.scm");
-
 pub struct ParserManager {
     pub cache_manager: CacheManager,
     pub downloader: BinaryDownloader,
@@ -238,17 +235,17 @@ impl ParserManager {
             }
         }
 
-        // If GitHub downloads failed, use the bundled queries (already combined JS+TS)
+        // If GitHub downloads failed, write empty queries (plain-text highlighting).
         if js_text.is_empty() && ts_text.is_empty() {
-            println!("📦 Using bundled TypeScript queries");
-            std::fs::write(&queries_path, BUNDLED_TS_QUERIES)?;
+            std::fs::write(&queries_path, "")?;
+            eprintln!("⚠️ TypeScript/TSX queries unavailable, highlighting will be plain text");
             return Ok(());
         }
 
-        // If only TS-specific failed, use bundled as the TS portion
+        // If only TS-specific failed, use JS queries alone.
         if ts_text.is_empty() {
-            println!("📦 TS-specific download failed, using bundled queries");
-            std::fs::write(&queries_path, BUNDLED_TS_QUERIES)?;
+            std::fs::write(&queries_path, js_text.trim_end())?;
+            println!("✅ Using JavaScript queries as fallback for {}", parser_name);
             return Ok(());
         }
 
