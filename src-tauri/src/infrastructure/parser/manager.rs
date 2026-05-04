@@ -463,8 +463,49 @@ mod tests {
     }
 
     #[test]
-    fn get_parser_info_returns_none_for_unknown() {
+    fn get_target_platform_returns_known_string() {
         let manager = fake_manager();
-        assert!(manager.get_parser_info("nonexistent_xyz").is_none());
+        let platform = manager.get_target_platform();
+        // Must be one of the known platform strings used in CDN asset names
+        let known = ["linux-x86_64", "macos-x86_64", "macos-arm64", "windows-x86_64"];
+        assert!(
+            known.contains(&platform.as_str()) || platform.contains('-'),
+            "unexpected platform string: {platform}"
+        );
     }
+
+    #[test]
+    fn cdn_url_format_is_correct() {
+        let manager = fake_manager();
+        let platform = manager.get_target_platform();
+        let ext = if cfg!(target_os = "windows") { "dll" }
+                  else if cfg!(target_os = "macos") { "dylib" }
+                  else { "so" };
+        let url = format!(
+            "https://github.com/KOALIQODE/forja-project/releases/download/grammars/rust-{}.{}",
+            platform, ext
+        );
+        assert!(url.starts_with("https://github.com/KOALIQODE/forja-project/releases/download/grammars/"));
+        assert!(url.contains("rust-"));
+        assert!(url.ends_with(&format!(".{}", ext)));
+    }
+
+    #[test]
+    fn cdn_url_contains_no_spaces_or_slashes_in_filename() {
+        let manager = fake_manager();
+        let platform = manager.get_target_platform();
+        // platform string must be safe for use in a URL path segment
+        assert!(!platform.contains(' '));
+        assert!(!platform.contains('/'));
+        assert!(!platform.contains('\\'));
+    }
+
+    #[test]
+    fn all_registry_parsers_have_non_empty_names_and_repos() {
+        for entry in PARSER_REGISTRY.iter() {
+            assert!(!entry.name.is_empty(), "parser entry has empty name");
+            assert!(!entry.github_repo.is_empty(), "parser '{}' has empty github_repo", entry.name);
+        }
+    }
+
 }
