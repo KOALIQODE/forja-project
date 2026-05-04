@@ -42,15 +42,16 @@ return {
 
 ### Permisos disponibles
 
-| Permiso | Descripción |
-|---|---|
-| `buffer:read` | Leer el contenido del buffer activo |
-| `buffer:write` | Modificar el contenido del buffer activo |
-| `events:on_save` | Reaccionar al evento de guardado de archivo |
-| `events:on_open` | Reaccionar al evento de apertura de archivo |
-| `events:on_change` | Reaccionar a cambios en el buffer |
-| `theme:register` | Registrar un tema de color |
-| `decorations:write` | Registrar un proveedor de decoraciones (ej: bracket colorizer) |
+| Permiso | Descripción | Riesgo |
+|---|---|---|
+| `buffer:read` | Leer el contenido del buffer activo | Bajo |
+| `buffer:write` | Modificar el contenido del buffer activo | Medio |
+| `events:on_save` | Reaccionar al evento de guardado de archivo | Medio |
+| `events:on_open` | Reaccionar al evento de apertura de archivo | Bajo |
+| `events:on_change` | Reaccionar a cambios en el buffer (cada keystroke) | Medio |
+| `theme:register` | Registrar un tema de color | Bajo |
+| `decorations:write` | Registrar un proveedor de decoraciones (ej: bracket colorizer) | Bajo |
+| `workspace:read` | Leer la ruta raíz del workspace actual | Bajo |
 
 > ⚠️ Si tu plugin llama a una API sin el permiso declarado, el runtime lanzará un error y el plugin no se cargará.
 
@@ -106,6 +107,16 @@ Reemplaza el contenido completo del buffer activo.
 ```lua
 -- Permiso requerido: buffer:write
 editor.set_buffer("nuevo contenido")
+```
+
+### `editor.workspace_root()` → string
+
+Lee la ruta raíz del workspace actual.
+
+```lua
+-- Permiso requerido: workspace:read
+local root = editor.workspace_root()
+-- Retorna: "/home/user/mi-proyecto"
 ```
 
 ### `editor.register_theme(table)`

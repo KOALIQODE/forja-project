@@ -184,6 +184,13 @@ local text = editor.get_buffer()   -- requiere buffer:read
 editor.set_buffer(new_text)         -- requiere buffer:write
 ```
 
+### Workspace
+
+```lua
+local root = editor.workspace_root()  -- requiere workspace:read
+-- Retorna la ruta raíz del workspace (ej: "/home/user/mi-proyecto")
+```
+
 ### Providers de decoraciones
 
 ```lua
@@ -225,16 +232,16 @@ editor.register_theme({
 
 ### Permisos disponibles
 
-| Permiso | Descripción |
-|---|---|
-| `buffer:read` | Leer contenido del buffer activo |
-| `buffer:write` | Escribir en el buffer activo |
-| `events:on_open` | Escuchar apertura de buffer |
-| `events:on_save` | Escuchar guardado de buffer |
-| `events:on_change` | Escuchar cambios en buffer |
-| `decorations:write` | Registrar decoraciones visuales |
-| `theme:register` | Registrar un tema |
-| `workspace:read` | Leer metadatos del workspace |
+| Permiso | Descripción | Riesgo |
+|---|---|---|
+| `buffer:read` | Leer contenido del buffer activo | Bajo |
+| `buffer:write` | Escribir en el buffer activo | Medio |
+| `events:on_open` | Escuchar apertura de buffer | Bajo |
+| `events:on_save` | Escuchar guardado de buffer | Medio |
+| `events:on_change` | Escuchar cambios en buffer | Medio |
+| `decorations:write` | Registrar decoraciones visuales | Bajo |
+| `theme:register` | Registrar un tema | Bajo |
+| `workspace:read` | Leer la ruta raíz del workspace | Bajo |
 
 ### Validación en Rust
 
@@ -246,6 +253,31 @@ if !plugin.has_permission("buffer:write") {
 ```
 
 El sistema compara los permisos declarados en `manifest.lua` contra los permisos que el plugin intenta usar en tiempo de ejecución. Si hay discrepancia, la llamada falla y se registra en logs.
+
+### Pre-flight y diálogo de consentimiento
+
+Antes de cargar cualquier plugin externo, el frontend llama al comando `plugin_preflight` que:
+
+1. Parsea el `manifest.lua` **sin cargar la VM Lua**
+2. Valida que todos los permisos declarados existen en `ALL_PERMISSIONS`
+3. Devuelve `PluginPreflightInfo` con descripción y nivel de riesgo por permiso
+
+```typescript
+// pluginClient.ts
+const info = await pluginPreflight(manifestSrc);
+// info.permissions = [
+//   { id: "buffer:write", description: "Modify the current editor buffer content", risk: "medium" },
+//   { id: "workspace:read", description: "Read the workspace root path", risk: "low" },
+// ]
+```
+
+El componente `PermissionConsentDialog.svelte` muestra al usuario:
+- Nombre y versión del plugin
+- Lista de permisos con descripción y badge de riesgo (bajo/medio/alto)
+- Banner de advertencia extra para plugins con permisos de riesgo alto
+- Botones **Allow** / **Deny** — si el usuario niega, la instalación se cancela
+
+**Plugins built-in** (`bracket-pair-colorizer`, `tokyo-night-dark`) están embebidos en el binario firmado y **no requieren consent** — son de confianza por diseño.
 
 ---
 
@@ -436,6 +468,19 @@ interface PluginInfo {
   commands: string[];
   dir_path: string; // ruta absoluta en disco — permite reload/re-enable
 }
+
+interface PermissionDetail {
+  id: string;          // "buffer:write"
+  description: string; // "Modify the current editor buffer content"
+  risk: string;        // "low" | "medium" | "high"
+}
+
+interface PluginPreflightInfo {
+  name: string;
+  version: string;
+  kind: "plugin" | "theme";
+  permissions: PermissionDetail[];
+}
 ```
 
 ### Stores Svelte
@@ -456,6 +501,7 @@ interface PluginInfo {
 
 | Comando | Descripción |
 |---|---|
+| `plugin_preflight(manifest_src)` | Parsea el manifest y devuelve permisos + descripciones SIN cargar el plugin |
 | `plugin_install_from_registry(name, version)` | Instala desde el registry oficial con meta.json |
 | `plugin_install_from_url(manifest_url, main_url, manifest_sha256, main_sha256)` | Instala desde URLs explícitas (seguridad validada) |
 | `plugin_registry_info()` | Devuelve la URL del registry y si dev_mode está activo |

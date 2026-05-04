@@ -394,6 +394,7 @@ Después de varias versiones aprobadas sin incidentes, un autor puede recibir el
 | Revisión por commit | Siempre tag/SHA, nunca branch |
 | Análisis automático | Scanner AST + detección de patrones |
 | Revisión humana | Panel de moderación privado |
+| Consentimiento del usuario | Diálogo de permisos antes de cargar plugins externos |
 | Integridad del paquete | SHA-256 verificado antes de escribir en disco |
 | URL origen | Solo `OFFICIAL_REGISTRY` (producción) · `FORJA_DEV_MODE` para dev |
 | Instalación controlada | Solo desde registry oficial (o self-hosted recompilando) |

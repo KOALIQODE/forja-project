@@ -4,8 +4,10 @@
   import TitleBar from "../lib/components/TitleBar.svelte";
   import ParserPrompt from "../lib/components/ParserPrompt.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
+  import ThemePicker from "../lib/components/ThemePicker.svelte";
   import "../lib/stores/preferencesStore";
   import { openTelescope, openGrammarHub, openPreferencesDialog, closeDialog, dialogState } from "../lib/stores/dialogStore";
+  import { activeUITheme } from "../lib/stores/uiThemeStore";
   import { get } from 'svelte/store';
   import "../app.css";
   import '@fontsource-variable/montserrat/wght.css';
@@ -15,32 +17,58 @@
 
   let steps = $state(15);
   let angle = $state(135);
-  let from  = $state('#0a0a0a');
-  let to    = $state('#1a1a1a');
-  
-  let gradient = $derived(steppedGradient(steps, angle, from, to));
 
+  // Reactive gradient — updates whenever the active UI theme changes
+  let gradient = $derived(
+    steppedGradient(
+      steps,
+      angle,
+      $activeUITheme.bgGradient.from,
+      $activeUITheme.bgGradient.to,
+    )
+  );
+
+  let themePickerOpen = $state(false);
   let lastTabTime = 0;
+  let ctrlKTime = 0;
 
   onMount(() => {
-    // Initialize built-in and user Lua plugins (theme + bracket colorizer)
     initPlugins();
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // ── Ctrl+K chord — must be highest priority ────────────────────────
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        ctrlKTime = Date.now();
+        return;
+      }
+
+      // Complete the Ctrl+K → T chord to open theme picker
+      if (e.key === 't' && ctrlKTime > 0 && Date.now() - ctrlKTime < 1500) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        ctrlKTime = 0;
+        themePickerOpen = !themePickerOpen;
+        return;
+      }
+
+      // Any other key resets the chord
+      if (ctrlKTime > 0) ctrlKTime = 0;
+
+      // ── Guard: theme picker handles its own keys ────────────────────────
+      if (themePickerOpen) return;
+
       const currentState = get(dialogState);
       
-      // Si el diálogo ya está abierto, solo permitimos Escape para cerrar
       if (currentState.activeDialog) {
           if (e.key === 'Escape') closeDialog();
           return;
       }
 
-      // No interceptar shortcuts si el editor está en insert mode:
-      // el usuario está escribiendo y los caracteres deben llegar al editor.
       const editorEl = document.querySelector('[data-buffer-ui]') as HTMLElement | null;
       const editorHasFocus = editorEl && (document.activeElement === editorEl || editorEl.contains(document.activeElement));
       const editorVimMode = editorEl?.dataset?.vimMode;
-      // "insert" = vim insert mode; undefined = vim disabled (always insert)
       const editorIsInsertMode = editorHasFocus && (editorVimMode === 'insert' || editorVimMode === undefined);
       if (editorIsInsertMode) return;
 
@@ -90,7 +118,6 @@
       }
     };
 
-    // Usar useCapture = true para interceptar antes que el editor
     window.addEventListener('keydown', handleKeyDown, true);
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
@@ -112,6 +139,10 @@
   <ParserPrompt />
 </div>
 <DialogManager />
+
+{#if themePickerOpen}
+  <ThemePicker onClose={() => { themePickerOpen = false; }} />
+{/if}
 
 <style>
   :global(html, body) {
