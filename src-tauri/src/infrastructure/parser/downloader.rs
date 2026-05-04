@@ -43,6 +43,41 @@ impl BinaryDownloader {
         Ok(())
     }
 
+    /// Download a binary from a direct URL (used for the Forja CDN).
+    /// Returns an error if the URL responds with a non-2xx status.
+    pub async fn download_from_url(
+        &self,
+        url: &str,
+        destination: &Path,
+        on_progress: Box<dyn Fn(u64, u64) + Send>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let response = self.client.get(url).send().await?;
+
+        if !response.status().is_success() {
+            return Err(format!("HTTP {} fetching {}", response.status(), url).into());
+        }
+
+        let total_size = response.content_length().unwrap_or(0);
+        let mut stream = response.bytes_stream();
+
+        if let Some(parent) = destination.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+
+        let mut file = File::create(destination).await?;
+        let mut downloaded = 0u64;
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            file.write_all(&chunk).await?;
+            downloaded += chunk.len() as u64;
+            on_progress(downloaded, total_size);
+        }
+        file.flush().await?;
+
+        Ok(())
+    }
+
     pub async fn get_release_info(
         &self,
         github_repo: &str,

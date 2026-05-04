@@ -76,7 +76,7 @@ use tauri::Manager;
 mod application;   // Use cases: document_service, parser_service, plugin_service
 mod commands;      // Inbound adapters: all #[tauri::command] handlers
 mod domain;        // Pure business logic: entities, value objects, no I/O
-mod infrastructure; // Outbound adapters: filesystem, git, LSP, parser, plugin, syntax
+pub mod infrastructure; // Outbound adapters: filesystem, git, LSP, parser, plugin, syntax
 
 // ── Bounded contexts ──────────────────────────────────────────────────────────
 // plugin_host/ is a self-contained context: Lua VMs, manifest parsing, security.

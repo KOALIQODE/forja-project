@@ -6,6 +6,12 @@ use super::registry::{ParserEntry, PARSER_REGISTRY};
 use super::validator::BinaryValidator;
 use std::path::PathBuf;
 
+/// Base URL where GitHub Actions publishes prebuilt grammar binaries.
+/// Assets follow the naming convention: `{parser}-{platform}.{ext}`
+/// e.g. `rust-linux-x86_64.so`, `css-macos-arm64.dylib`, `json-windows-x86_64.dll`
+const FORJA_CDN_BASE: &str =
+    "https://github.com/KOALIQODE/forja-project/releases/download/grammars";
+
 pub struct ParserManager {
     pub cache_manager: CacheManager,
     pub downloader: BinaryDownloader,
@@ -83,56 +89,42 @@ impl ParserManager {
             .find(|e| e.name == parser_name)
             .ok_or_else(|| format!("Unknown parser: {}", parser_name))?;
 
-        // ── Step 1: Attempt prebuilt download (if flagged) ───────────────────────
-        // The error type Box<dyn Error> is not Send, so we must NOT hold `e` across
-        // any `.await` boundary.  We materialise the result as Option<PathBuf> first,
-        // then do the compilation await separately — by that point `e` is gone.
-        let prebuilt_path: Option<std::path::PathBuf> = if entry.has_prebuilt
-            && !self.cache_manager.is_parser_installed(parser_name)
-        {
-            match self.download_prebuilt(parser_name, entry, on_progress).await {
-                Ok(p) => {
-                    println!("✅ {} prebuilt downloaded", parser_name);
-                    Some(p)
-                }
-                Err(e) => {
-                    // e is consumed here (moved into format), never crosses an await
-                    eprintln!("⚠️  Prebuilt failed ({}), falling back to compilation", e);
-                    None
+        // ── Step 1: Try Forja CDN (prebuilt binary, no compiler needed) ──────────
+        // Map the error to String immediately so the non-Send Box<dyn Error>
+        // is dropped before any subsequent `.await` boundary.
+        let cdn_result: Result<PathBuf, String> = self
+            .download_from_cdn(parser_name, on_progress)
+            .await
+            .map_err(|e| e.to_string());
+
+        let binary_path: PathBuf = match cdn_result {
+            Ok(p) => {
+                println!("✅ {} downloaded from Forja CDN", parser_name);
+                p
+            }
+            Err(cdn_msg) => {
+                eprintln!("⚠️  CDN unavailable for {} ({}), trying local compilation…", parser_name, cdn_msg);
+
+                match self.compiler.compile(parser_name, entry.github_repo, entry.subdir).await {
+                    Ok(p) => {
+                        println!("✅ {} compiled from source", parser_name);
+                        p
+                    }
+                    Err(compile_err) => {
+                        return Err(format!(
+                            "Could not install the '{name}' parser.\n\
+                             • CDN download failed: {cdn_msg}\n\
+                             • Local compilation failed: {compile_err}\n\n\
+                             Make sure you have an internet connection. \
+                             If you are offline, install a C compiler (gcc/clang) to build from source.",
+                            name = parser_name,
+                        ).into());
+                    }
                 }
             }
-        } else {
-            None
         };
 
-        // ── Step 2: Resolve binary path ──────────────────────────────────────────
-        // Force recompile when:
-        //   a) binary or queries are missing, OR
-        //   b) the registry now points to a different GitHub repo than what was compiled.
-        //      This prevents binary/query mismatches when grammars are updated in the registry.
-        let stored_repo = std::fs::read_to_string(self.cache_manager.metadata_path(parser_name))
-            .unwrap_or_default();
-        let repo_changed = stored_repo.trim() != entry.github_repo;
-
-        let binary_path = if self.cache_manager.is_parser_installed(parser_name)
-            && self.cache_manager.queries_path(parser_name).exists()
-            && !repo_changed
-        {
-            // Binary, queries, and grammar repo all match — nothing to do
-            self.cache_manager.binary_path(parser_name)
-        } else if let Some(p) = prebuilt_path {
-            if !repo_changed { p } else {
-                self.compiler.compile(parser_name, entry.github_repo, entry.subdir).await?
-            }
-        } else {
-            // Compile from source; also extracts matching queries into the cache dir
-            self.compiler.compile(parser_name, entry.github_repo, entry.subdir).await?
-        };
-
-        // Step 3: download queries if:
-        //  a) file doesn't exist yet, OR
-        //  b) TypeScript/TSX — must combine JS base queries + TS-specific queries, OR
-        //  c) the file has an unresolved "; inherits:" directive (e.g. Svelte → HTML).
+        // ── Step 3: Download highlight queries ───────────────────────────────────
         let queries_path = self.cache_manager.queries_path(parser_name);
         let needs_queries = !queries_path.exists()
             || matches!(parser_name, "typescript" | "tsx")
@@ -143,10 +135,9 @@ impl ParserManager {
             self.download_queries(parser_name).await?;
         }
 
-        // ── Step 4: auto-install companion parsers ───────────────────────────────
-        // markdown_inline is required for inline highlighting inside markdown files.
+        // ── Step 4: Auto-install markdown_inline companion ───────────────────────
         if parser_name == "markdown" && !self.cache_manager.is_parser_ready("markdown_inline") {
-            println!("📦 Installing markdown_inline companion...");
+            println!("📦 Installing markdown_inline companion…");
             Box::pin(self.ensure_parser_available("markdown_inline", Box::new(|_, _| {}))).await
                 .unwrap_or_else(|e| {
                     eprintln!("⚠️  markdown_inline companion failed: {}", e);
@@ -155,6 +146,52 @@ impl ParserManager {
         }
 
         Ok(binary_path)
+    }
+
+    /// Build the CDN URL and download the prebuilt binary for the current platform.
+    async fn download_from_cdn(
+        &self,
+        parser_name: &str,
+        on_progress: Box<dyn Fn(u64, u64) + Send>,
+    ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let platform = self.get_target_platform();
+        let ext = if cfg!(target_os = "windows") { "dll" }
+                  else if cfg!(target_os = "macos") { "dylib" }
+                  else { "so" };
+
+        let url = format!("{}/{}-{}.{}", FORJA_CDN_BASE, parser_name, platform, ext);
+        println!("⬇️  Fetching {} from CDN…", url);
+
+        let temp_dir = tempfile::tempdir()?;
+        let temp_path = temp_dir.path().join(format!("parser.{}", ext));
+
+        self.downloader
+            .download_from_url(&url, &temp_path, on_progress)
+            .await?;
+
+        // Validate the binary is a real shared library before accepting it
+        BinaryValidator::validate_binary_format(&temp_path)?;
+
+        // Move to permanent cache
+        let parser_dir = self.cache_manager.parser_dir(parser_name);
+        std::fs::create_dir_all(&parser_dir)?;
+        let final_path = self.cache_manager.binary_path(parser_name);
+        std::fs::rename(&temp_path, &final_path)
+            .or_else(|_| std::fs::copy(&temp_path, &final_path).map(|_| ()))?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&final_path, std::fs::Permissions::from_mode(0o755))?;
+        }
+
+        // Save metadata so cache-invalidation logic can track the source
+        self.save_parser_metadata(
+            parser_name,
+            PARSER_REGISTRY.iter().find(|e| e.name == parser_name).unwrap(),
+        )?;
+
+        Ok(final_path)
     }
 
     async fn download_queries(&self, parser_name: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -348,52 +385,6 @@ impl ParserManager {
             std::fs::remove_file(&queries_path)?;
         }
         self.download_queries(parser_name).await
-    }
-
-    async fn download_prebuilt(
-        &self,
-        parser_name: &str,
-        entry: &ParserEntry,
-        on_progress: Box<dyn Fn(u64, u64) + Send>,
-    ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let release = self.downloader.get_release_info(entry.github_repo).await?;
-        let target = self.get_target_platform();
-
-        let asset = release.assets.iter()
-            .find(|a| a.name.contains(&target))
-            .ok_or_else(|| format!("No binary available for platform: {}", target))?;
-
-        let temp_dir = tempfile::tempdir()?;
-        let temp_path = temp_dir.path().join(&asset.name);
-
-        self.downloader.download_binary(
-            &asset.browser_download_url,
-            &temp_path,
-            on_progress,
-        ).await?;
-
-        // Validate binary format
-        BinaryValidator::validate_binary_format(&temp_path)?;
-
-        // Move to permanent cache
-        let parser_dir = self.cache_manager.parser_dir(parser_name);
-        std::fs::create_dir_all(&parser_dir)?;
-        let final_path = self.cache_manager.binary_path(parser_name);
-        std::fs::rename(&temp_path, &final_path)
-            .or_else(|_| std::fs::copy(&temp_path, &final_path).map(|_| ()))?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let perms = std::fs::Permissions::from_mode(0o755);
-            std::fs::set_permissions(&final_path, perms)?;
-        }
-
-        // Save metadata
-        self.save_parser_metadata(parser_name, entry)?;
-
-        println!("✅ {} downloaded successfully", parser_name);
-        Ok(final_path)
     }
 
     fn get_target_platform(&self) -> String {

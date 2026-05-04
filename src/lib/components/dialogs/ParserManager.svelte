@@ -11,7 +11,7 @@
     X,
     Search,
     Loader2,
-    TriangleAlert,
+    Globe,
   } from "@lucide/svelte";
   import { closeDialog } from "../../stores/dialogStore";
 
@@ -240,8 +240,8 @@
     <!-- Footer -->
     <div class="flex items-center justify-between border-t border-white/5 bg-white/[0.01] px-8 py-4 text-[9px] uppercase tracking-[0.2em] text-white/20">
       <div class="flex items-center gap-2">
-        <TriangleAlert size={10} class="text-amber-500/40" />
-        <span>Requires gcc / clang to compile parsers from source</span>
+        <Globe size={10} class="text-emerald-500/40" />
+        <span>Downloads prebuilt binaries automatically — no compiler required</span>
       </div>
       <span>{parsers.filter(p => p.installed).length} / {parsers.length} installed</span>
     </div>
