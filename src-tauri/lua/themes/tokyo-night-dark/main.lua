@@ -41,7 +41,7 @@ editor.register_theme({
   -- Contributors: see docs/UI_THEMES.md for the full token reference.
   ui = {
     kind = "dark",
-    bg_gradient = { from = "#0a0b14", to = "#13141f", steps = 15, angle = 135 },
+    bg_gradient = { from = "#080912", to = "#1e2030", steps = 12, angle = 135 },
     preview = { bg = "#0a0b14", accent = "#7aa2f7", text = "#c0caf5" },
     vars = {
       ["--forja-ui-text-primary"]       = "#c0caf5",

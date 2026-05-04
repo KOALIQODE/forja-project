@@ -27,7 +27,7 @@ export const THEMES: UITheme[] = [
     id: 'misto-dark',
     name: 'Misto Dark',
     kind: 'dark',
-    bgGradient: { from: '#0a0a0a', to: '#161616', steps: 15, angle: 135 },
+    bgGradient: { from: '#080808', to: '#242424', steps: 12, angle: 135 },
     preview: { bg: '#0a0a0a', accent: '#4ade80', text: '#f4f4f5' },
     vars: {
       '--forja-ui-text-primary':      '#f4f4f5',
@@ -64,7 +64,7 @@ export const THEMES: UITheme[] = [
     id: 'misto-light',
     name: 'Misto Light',
     kind: 'light',
-    bgGradient: { from: '#ffffff', to: '#dde8e0', steps: 15, angle: 180 },
+    bgGradient: { from: '#ffffff', to: '#bdd0c8', steps: 12, angle: 135 },
     preview: { bg: '#f5f5f5', accent: '#16a34a', text: '#111111' },
     vars: {
       '--forja-ui-text-primary':      '#111111',

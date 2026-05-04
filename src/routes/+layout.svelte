@@ -15,14 +15,11 @@
 
   let { children }: { children: Snippet } = $props();
 
-  let steps = $state(15);
-  let angle = $state(135);
-
   // Reactive gradient — updates whenever the active UI theme changes
   let gradient = $derived(
     steppedGradient(
-      steps,
-      angle,
+      $activeUITheme.bgGradient.steps,
+      $activeUITheme.bgGradient.angle,
       $activeUITheme.bgGradient.from,
       $activeUITheme.bgGradient.to,
     )
