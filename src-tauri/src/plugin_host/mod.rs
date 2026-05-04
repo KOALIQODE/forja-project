@@ -27,6 +27,18 @@ pub(crate) const BUILTIN_SEED: &[(&str, &str, &str, &str)] = &[
         include_str!("../../lua/themes/tokyo-night-dark/main.lua"),
     ),
     (
+        "themes/misto-dark/manifest.lua",
+        include_str!("../../lua/themes/misto-dark/manifest.lua"),
+        "themes/misto-dark/main.lua",
+        include_str!("../../lua/themes/misto-dark/main.lua"),
+    ),
+    (
+        "themes/misto-light/manifest.lua",
+        include_str!("../../lua/themes/misto-light/manifest.lua"),
+        "themes/misto-light/main.lua",
+        include_str!("../../lua/themes/misto-light/main.lua"),
+    ),
+    (
         "plugins/bracket-pair-colorizer/manifest.lua",
         include_str!("../../lua/plugins/bracket-pair-colorizer/manifest.lua"),
         "plugins/bracket-pair-colorizer/main.lua",
@@ -117,29 +129,27 @@ pub(crate) fn plugins_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Seed built-in plugins to the plugins directory if not already present.
+/// Seed built-in plugins to the plugins directory.
+/// Built-in files are always overwritten — they are official and managed by the app binary.
+/// User-installed plugins live in separate directories and are never touched here.
 pub(crate) fn seed_builtins(plugins_root: &Path) -> Result<(), String> {
     for (manifest_rel, manifest_src, main_rel, main_src) in BUILTIN_SEED {
         let manifest_path = plugins_root.join(manifest_rel);
         let main_path     = plugins_root.join(main_rel);
 
-        // Only write if the file doesn't exist yet (preserve user edits)
-        if !manifest_path.exists() {
-            if let Some(parent) = manifest_path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("mkdir error: {}", e))?;
-            }
-            std::fs::write(&manifest_path, manifest_src)
-                .map_err(|e| format!("write error: {}", e))?;
+        if let Some(parent) = manifest_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir error: {}", e))?;
         }
-        if !main_path.exists() {
-            if let Some(parent) = main_path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("mkdir error: {}", e))?;
-            }
-            std::fs::write(&main_path, main_src)
-                .map_err(|e| format!("write error: {}", e))?;
+        std::fs::write(&manifest_path, manifest_src)
+            .map_err(|e| format!("write error: {}", e))?;
+
+        if let Some(parent) = main_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir error: {}", e))?;
         }
+        std::fs::write(&main_path, main_src)
+            .map_err(|e| format!("write error: {}", e))?;
     }
     Ok(())
 }

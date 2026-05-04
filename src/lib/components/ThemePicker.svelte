@@ -5,11 +5,14 @@
 
   let { onClose }: { onClose: () => void } = $props();
 
-  const themes = allUIThemes;
+  let themes = $derived($allUIThemes);
 
   // Use Svelte 5 store auto-subscription — no manual unsubscribe needed
   let activeId = $derived($activeUIThemeId);
-  let selectedIndex = $state(Math.max(0, themes.findIndex((t) => t.id === $activeUIThemeId)));
+  let selectedIndex = $state(0);
+  $effect(() => {
+    selectedIndex = Math.max(0, $allUIThemes.findIndex((t) => t.id === $activeUIThemeId));
+  });
 
   // Scope picker CSS vars to this component only
   let themeStyle = $derived(

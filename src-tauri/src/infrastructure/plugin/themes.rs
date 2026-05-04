@@ -2,6 +2,7 @@
 
 use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// The base (non-syntax) colours of a theme.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -55,6 +56,35 @@ pub struct ThemeSyntax {
     pub namespace: Option<String>,
 }
 
+/// Background gradient configuration for the app layout.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BgGradient {
+    pub from: String,
+    pub to: String,
+    pub steps: u32,
+    pub angle: u32,
+}
+
+/// Swatch colors for the theme picker preview.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ThemePreview {
+    pub bg: String,
+    pub accent: String,
+    pub text: String,
+}
+
+/// UI-level theme tokens — CSS custom properties for WelcomeScreen, ThemePicker, etc.
+/// These are separate from the editor syntax colors.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ThemeUI {
+    /// "dark" or "light"
+    pub kind: String,
+    pub bg_gradient: BgGradient,
+    pub preview: ThemePreview,
+    /// CSS custom property map, e.g. `{"--forja-ui-text-primary": "#f4f4f5"}`
+    pub vars: HashMap<String, String>,
+}
+
 /// A complete theme definition with colours, syntax tokens, and bracket colours.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeDefinition {
@@ -66,6 +96,8 @@ pub struct ThemeDefinition {
     pub syntax: ThemeSyntax,
     /// Bracket pair colours by nesting depth (depth 1 → index 0).
     pub brackets: Vec<String>,
+    /// UI-level token set. Present only on themes that declare a `ui = {...}` block.
+    pub ui: Option<ThemeUI>,
 }
 
 impl ThemeDefinition {
@@ -113,11 +145,55 @@ impl ThemeDefinition {
             _ => vec![],
         };
 
+        let ui = (|| -> Option<ThemeUI> {
+            let t = match table.get::<LuaValue>("ui").ok()? {
+                LuaValue::Table(t) => t,
+                _ => return None,
+            };
+            let kind: String = t.get("kind").unwrap_or_else(|_| "dark".to_string());
+            let bg_gradient = match t.get::<LuaValue>("bg_gradient").ok()? {
+                LuaValue::Table(bg) => BgGradient {
+                    from: bg.get("from").unwrap_or_default(),
+                    to: bg.get("to").unwrap_or_default(),
+                    steps: bg.get("steps").unwrap_or(15),
+                    angle: bg.get("angle").unwrap_or(135),
+                },
+                _ => BgGradient::default(),
+            };
+            let preview = match t.get::<LuaValue>("preview").ok()? {
+                LuaValue::Table(p) => ThemePreview {
+                    bg: p.get("bg").unwrap_or_default(),
+                    accent: p.get("accent").unwrap_or_default(),
+                    text: p.get("text").unwrap_or_default(),
+                },
+                _ => ThemePreview::default(),
+            };
+            let vars = match t.get::<LuaValue>("vars").ok()? {
+                LuaValue::Table(v) => {
+                    let mut map = HashMap::new();
+                    for pair in v.pairs::<String, String>() {
+                        if let Ok((k, val)) = pair {
+                            map.insert(k, val);
+                        }
+                    }
+                    map
+                },
+                _ => HashMap::new(),
+            };
+            Some(ThemeUI {
+                kind,
+                bg_gradient,
+                preview,
+                vars,
+            })
+        })();
+
         Ok(ThemeDefinition {
             name,
             colors,
             syntax,
             brackets,
+            ui,
         })
     }
 }
@@ -140,6 +216,7 @@ mod tests {
                 ..Default::default()
             },
             brackets: vec!["#ffd700".into(), "#da70d6".into()],
+            ui: None,
         };
 
         let json = serde_json::to_string(&theme).unwrap();
