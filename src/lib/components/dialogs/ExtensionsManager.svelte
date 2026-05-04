@@ -97,9 +97,11 @@
     consentPending = null;
   }
 
-  // Reactive from stores
+  // Core UI themes are always built-in — exclude from the theme manager list
+  const CORE_UI_THEMES = new Set(['misto-dark', 'misto-light']);
+  // Reactive from stores — use knownPlugins so disabled themes remain visible
   let plugins = $derived($knownPlugins.filter(p => p.kind === "plugin"));
-  let themes  = $derived($loadedPlugins.filter(p => p.kind === "theme"));
+  let themes  = $derived($knownPlugins.filter(p => p.kind === "theme" && !CORE_UI_THEMES.has(p.name)));
   let currentTheme = $derived($activeTheme);
   let isPluginsLoading = $derived($pluginLoading);
   let disabled = $derived($disabledPluginNames);
@@ -215,14 +217,20 @@
     }
   }
 
-  async function activateTheme(name: string) {
-    await activateThemeByName(name);
+  async function activateTheme(theme: PluginInfo) {
+    // Re-enable plugin if it was previously disabled/unloaded
+    if (disabled.has(theme.name)) {
+      await enablePlugin(theme);
+    }
+    await activateThemeByName(theme.name);
   }
 
-  async function deactivateTheme() {
+  async function deactivateTheme(name: string) {
     activeTheme.set(null);
     clearTheme();
     localStorage.setItem("forja:activeTheme", "__none__");
+    // Disable the plugin so it disappears from the Ctrl+K+T UI theme picker
+    await disablePlugin(name);
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -443,7 +451,7 @@
                   <div class="shrink-0">
                     {#if isActive}
                       <button
-                        onclick={deactivateTheme}
+                        onclick={() => deactivateTheme(theme.name)}
                         class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-violet-300/60 transition-all hover:bg-rose-500/20 hover:text-rose-400"
                       >
                         <PowerOff size={12} />
@@ -451,7 +459,7 @@
                       </button>
                     {:else}
                       <button
-                        onclick={() => activateTheme(theme.name)}
+                        onclick={() => activateTheme(theme)}
                         class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/50 transition-all hover:bg-violet-500 hover:text-white"
                       >
                         <Power size={12} />

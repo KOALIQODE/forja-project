@@ -20,19 +20,21 @@ case "$PLATFORM" in
   *)        EXT="so" ;;
 esac
 
-# Detect best available C compiler
+# Detect best available C compiler.
+# Prefer clang — it handles tree-sitter's complex designated initializers
+# better than GCC on all platforms (no "sorry, unimplemented" errors).
 detect_compiler() {
   local need_cpp=$1
   if [ "$need_cpp" = "true" ]; then
-    for cc in c++ g++ clang++; do
+    for cc in clang++ c++ g++; do
       if command -v "$cc" &>/dev/null; then echo "$cc"; return; fi
     done
-    echo "ERROR: no C++ compiler found (c++/g++/clang++)" >&2; exit 1
+    echo "ERROR: no C++ compiler found (clang++/c++/g++)" >&2; exit 1
   else
-    for cc in cc gcc clang; do
+    for cc in clang cc gcc; do
       if command -v "$cc" &>/dev/null; then echo "$cc"; return; fi
     done
-    echo "ERROR: no C compiler found (cc/gcc/clang)" >&2; exit 1
+    echo "ERROR: no C compiler found (clang/cc/gcc)" >&2; exit 1
   fi
 }
 
@@ -72,14 +74,15 @@ compile_parser() {
   TMP=$(mktemp -d)
   trap "rm -rf $TMP" RETURN
 
-  # Download source ZIP — try explicit branch override first, then main/master/HEAD
+  # Download source ZIP — try explicit branch override first, then main/master
+  # Use the simpler /${BRANCH}.zip format (no refs/heads/) — more reliable with redirects
   local ZIP="$TMP/source.zip"
   local DOWNLOADED=false
   local BRANCHES_TO_TRY=()
   [ -n "$BRANCH_OVERRIDE" ] && BRANCHES_TO_TRY+=("$BRANCH_OVERRIDE")
   BRANCHES_TO_TRY+=(main master)
   for BRANCH in "${BRANCHES_TO_TRY[@]}"; do
-    local URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.zip"
+    local URL="https://github.com/${REPO}/archive/${BRANCH}.zip"
     if curl -fsSL --retry 3 -o "$ZIP" "$URL" 2>/dev/null; then
       DOWNLOADED=true
       break
@@ -131,13 +134,6 @@ compile_parser() {
     return 1
   fi
 
-  # Determine if a C++ scanner is needed
-  local NEEDS_CPP=false
-  [ -f "$SRC_DIR/scanner.cc" ] && NEEDS_CPP=true
-
-  local CC
-  CC=$(detect_compiler "$NEEDS_CPP")
-
   # Build shared library flags (platform-specific)
   # Use -O1 instead of -O2 for very large parser.c files to avoid OOM in CI
   local PARSER_SIZE
@@ -145,17 +141,42 @@ compile_parser() {
   local OPT_LEVEL="-O2"
   [ "$PARSER_SIZE" -gt 1000000 ] && OPT_LEVEL="-O1"
 
-  local FLAGS=("-shared" "-fPIC" "$OPT_LEVEL" "-I$SRC_DIR" "$SRC_DIR/parser.c")
-  [ -f "$SRC_DIR/scanner.c"  ] && FLAGS+=("$SRC_DIR/scanner.c")
-  [ -f "$SRC_DIR/scanner.cc" ] && FLAGS+=("$SRC_DIR/scanner.cc")
-  FLAGS+=("-o" "$DEST")
+  # -fPIC is required on Linux/macOS but unsupported on Windows (MSVC target)
+  local PIC_FLAG="-fPIC"
+  [[ "$PLATFORM" == windows* ]] && PIC_FLAG=""
 
-  if "$CC" "${FLAGS[@]}"; then
-    echo "✅ $NAME → $DEST"
+  # For C++ scanner, compile parser.c and scanner.cc separately
+  # to avoid mixing -std=c11 and -std=c++14 in one invocation
+  if [ -f "$SRC_DIR/scanner.cc" ]; then
+    local OBJ_PARSER="$TMP/parser.o"
+    local OBJ_SCANNER="$TMP/scanner.o"
+    local CC_C
+    CC_C=$(detect_compiler "false")
+    local CC_CPP
+    CC_CPP=$(detect_compiler "true")
+    if ! "$CC_C" -c $PIC_FLAG "$OPT_LEVEL" -std=c11 -Wno-switch -I"$SRC_DIR" "$SRC_DIR/parser.c" -o "$OBJ_PARSER"; then
+      echo "❌ Compilation failed for $NAME (parser.c)" >&2; return 1
+    fi
+    if ! "$CC_CPP" -c $PIC_FLAG "$OPT_LEVEL" -std=c++14 -Wno-switch -I"$SRC_DIR" "$SRC_DIR/scanner.cc" -o "$OBJ_SCANNER"; then
+      echo "❌ Compilation failed for $NAME (scanner.cc)" >&2; return 1
+    fi
+    local EXTRA_OBJS=()
+    [ -f "$SRC_DIR/scanner.c" ] && {
+      local OBJ_SCANNER_C="$TMP/scanner_c.o"
+      "$CC_C" -c $PIC_FLAG "$OPT_LEVEL" -std=c11 -I"$SRC_DIR" "$SRC_DIR/scanner.c" -o "$OBJ_SCANNER_C"
+      EXTRA_OBJS+=("$OBJ_SCANNER_C")
+    }
+    "$CC_CPP" -shared "$OBJ_PARSER" "$OBJ_SCANNER" "${EXTRA_OBJS[@]}" -o "$DEST"
   else
-    echo "❌ Compilation failed for $NAME" >&2
-    return 1
+    local CC_C2
+    CC_C2=$(detect_compiler "false")
+    local FLAGS=("-shared" $PIC_FLAG "$OPT_LEVEL" "-std=c11" "-Wno-switch" "-I$SRC_DIR" "$SRC_DIR/parser.c")
+    [ -f "$SRC_DIR/scanner.c" ] && FLAGS+=("$SRC_DIR/scanner.c")
+    FLAGS+=("-o" "$DEST")
+    "$CC_C2" "${FLAGS[@]}" || { echo "❌ Compilation failed for $NAME" >&2; return 1; }
   fi
+
+  echo "✅ $NAME → $DEST"
 }
 
 # ── Main loop ────────────────────────────────────────────────────────────────
@@ -163,7 +184,7 @@ SUCCESS=0
 FAILED=()
 
 for ENTRY in "${PARSERS[@]}"; do
-  IFS='|' read -r NAME REPO SUBDIR BRANCH <<< "${ENTRY}|||"
+  IFS='|' read -r NAME REPO SUBDIR BRANCH <<< "$ENTRY"
   if compile_parser "$NAME" "$REPO" "$SUBDIR" "$BRANCH"; then
     (( SUCCESS++ )) || true
   else

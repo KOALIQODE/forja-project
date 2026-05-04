@@ -96,42 +96,6 @@ export const THEMES: UITheme[] = [
     },
   },
 
-  // ── Tokyo Night Dark (adapted) ───────────────────────────────────────────────
-  {
-    id: 'tokyo-night-dark',
-    name: 'Tokyo Night Dark',
-    kind: 'dark',
-    bgGradient: { from: '#1a1b26', to: '#24283b', steps: 15, angle: 135 },
-    preview: { bg: '#1a1b26', accent: '#7aa2f7', text: '#c0caf5' },
-    vars: {
-      '--forja-ui-text-primary':      '#c0caf5',
-      '--forja-ui-text-secondary':    '#a9b1d6',
-      '--forja-ui-text-muted':        '#565f89',
-      '--forja-ui-text-version':      '#414868',
-      '--forja-ui-gradient-from':     '#7aa2f7',
-      '--forja-ui-gradient-to':       '#bb9af7',
-      '--forja-ui-btn-border':        '#2f3549',
-      '--forja-ui-btn-bg':            'rgba(26,27,38,0.5)',
-      '--forja-ui-btn-text':          '#a9b1d6',
-      '--forja-ui-btn-hover-border':  'rgba(122,162,247,0.4)',
-      '--forja-ui-btn-hover-bg':      'rgba(122,162,247,0.06)',
-      '--forja-ui-btn-hover-text':    '#c0caf5',
-      '--forja-ui-btn-hover-shadow':  '0 0 25px rgba(122,162,247,0.12)',
-      '--forja-ui-btn-icon':          '#565f89',
-      '--forja-ui-btn-icon-hover':    '#7aa2f7',
-      '--forja-ui-ws-bg':             'transparent',
-      '--forja-ui-picker-bg':         'rgba(22,23,35,0.97)',
-      '--forja-ui-picker-border':     '#2f3549',
-      '--forja-ui-picker-text':       '#a9b1d6',
-      '--forja-ui-picker-item-hover': 'rgba(255,255,255,0.05)',
-      '--forja-ui-picker-active':     'rgba(122,162,247,0.15)',
-      '--forja-ui-picker-active-text':'#7aa2f7',
-      '--forja-ui-logo-outer':        'rgba(122,162,247,0.45)',
-      '--forja-ui-logo-mid':          '#1e2642',
-      '--forja-ui-logo-core':         '#7aa2f7',
-      '--forja-ui-logo-glow':         'rgba(122,162,247,0.5)',
-    },
-  },
 ];
 
 export const DEFAULT_THEME_ID = 'misto-dark';

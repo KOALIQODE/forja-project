@@ -55,11 +55,32 @@ export interface ThemeSyntax {
     namespace?: string;
 }
 
+export interface BgGradient {
+    from: string;
+    to: string;
+    steps: number;
+    angle: number;
+}
+
+export interface ThemePreview {
+    bg: string;
+    accent: string;
+    text: string;
+}
+
+export interface ThemeUI {
+    kind: 'dark' | 'light';
+    bg_gradient: BgGradient;
+    preview: ThemePreview;
+    vars: Record<string, string>;
+}
+
 export interface ThemeDefinition {
     name: string;
     colors: ThemeColors;
     syntax: ThemeSyntax;
     brackets: string[];
+    ui?: ThemeUI;
 }
 
 export interface BracketRange {
@@ -85,7 +106,7 @@ export async function pluginPreflight(manifestSrc: string): Promise<PluginPrefli
     return invoke<PluginPreflightInfo>("plugin_preflight", { manifestSrc });
 }
 
-/** Load all built-in plugins embedded in the binary (tokyo-night-dark + bracket-pair-colorizer). */
+/** Load all built-in plugins embedded in the binary (themes + bracket-pair-colorizer). */
 export async function pluginLoadBuiltins(): Promise<string[]> {
     return invoke<string[]>("plugin_load_builtins");
 }

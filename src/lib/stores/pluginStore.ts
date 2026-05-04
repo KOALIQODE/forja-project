@@ -11,6 +11,7 @@ import {
     type ThemeDefinition,
     type BracketRange,
 } from "$lib/utils/pluginClient";
+import { loadUIThemesFromBackend } from '$lib/stores/uiThemeStore';
 import { applyTheme } from "$lib/utils/themeEngine";
 
 // ── Core writable stores ──────────────────────────────────────────────────────
@@ -94,6 +95,8 @@ export async function initPlugins(): Promise<void> {
         console.log("[plugins] all loaded plugins:", list.map(p => `${p.name} (${p.kind})`));
 
         await applyFirstTheme();
+        await loadUIThemesFromBackend();
+        console.log('[plugins] UI themes loaded from backend');
         const theme = get(activeTheme);
         console.log("[plugins] active theme:", theme?.name ?? "none");
     } catch (e) {
@@ -140,6 +143,7 @@ export async function disablePlugin(name: string): Promise<void> {
         return next;
     });
     if (get(activeTheme)?.name === name) activeTheme.set(null);
+    await loadUIThemesFromBackend();
 }
 
 /** Enable a plugin: remove from disabled set, reload it. */
@@ -162,6 +166,7 @@ export async function enablePlugin(plugin: PluginInfo): Promise<void> {
         saveDisabledSet(next);
         return next;
     });
+    await loadUIThemesFromBackend();
 }
 
 /** Unload a plugin by name. */

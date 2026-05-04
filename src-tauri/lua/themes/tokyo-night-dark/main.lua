@@ -2,14 +2,14 @@ editor.register_theme({
   name = "tokyo-night-dark",
 
   colors = {
-    bg          = "#1a1b26",
+    bg          = "#0a0b14",
     fg          = "#c0caf5",
     cursor      = "#c0caf5",
-    selection   = "#33467c",
-    line_number = "#3b4261",
-    gutter_bg   = "#1a1b26",
-    border      = "#27283d",
-    active_line = "#1e202e",
+    selection   = "#1e2642",
+    line_number = "#2e3452",
+    gutter_bg   = "#0a0b14",
+    border      = "#1c1e2e",
+    active_line = "#0d0e1a",
   },
 
   syntax = {
@@ -19,7 +19,7 @@ editor.register_theme({
     variable      = "#c0caf5",
     type          = "#2ac3de",
     constant      = "#ff9e64",
-    comment       = "#565f89",
+    comment       = "#444b6a",
     operator      = "#89ddff",
     number        = "#ff9e64",
     punctuation   = "#89ddff",
@@ -28,13 +28,48 @@ editor.register_theme({
     namespace     = "#2ac3de",
   },
 
-  -- Bracket pair colors indexed by nesting depth (depth 1 → index 1)
   brackets = {
-    "#f7768e",  -- depth 1
-    "#e0af68",  -- depth 2
-    "#9ece6a",  -- depth 3
-    "#7aa2f7",  -- depth 4
-    "#bb9af7",  -- depth 5
-    "#2ac3de",  -- depth 6
-  }
+    "#f7768e",
+    "#e0af68",
+    "#9ece6a",
+    "#7aa2f7",
+    "#bb9af7",
+    "#2ac3de",
+  },
+
+  -- UI token set for WelcomeScreen, ThemePicker, and other program surfaces.
+  -- Contributors: see docs/UI_THEMES.md for the full token reference.
+  ui = {
+    kind = "dark",
+    bg_gradient = { from = "#0a0b14", to = "#13141f", steps = 15, angle = 135 },
+    preview = { bg = "#0a0b14", accent = "#7aa2f7", text = "#c0caf5" },
+    vars = {
+      ["--forja-ui-text-primary"]       = "#c0caf5",
+      ["--forja-ui-text-secondary"]     = "#a9b1d6",
+      ["--forja-ui-text-muted"]         = "#444b6a",
+      ["--forja-ui-text-version"]       = "#2e3452",
+      ["--forja-ui-gradient-from"]      = "#7aa2f7",
+      ["--forja-ui-gradient-to"]        = "#bb9af7",
+      ["--forja-ui-btn-border"]         = "#1c1e2e",
+      ["--forja-ui-btn-bg"]             = "rgba(10,11,20,0.55)",
+      ["--forja-ui-btn-text"]           = "#a9b1d6",
+      ["--forja-ui-btn-hover-border"]   = "rgba(122,162,247,0.35)",
+      ["--forja-ui-btn-hover-bg"]       = "rgba(122,162,247,0.06)",
+      ["--forja-ui-btn-hover-text"]     = "#c0caf5",
+      ["--forja-ui-btn-hover-shadow"]   = "0 0 25px rgba(122,162,247,0.1)",
+      ["--forja-ui-btn-icon"]           = "#444b6a",
+      ["--forja-ui-btn-icon-hover"]     = "#7aa2f7",
+      ["--forja-ui-ws-bg"]              = "transparent",
+      ["--forja-ui-picker-bg"]          = "rgba(8,9,18,0.97)",
+      ["--forja-ui-picker-border"]      = "#1c1e2e",
+      ["--forja-ui-picker-text"]        = "#a9b1d6",
+      ["--forja-ui-picker-item-hover"]  = "rgba(255,255,255,0.04)",
+      ["--forja-ui-picker-active"]      = "rgba(122,162,247,0.12)",
+      ["--forja-ui-picker-active-text"] = "#7aa2f7",
+      ["--forja-ui-logo-outer"]         = "rgba(122,162,247,0.4)",
+      ["--forja-ui-logo-mid"]           = "#0f1020",
+      ["--forja-ui-logo-core"]          = "#7aa2f7",
+      ["--forja-ui-logo-glow"]          = "rgba(122,162,247,0.45)",
+    },
+  },
 })
