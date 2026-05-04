@@ -1,16 +1,7 @@
-<script>
-  import {
-    Bell,
-    Puzzle,
-    User,
-    BadgeQuestionMark,
-    Minus,
-    Square,
-    X,
-    Download,
-    Settings,
-  } from "@lucide/svelte";
+<script lang="ts">
+  import { Bell, Puzzle, BadgeQuestionMark, Minus, Square, X, Settings } from "@lucide/svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { openPreferencesDialog, openExtensionsManager } from "../stores/dialogStore";
   const appWindow = getCurrentWindow();
 
   function handleMinimize() {
@@ -26,164 +17,66 @@
   }
 </script>
 
-<header class="titlebar">
+<header class="flex h-10 w-full items-center justify-between bg-transparent text-[#e0e0e0] select-none" data-program-ui data-tauri-drag-region>
   <!-- Left section - Logo/Brand -->
-  <div class="titlebar-left">
-    <div class="logo"></div>
+  <div class="flex items-center pl-4">
+    <div class="flex items-center gap-2.5">
+      <div class="relative flex h-4 w-4 items-center justify-center">
+        <div class="absolute h-full w-full rotate-45 rounded-[3px] border border-emerald-500/50 bg-emerald-500/10"></div>
+        <div class="z-10 h-1.5 w-1.5 rotate-45 rounded-sm bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></div>
+      </div>
+      <h1 class="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.05em]">
+        <span class="text-zinc-100">Forja</span>
+        <span class="text-emerald-500">Studio</span>
+        <span class="text-zinc-500">Editor</span>
+      </h1>
+    </div>
   </div>
 
   <!-- Right section - Actions & Controls -->
-  <div class="titlebar-right">
+  <div class="flex items-center">
     <!-- Notification & User actions -->
-    <div class="actions">
-      <button class="action-btn" title="Notifications">
+    <div class="flex items-center gap-0.5 pr-2">
+      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Notifications">
         <Bell size="16" />
       </button>
-      <button class="action-btn">
+      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Extensions" onclick={() => openExtensionsManager()}>
         <Puzzle size="16" />
       </button>
-      <!-- <button class="action-btn">
-        <Download size="16" />
-      </button> -->
-      <button class="action-btn" title="Profile">
-        <User size="16" />
-      </button>
-      <button class="action-btn" title="Settings">
+      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Preferences" onclick={() => openPreferencesDialog("program")}>
         <Settings size="16" />
       </button>
-      <button class="action-btn" title="Help">
+      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Help">
         <BadgeQuestionMark size="16" />
       </button>
     </div>
 
     <!-- Window controls -->
-    <div class="window-controls">
+    <div class="flex h-10 items-center">
       <button
-        class="control-btn minimize"
+        type="button"
+        class="flex h-full w-[46px] cursor-pointer items-center justify-center bg-transparent text-[#b0b0b0] transition-all hover:bg-white/10 hover:text-white active:scale-95"
         title="Minimize"
-        on:click={handleMinimize}
+        onclick={handleMinimize}
       >
         <Minus size="14" />
       </button>
       <button
-        class="control-btn maximize"
+        type="button"
+        class="flex h-full w-[46px] cursor-pointer items-center justify-center bg-transparent text-[#b0b0b0] transition-all hover:bg-white/10 hover:text-white active:scale-95"
         title="Maximize"
-        on:click={handleMaximize}
+        onclick={handleMaximize}
       >
         <Square size="12" />
       </button>
-      <button class="control-btn close" title="Close" on:click={handleClose}>
+      <button
+        type="button"
+        class="flex h-full w-[46px] cursor-pointer items-center justify-center bg-transparent text-[#b0b0b0] transition-all hover:bg-[#e74c3c] hover:text-white active:scale-95"
+        title="Close"
+        onclick={handleClose}
+      >
         <X size="14" />
       </button>
     </div>
   </div>
 </header>
-
-<style>
-  .titlebar {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-    border-bottom: 1px solid #404040;
-    color: #e0e0e0;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0;
-    user-select: none;
-    -webkit-app-region: drag;
-  }
-
-  .titlebar-left {
-    display: flex;
-    align-items: center;
-    padding-left: 16px;
-  }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px;
-    width: 20px;
-    border-radius: 50%;
-    background-color: #2a2a2a;
-    height: 20px;
-  }
-
-  .titlebar-right {
-    display: flex;
-    align-items: center;
-    -webkit-app-region: no-drag;
-  }
-
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding-right: 12px;
-  }
-
-  .action-btn {
-    background: transparent;
-    border: none;
-    color: #b0b0b0;
-    padding: 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s ease;
-  }
-
-  .action-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
-  }
-
-  .window-controls {
-    display: flex;
-    align-items: center;
-    height: 40px;
-  }
-
-  .control-btn {
-    background: transparent;
-    border: none;
-    color: #b0b0b0;
-    width: 46px;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .control-btn.minimize:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
-  }
-
-  .control-btn.maximize:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
-  }
-
-  .control-btn.close:hover {
-    background: #e74c3c;
-    color: #ffffff;
-  }
-
-  .control-btn:active {
-    transform: scale(0.95);
-  }
-
-  /* Dark theme enhancements */
-  @media (prefers-color-scheme: dark) {
-    .titlebar {
-      background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
-      border-bottom-color: #2a2a2a;
-    }
-  }
-</style>

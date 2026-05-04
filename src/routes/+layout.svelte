@@ -1,55 +1,155 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import { onMount, type Snippet } from 'svelte';
+  import { steppedGradient } from "../lib/utils/backgroundLayer"
   import TitleBar from "../lib/components/TitleBar.svelte";
-  import ShortcutsManager from "../lib/components/shortcuts/ShortcutsManager.svelte";
+  import ParserPrompt from "../lib/components/ParserPrompt.svelte";
+  import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
+  import ThemePicker from "../lib/components/ThemePicker.svelte";
+  import "../lib/stores/preferencesStore";
+  import { openTelescope, openGrammarHub, openPreferencesDialog, closeDialog, dialogState } from "../lib/stores/dialogStore";
+  import { activeUITheme } from "../lib/stores/uiThemeStore";
+  import { get } from 'svelte/store';
+  import "../app.css";
+  import '@fontsource-variable/montserrat/wght.css';
+  import { initPlugins } from "$lib/stores/pluginStore";
+
   let { children }: { children: Snippet } = $props();
+
+  let steps = $state(15);
+  let angle = $state(135);
+
+  // Reactive gradient — updates whenever the active UI theme changes
+  let gradient = $derived(
+    steppedGradient(
+      steps,
+      angle,
+      $activeUITheme.bgGradient.from,
+      $activeUITheme.bgGradient.to,
+    )
+  );
+
+  let themePickerOpen = $state(false);
+  let lastTabTime = 0;
+  let ctrlKTime = 0;
+
+  onMount(() => {
+    initPlugins();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ── Ctrl+K chord — must be highest priority ────────────────────────
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        ctrlKTime = Date.now();
+        return;
+      }
+
+      // Complete the Ctrl+K → T chord to open theme picker
+      if (e.key === 't' && ctrlKTime > 0 && Date.now() - ctrlKTime < 1500) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        ctrlKTime = 0;
+        themePickerOpen = !themePickerOpen;
+        return;
+      }
+
+      // Any other key resets the chord
+      if (ctrlKTime > 0) ctrlKTime = 0;
+
+      // ── Guard: theme picker handles its own keys ────────────────────────
+      if (themePickerOpen) return;
+
+      const currentState = get(dialogState);
+      
+      if (currentState.activeDialog) {
+          if (e.key === 'Escape') closeDialog();
+          return;
+      }
+
+      const editorEl = document.querySelector('[data-buffer-ui]') as HTMLElement | null;
+      const editorHasFocus = editorEl && (document.activeElement === editorEl || editorEl.contains(document.activeElement));
+      const editorVimMode = editorEl?.dataset?.vimMode;
+      const editorIsInsertMode = editorHasFocus && (editorVimMode === 'insert' || editorVimMode === undefined);
+      if (editorIsInsertMode) return;
+
+      // Tab Tab -> Search Files
+      if (e.key === 'Tab') {
+        const now = Date.now();
+        const delta = now - lastTabTime;
+        if (delta > 0 && delta < 500) { 
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          openTelescope('files');
+          lastTabTime = 0;
+          return;
+        } 
+        lastTabTime = now;
+      }
+
+      // Shift + / (es decir '?') -> Live Grep
+      if (e.shiftKey && e.key === '/') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openTelescope('grep');
+        return;
+      }
+
+      // Ctrl + B -> Buffers
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openTelescope('buffers');
+        return;
+      }
+
+      // Ctrl + G -> Grammar Hub
+      if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openGrammarHub();
+        return;
+      }
+
+      // Ctrl/Cmd + , -> Preferences
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openPreferencesDialog('program');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  });
 </script>
 
-<div class="app-container">
-  <TitleBar />
-  <main class="main-content">
+<div 
+  class="flex h-screen flex-col overflow-hidden font-sans" 
+  style:background={gradient}
+>
+  <TitleBar/>
+  <main class="flex-1 overflow-hidden relative">
     {@render children()}
   </main>
 </div>
 
-<ShortcutsManager />
+<div data-program-ui>
+  <ParserPrompt />
+</div>
+<DialogManager />
+
+{#if themePickerOpen}
+  <ThemePicker onClose={() => { themePickerOpen = false; }} />
+{/if}
 
 <style>
-  .app-container {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .main-content {
-    height: calc(100vh - 40px);
-    overflow: auto;
-  }
-
   :global(html, body) {
     margin: 0;
     padding: 0;
     height: 100%;
     overflow: hidden;
-  }
-
-  :global(body) {
-    background-color: #0a0a0a;
-    font-family:
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI",
-      Roboto,
-      Oxygen,
-      Ubuntu,
-      Cantarell,
-      "Open Sans",
-      "Helvetica Neue",
-      sans-serif;
-  }
-
-  :global(main) {
-    height: 100%;
+    font-family: var(--forja-program-font-family, 'Montserrat Variable', sans-serif);
   }
 </style>

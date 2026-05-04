@@ -1,351 +1,120 @@
-<script>
-  import { FolderOpen, Plus, Clock } from "@lucide/svelte";
-  import { onMount, onDestroy } from "svelte";
-  import { keyboardManager, createNavigationActions } from "../utils/keyboardManager.js";
-  
-  // Simulamos obtener la versión del sistema - en producción vendrá de Tauri
+<script lang="ts">
+  import { FolderOpen, Clock } from "@lucide/svelte";
+  import { openProject } from "../stores/projectStore";
+  import { openRecentProjectsDialog } from "../stores/dialogStore";
+  import { open } from "@tauri-apps/plugin-dialog";
+  import { activeUITheme } from "../stores/uiThemeStore";
+
   const version = "1.0.0-alpha";
-  
-  let selectedIndex = 0; // 0, 1, 2 para los tres botones
-  let welcomeContainer;
 
-  function handleOpenProject() {
-    console.log('Opening project...');
-  }
+  let welcomeContainer: HTMLElement;
 
-  function handleNewProject() {
-    console.log('Creating new project...');
+  let themeStyle = $derived(
+    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+  );
+
+  async function handleOpenProject() {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Project Folder",
+      });
+      if (selected) openProject(selected);
+    } catch (error) {
+      console.error("Error opening folder dialog", error);
+    }
   }
 
   function handleRecentProjects() {
-    console.log('Showing recent projects...');
+    openRecentProjectsDialog();
   }
-
-  function moveUp() {
-    selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : 2;
-    console.log("Moving up, selectedIndex:", selectedIndex);
-  }
-
-  function moveDown() {
-    selectedIndex = (selectedIndex + 1) % 3;
-    console.log("Moving down, selectedIndex:", selectedIndex);
-  }
-
-  function selectCurrent() {
-    switch(selectedIndex) {
-      case 0:
-        handleOpenProject();
-        break;
-      case 1:
-        handleNewProject();
-        break;
-      case 2:
-        handleRecentProjects();
-        break;
-    }
-  }
-
-  onMount(() => {
-    // Register keyboard navigation for welcome screen
-    const navigationActions = createNavigationActions({
-      onMoveUp: moveUp,
-      onMoveDown: moveDown,
-      onSelect: selectCurrent,
-    });
-
-    // Add leader key combinations
-    const leaderActions = [
-      {
-        key: ' o', // Space + O
-        handler: () => handleOpenProject(),
-        description: 'Open Project',
-      },
-      {
-        key: ' n', // Space + N  
-        handler: () => handleNewProject(),
-        description: 'New Project',
-      },
-      {
-        key: ' r', // Space + R
-        handler: () => handleRecentProjects(), 
-        description: 'Recent Projects',
-      },
-    ];
-
-    keyboardManager.registerContext("welcome-screen", [
-      ...navigationActions,
-      ...leaderActions,
-    ]);
-    keyboardManager.setActiveContext("welcome-screen");
-    keyboardManager.startListening();
-
-    // Focus the container
-    if (welcomeContainer) {
-      welcomeContainer.focus();
-    }
-  });
-
-  onDestroy(() => {
-    keyboardManager.stopListening();
-  });
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<main class="welcome-screen" tabindex="0" bind:this={welcomeContainer}>
-  <div class="welcome-container">
-    <!-- Header section -->
-    <header class="welcome-header">
-      <h1 class="app-title">
-        <span class="title-main">Forja Studio</span>
-        <span class="title-sub">Editor</span>
-      </h1>
-      <p class="version">v{version}</p>
+<main
+  class="flex h-full w-full items-center justify-center outline-none"
+  data-program-ui
+  style={themeStyle}
+  bind:this={welcomeContainer}
+>
+  <div class="w-full max-w-[480px] px-8 py-12 text-center">
+    <!-- Header -->
+    <header class="mb-10 animate-[fadeInUp_0.6s_ease_0.1s_both]">
+      <div class="flex justify-center mb-4">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 100 100"
+          fill="none"
+          class="h-16 w-16 transition-all duration-500"
+          style="filter: drop-shadow(0 0 12px var(--forja-ui-logo-glow, rgba(26,171,109,0.35))) drop-shadow(0 0 4px var(--forja-ui-logo-glow, rgba(26,171,109,0.35)))"
+          aria-label="Forja"
+        >
+          <rect x="8" y="8" width="84" height="84" rx="20" ry="20"
+                fill="var(--forja-ui-logo-outer, rgba(126,207,176,0.55))"
+                transform="rotate(45 50 50)" />
+          <rect x="18" y="18" width="64" height="64" rx="15" ry="15"
+                fill="var(--forja-ui-logo-mid, #1e3a2f)"
+                transform="rotate(45 50 50)" />
+          <rect x="31" y="31" width="38" height="38" rx="9" ry="9"
+                fill="var(--forja-ui-logo-core, #1aab6d)"
+                transform="rotate(45 50 50)" />
+        </svg>
+      </div>
+      <p class="m-0 text-base font-medium text-[var(--forja-ui-text-version,#52525b)] opacity-80">v{version}</p>
     </header>
 
     <!-- Tagline -->
-    <section class="tagline-section">
-      <p class="tagline">
-        The essence of <span class="vim-highlight">Vim</span> in a native interface
+    <section class="mb-14 animate-[fadeInUp_0.6s_ease_0.2s_both]">
+      <p class="m-0 mb-1 text-2xl font-normal leading-relaxed text-[var(--forja-ui-text-secondary,#a1a1aa)]">
+        Forge your <span class="bg-gradient-to-r from-[var(--forja-ui-gradient-from,#34d399)] to-[var(--forja-ui-gradient-to,#2dd4bf)] bg-clip-text font-semibold text-transparent">workflow</span>
       </p>
-      <p class="description">
-        Keyboard navigation, fast commands, efficient editing
+      <p class="m-0 text-lg leading-relaxed text-[var(--forja-ui-text-muted,#71717a)]">
+        A lightweight, modular editor that grows with your needs.
       </p>
     </section>
 
     <!-- Action buttons -->
-    <section class="actions-section">
-      <button class="action-btn primary {selectedIndex === 0 ? 'keyboard-focused' : ''}" on:click={handleOpenProject}>
-        <FolderOpen size="20" />
-        <span>Open Project</span>
-        <kbd class="shortcut">Space+O</kbd>
+    <section class="mb-10 flex flex-col gap-3 animate-[fadeInUp_0.6s_ease_0.3s_both] text-[13px]">
+      <button
+        type="button"
+        class="group relative flex cursor-pointer items-center overflow-hidden rounded-lg border border-[var(--forja-ui-btn-border,#27272a)] bg-[var(--forja-ui-btn-bg,rgba(9,9,11,0.3))] px-5 py-4 font-medium text-[var(--forja-ui-btn-text,#a1a1aa)] transition-all duration-300 hover:border-[var(--forja-ui-btn-hover-border,rgba(16,185,129,0.5))] hover:bg-[var(--forja-ui-btn-hover-bg,rgba(16,185,129,0.05))] hover:text-[var(--forja-ui-btn-hover-text,#f4f4f5)] hover:shadow-[var(--forja-ui-btn-hover-shadow,0_0_25px_rgba(16,185,129,0.1))]"
+        onclick={(e) => { e.preventDefault(); handleOpenProject(); }}
+      >
+        <div class="absolute top-0 -left-full h-full w-full bg-gradient-to-r from-transparent via-white/5 to-transparent transition-all duration-1000 group-hover:left-full"></div>
+        <div class="flex items-center gap-4">
+          <FolderOpen size="15" class="text-[var(--forja-ui-btn-icon,#71717a)] transition-colors group-hover:text-[var(--forja-ui-btn-icon-hover,#34d399)]" />
+          <span>Open Project</span>
+        </div>
       </button>
 
-      <button class="action-btn secondary {selectedIndex === 1 ? 'keyboard-focused' : ''}" on:click={handleNewProject}>
-        <Plus size="20" />
-        <span>New Empty Project</span>
-        <kbd class="shortcut">Space+N</kbd>
-      </button>
+      <!-- <button
+        type="button"
+        class="group relative flex cursor-pointer items-center overflow-hidden rounded-lg border border-[var(--forja-ui-btn-border,#27272a)] bg-[var(--forja-ui-btn-bg,rgba(9,9,11,0.3))] px-5 py-4 font-medium text-[var(--forja-ui-btn-text,#a1a1aa)] transition-all duration-300 hover:border-[var(--forja-ui-btn-hover-border,rgba(16,185,129,0.5))] hover:bg-[var(--forja-ui-btn-hover-bg,rgba(16,185,129,0.05))] hover:text-[var(--forja-ui-btn-hover-text,#f4f4f5)] hover:shadow-[var(--forja-ui-btn-hover-shadow,0_0_25px_rgba(16,185,129,0.1))]"
+        onclick={(e) => { e.preventDefault(); }}
+      >
+        <div class="absolute top-0 -left-full h-full w-full bg-gradient-to-r from-transparent via-white/5 to-transparent transition-all duration-1000 group-hover:left-full"></div>
+        <div class="flex items-center gap-4">
+          <Plus size="15" class="text-[var(--forja-ui-btn-icon,#71717a)] transition-colors group-hover:text-[var(--forja-ui-btn-icon-hover,#34d399)]" />
+          <span>New Empty Project</span>
+        </div>
+      </button> -->
 
-      <button class="action-btn secondary {selectedIndex === 2 ? 'keyboard-focused' : ''}" on:click={handleRecentProjects}>
-        <Clock size="20" />
-        <span>Recent Projects</span>
-        <kbd class="shortcut">Space+R</kbd>
+      <button
+        type="button"
+        class="group relative flex cursor-pointer items-center overflow-hidden rounded-lg border border-[var(--forja-ui-btn-border,#27272a)] bg-[var(--forja-ui-btn-bg,rgba(9,9,11,0.3))] px-5 py-4 font-medium text-[var(--forja-ui-btn-text,#a1a1aa)] transition-all duration-300 hover:border-[var(--forja-ui-btn-hover-border,rgba(16,185,129,0.5))] hover:bg-[var(--forja-ui-btn-hover-bg,rgba(16,185,129,0.05))] hover:text-[var(--forja-ui-btn-hover-text,#f4f4f5)] hover:shadow-[var(--forja-ui-btn-hover-shadow,0_0_25px_rgba(16,185,129,0.1))]"
+        onclick={(e) => { e.preventDefault(); handleRecentProjects(); }}
+      >
+        <div class="absolute top-0 -left-full h-full w-full bg-gradient-to-r from-transparent via-white/5 to-transparent transition-all duration-1000 group-hover:left-full"></div>
+        <div class="flex items-center gap-4">
+          <Clock size="15" class="text-[var(--forja-ui-btn-icon,#71717a)] transition-colors group-hover:text-[var(--forja-ui-btn-icon-hover,#34d399)]" />
+          <span>Recent Projects</span>
+        </div>
       </button>
     </section>
-
-    <!-- Footer -->
-    <footer class="welcome-footer">
-      <p class="footer-text">Press <kbd>?</kbd> for keyboard shortcuts</p>
-    </footer>
   </div>
 </main>
 
 <style>
-  .welcome-screen {
-    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-    color: #e0e0e0;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
-
-  .welcome-container {
-    max-width: 480px;
-    width: 100%;
-    padding: 48px 32px;
-    text-align: center;
-  }
-
-  .welcome-header {
-    margin-bottom: 32px;
-  }
-
-  .app-title {
-    font-size: 48px;
-    font-weight: 300;
-    margin: 0 0 12px 0;
-    letter-spacing: -0.02em;
-    line-height: 1.1;
-  }
-
-  .title-main {
-    color: #ffffff;
-    font-weight: 600;
-  }
-
-  .title-sub {
-    color: #888888;
-    font-weight: 300;
-    margin-left: 8px;
-  }
-
-  .version {
-    color: #666666;
-    font-size: 14px;
-    font-weight: 500;
-    margin: 0;
-    opacity: 0.8;
-  }
-
-  .tagline-section {
-    margin-bottom: 40px;
-  }
-
-  .tagline {
-    font-size: 24px;
-    font-weight: 400;
-    margin: 0 0 2px 0;
-    color: #cccccc;
-    line-height: 1.4;
-  }
-
-  .vim-highlight {
-    color: #4ade80;
-    font-weight: 600;
-    background: linear-gradient(45deg, #4ade80, #22c55e);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .description {
-    font-size: 16px;
-    color: #999999;
-    margin: 0;
-    line-height: 1.5;
-  }
-
-  .actions-section {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin-bottom: 32px;
-  }
-
-  .action-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid #333333;
-    border-radius: 8px;
-    padding: 20px 24px;
-    color: #e0e0e0;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    text-align: left;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .action-btn::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.05),
-      transparent
-    );
-    transition: left 0.5s ease;
-  }
-
-  .action-btn:hover::before {
-    left: 100%;
-  }
-
-  .action-btn.primary {
-    border-color: #333333;
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .action-btn.primary:hover {
-    border-color: #555555;
-    background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(255, 255, 255, 0.1);
-  }
-
-  .action-btn.secondary:hover {
-    border-color: #555555;
-    background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-1px);
-  }
-
-  .action-btn.keyboard-focused {
-    background: rgba(74, 222, 128, 0.15);
-    border-color: #4ade80;
-    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.3);
-  }
-
-  .welcome-screen:focus {
-    outline: none;
-  }
-
-  .action-btn span {
-    flex: 1;
-    margin-left: 12px;
-  }
-
-  .shortcut {
-    background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: "Courier New", monospace;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-
-  .welcome-footer {
-    opacity: 0.6;
-  }
-
-  .footer-text {
-    font-size: 14px;
-    color: #888888;
-    margin: 0;
-  }
-
-  .footer-text kbd {
-    background: rgba(255, 255, 255, 0.1);
-    color: #cccccc;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 12px;
-    font-family: "Courier New", monospace;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-
-  /* Responsive */
-  @media (max-width: 640px) {
-    .welcome-container {
-      padding: 32px 24px;
-    }
-
-    .app-title {
-      font-size: 36px;
-    }
-
-    .tagline {
-      font-size: 20px;
-    }
-
-    .action-btn {
-      padding: 16px 20px;
-    }
-  }
-
-  /* Subtle animations */
   @keyframes fadeInUp {
     from {
       opacity: 0;
@@ -355,21 +124,5 @@
       opacity: 1;
       transform: translateY(0);
     }
-  }
-
-  .welcome-header {
-    animation: fadeInUp 0.6s ease 0.1s both;
-  }
-
-  .tagline-section {
-    animation: fadeInUp 0.6s ease 0.2s both;
-  }
-
-  .actions-section {
-    animation: fadeInUp 0.6s ease 0.3s both;
-  }
-
-  .welcome-footer {
-    animation: fadeInUp 0.6s ease 0.4s both;
   }
 </style>

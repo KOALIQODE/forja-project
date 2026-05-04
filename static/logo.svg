@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Outer ring: soft green, rounded rotated square -->
+  <rect x="8" y="8" width="84" height="84" rx="20" ry="20"
+        fill="#7ecfb0" opacity="0.55"
+        transform="rotate(45 50 50)" />
+  <!-- Middle ring: semi-transparent lighter green -->
+  <rect x="18" y="18" width="64" height="64" rx="15" ry="15"
+        fill="#e8f7f2"
+        transform="rotate(45 50 50)" />
+  <!-- Inner core: deep green -->
+  <rect x="31" y="31" width="38" height="38" rx="9" ry="9"
+        fill="#1aab6d"
+        transform="rotate(45 50 50)" />
+</svg>
