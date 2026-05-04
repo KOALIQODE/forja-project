@@ -33,52 +33,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── System dependencies MUST come before Rust/Cargo steps ────────────────
-      # The glib-sys build script runs pkg-config at compile time; if glib-2.0
-      # isn't installed yet when cargo tries to use a cached build script result
-      # the build fails even if the cache is valid.
-      - name: Install system dependencies (Linux)
+      # Linux: gcc + unzip are pre-installed on ubuntu-latest, just verify
+      - name: Verify build tools (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y \
-            libglib2.0-dev \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libssl-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev
-          # Sanity-check: fail loudly here rather than inside cargo
-          pkg-config --modversion glib-2.0
+          gcc --version
+          unzip -v | head -1
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # macOS: clang + unzip are pre-installed on macos runners
+      - name: Verify build tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          clang --version
+          unzip -v | head -1
 
-      # Only cache ~/.cargo (registry + git) — NOT src-tauri/target.
-      # Caching target/ can restore a stale glib-sys build-script result
-      # from before the system libs were installed, causing the same error.
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
-      # Windows: make sure we have a working C/C++ compiler in PATH
+      # Windows: install LLVM/Clang + use Git Bash for the shell script
       - name: Install LLVM/Clang (Windows)
         if: runner.os == 'Windows'
         run: choco install llvm -y
 
-      - name: Compile all parsers for ${{ matrix.platform }}
-        working-directory: src-tauri
-        run: cargo run --bin build-parsers --release -- --platform ${{ matrix.platform }} --out-dir ../dist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build all parsers
+        shell: bash
+        run: |
+          chmod +x .github/scripts/build-parsers.sh
+          PLATFORM=${{ matrix.platform }} OUT_DIR=dist bash .github/scripts/build-parsers.sh
 
       - name: List produced artifacts
         shell: bash
