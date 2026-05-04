@@ -141,7 +141,11 @@ compile_parser() {
   local OPT_LEVEL="-O2"
   [ "$PARSER_SIZE" -gt 1000000 ] && OPT_LEVEL="-O1"
 
-  # For C++ scanner, we must compile parser.c and scanner.cc separately
+  # -fPIC is required on Linux/macOS but unsupported on Windows (MSVC target)
+  local PIC_FLAG="-fPIC"
+  [[ "$PLATFORM" == windows* ]] && PIC_FLAG=""
+
+  # For C++ scanner, compile parser.c and scanner.cc separately
   # to avoid mixing -std=c11 and -std=c++14 in one invocation
   if [ -f "$SRC_DIR/scanner.cc" ]; then
     local OBJ_PARSER="$TMP/parser.o"
@@ -150,23 +154,23 @@ compile_parser() {
     CC_C=$(detect_compiler "false")
     local CC_CPP
     CC_CPP=$(detect_compiler "true")
-    if ! "$CC_C" -c -fPIC "$OPT_LEVEL" -std=c11 -I"$SRC_DIR" "$SRC_DIR/parser.c" -o "$OBJ_PARSER"; then
+    if ! "$CC_C" -c $PIC_FLAG "$OPT_LEVEL" -std=c11 -I"$SRC_DIR" "$SRC_DIR/parser.c" -o "$OBJ_PARSER"; then
       echo "❌ Compilation failed for $NAME (parser.c)" >&2; return 1
     fi
-    if ! "$CC_CPP" -c -fPIC "$OPT_LEVEL" -std=c++14 -I"$SRC_DIR" "$SRC_DIR/scanner.cc" -o "$OBJ_SCANNER"; then
+    if ! "$CC_CPP" -c $PIC_FLAG "$OPT_LEVEL" -std=c++14 -I"$SRC_DIR" "$SRC_DIR/scanner.cc" -o "$OBJ_SCANNER"; then
       echo "❌ Compilation failed for $NAME (scanner.cc)" >&2; return 1
     fi
     local EXTRA_OBJS=()
     [ -f "$SRC_DIR/scanner.c" ] && {
       local OBJ_SCANNER_C="$TMP/scanner_c.o"
-      "$CC_C" -c -fPIC "$OPT_LEVEL" -std=c11 -I"$SRC_DIR" "$SRC_DIR/scanner.c" -o "$OBJ_SCANNER_C"
+      "$CC_C" -c $PIC_FLAG "$OPT_LEVEL" -std=c11 -I"$SRC_DIR" "$SRC_DIR/scanner.c" -o "$OBJ_SCANNER_C"
       EXTRA_OBJS+=("$OBJ_SCANNER_C")
     }
     "$CC_CPP" -shared "$OBJ_PARSER" "$OBJ_SCANNER" "${EXTRA_OBJS[@]}" -o "$DEST"
   else
     local CC_C2
     CC_C2=$(detect_compiler "false")
-    local FLAGS=("-shared" "-fPIC" "$OPT_LEVEL" "-std=c11" "-I$SRC_DIR" "$SRC_DIR/parser.c")
+    local FLAGS=("-shared" $PIC_FLAG "$OPT_LEVEL" "-std=c11" "-I$SRC_DIR" "$SRC_DIR/parser.c")
     [ -f "$SRC_DIR/scanner.c" ] && FLAGS+=("$SRC_DIR/scanner.c")
     FLAGS+=("-o" "$DEST")
     "$CC_C2" "${FLAGS[@]}" || { echo "❌ Compilation failed for $NAME" >&2; return 1; }

@@ -17,12 +17,6 @@ jobs:
           - os: ubuntu-latest
             platform: linux-x86_64
             ext: so
-          - os: macos-13
-            platform: macos-x86_64
-            ext: dylib
-          - os: macos-14
-            platform: macos-arm64
-            ext: dylib
           - os: windows-latest
             platform: windows-x86_64
             ext: dll
@@ -38,13 +32,6 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           gcc --version
-          unzip -v | head -1
-
-      # macOS: clang + unzip are pre-installed on macos runners
-      - name: Verify build tools (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          clang --version
           unzip -v | head -1
 
       # Windows: install LLVM/Clang + use Git Bash for the shell script
