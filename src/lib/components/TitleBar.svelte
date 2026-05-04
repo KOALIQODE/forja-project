@@ -1,8 +1,14 @@
 <script lang="ts">
-  import { Bell, Puzzle, BadgeQuestionMark, Minus, Square, X, Settings } from "@lucide/svelte";
+  import { Puzzle, BadgeQuestionMark, Minus, Square, X, Settings } from "@lucide/svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { openPreferencesDialog, openExtensionsManager } from "../stores/dialogStore";
+  import { activeUITheme } from "../stores/uiThemeStore";
+
   const appWindow = getCurrentWindow();
+
+  let themeStyle = $derived(
+    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+  );
 
   function handleMinimize() {
     appWindow.minimize();
@@ -17,36 +23,52 @@
   }
 </script>
 
-<header class="flex h-10 w-full items-center justify-between bg-transparent text-[#e0e0e0] select-none" data-program-ui data-tauri-drag-region>
+<header
+  class="flex h-10 w-full items-center justify-between bg-transparent text-(--forja-ui-text-primary,#e0e0e0) select-none"
+  data-program-ui
+  data-tauri-drag-region
+  style={themeStyle}
+>
   <!-- Left section - Logo/Brand -->
   <div class="flex items-center pl-4">
     <div class="flex items-center gap-2.5">
       <div class="relative flex h-4 w-4 items-center justify-center">
-        <div class="absolute h-full w-full rotate-45 rounded-[3px] border border-emerald-500/50 bg-emerald-500/10"></div>
-        <div class="z-10 h-1.5 w-1.5 rotate-45 rounded-sm bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></div>
+        <div class="absolute h-full w-full rotate-45 rounded-[3px] border border-(--forja-ui-gradient-from,#10b981)/50 bg-(--forja-ui-gradient-from,#10b981)/10"></div>
+        <div class="z-10 h-1.5 w-1.5 rotate-45 rounded-sm bg-(--forja-ui-gradient-from,#10b981) shadow-[0_0_8px_rgba(16,185,129,0.6)]"></div>
       </div>
       <h1 class="flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.05em]">
-        <span class="text-zinc-100">Forja</span>
-        <span class="text-emerald-500">Studio</span>
-        <span class="text-zinc-500">Editor</span>
+        <span class="text-(--forja-ui-text-primary,#f4f4f5)">Forja</span>
+        <span class="text-(--forja-ui-gradient-from,#34d399)">Studio</span>
+        <span class="text-(--forja-ui-text-muted,#71717a)">Editor</span>
       </h1>
     </div>
   </div>
 
   <!-- Right section - Actions & Controls -->
   <div class="flex items-center">
-    <!-- Notification & User actions -->
+    <!-- Action buttons -->
     <div class="flex items-center gap-0.5 pr-2">
-      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Notifications">
-        <Bell size="16" />
-      </button>
-      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Extensions" onclick={() => openExtensionsManager()}>
+      <button
+        type="button"
+        class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-(--forja-ui-btn-icon,#9ca3af) transition-all hover:bg-(--forja-ui-picker-item-hover,rgba(255,255,255,0.08)) hover:text-(--forja-ui-text-primary,#ffffff)"
+        title="Extensions"
+        onclick={() => openExtensionsManager()}
+      >
         <Puzzle size="16" />
       </button>
-      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Preferences" onclick={() => openPreferencesDialog("program")}>
+      <button
+        type="button"
+        class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-(--forja-ui-btn-icon,#9ca3af) transition-all hover:bg-(--forja-ui-picker-item-hover,rgba(255,255,255,0.08)) hover:text-(--forja-ui-text-primary,#ffffff)"
+        title="Preferences"
+        onclick={() => openPreferencesDialog("program")}
+      >
         <Settings size="16" />
       </button>
-      <button type="button" class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-[#b0b0b0] transition-all hover:bg-white/8 hover:text-white" title="Help">
+      <button
+        type="button"
+        class="flex cursor-pointer items-center justify-center rounded bg-transparent p-2 text-(--forja-ui-btn-icon,#9ca3af) transition-all hover:bg-(--forja-ui-picker-item-hover,rgba(255,255,255,0.08)) hover:text-(--forja-ui-text-primary,#ffffff)"
+        title="Help"
+      >
         <BadgeQuestionMark size="16" />
       </button>
     </div>
@@ -55,7 +77,7 @@
     <div class="flex h-10 items-center">
       <button
         type="button"
-        class="flex h-full w-[46px] cursor-pointer items-center justify-center bg-transparent text-[#b0b0b0] transition-all hover:bg-white/10 hover:text-white active:scale-95"
+        class="flex h-full w-[46px] cursor-pointer items-center justify-center bg-transparent text-(--forja-ui-btn-icon,#9ca3af) transition-all hover:bg-(--forja-ui-picker-item-hover,rgba(255,255,255,0.08)) hover:text-(--forja-ui-text-primary,#ffffff) active:scale-95"
         title="Minimize"
         onclick={handleMinimize}
       >
@@ -63,7 +85,7 @@
       </button>
       <button
         type="button"
-        class="flex h-full w-[46px] cursor-pointer items-center justify-center bg-transparent text-[#b0b0b0] transition-all hover:bg-white/10 hover:text-white active:scale-95"
+        class="flex h-full w-[46px] cursor-pointer items-center justify-center bg-transparent text-(--forja-ui-btn-icon,#9ca3af) transition-all hover:bg-(--forja-ui-picker-item-hover,rgba(255,255,255,0.08)) hover:text-(--forja-ui-text-primary,#ffffff) active:scale-95"
         title="Maximize"
         onclick={handleMaximize}
       >
@@ -71,7 +93,7 @@
       </button>
       <button
         type="button"
-        class="flex h-full w-[46px] cursor-pointer items-center justify-center bg-transparent text-[#b0b0b0] transition-all hover:bg-[#e74c3c] hover:text-white active:scale-95"
+        class="flex h-full w-[46px] cursor-pointer items-center justify-center bg-transparent text-(--forja-ui-btn-icon,#9ca3af) transition-all hover:bg-[#e74c3c] hover:text-white active:scale-95"
         title="Close"
         onclick={handleClose}
       >

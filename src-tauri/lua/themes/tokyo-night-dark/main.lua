@@ -57,7 +57,7 @@ editor.register_theme({
       ["--forja-ui-btn-hover-bg"]       = "rgba(122,162,247,0.06)",
       ["--forja-ui-btn-hover-text"]     = "#c0caf5",
       ["--forja-ui-btn-hover-shadow"]   = "0 0 25px rgba(122,162,247,0.1)",
-      ["--forja-ui-btn-icon"]           = "#444b6a",
+      ["--forja-ui-btn-icon"]           = "#8892b8",
       ["--forja-ui-btn-icon-hover"]     = "#7aa2f7",
       ["--forja-ui-ws-bg"]              = "transparent",
       ["--forja-ui-picker-bg"]          = "rgba(8,9,18,0.97)",
