@@ -154,10 +154,10 @@ compile_parser() {
     CC_C=$(detect_compiler "false")
     local CC_CPP
     CC_CPP=$(detect_compiler "true")
-    if ! "$CC_C" -c $PIC_FLAG "$OPT_LEVEL" -std=c11 -I"$SRC_DIR" "$SRC_DIR/parser.c" -o "$OBJ_PARSER"; then
+    if ! "$CC_C" -c $PIC_FLAG "$OPT_LEVEL" -std=c11 -Wno-switch -I"$SRC_DIR" "$SRC_DIR/parser.c" -o "$OBJ_PARSER"; then
       echo "❌ Compilation failed for $NAME (parser.c)" >&2; return 1
     fi
-    if ! "$CC_CPP" -c $PIC_FLAG "$OPT_LEVEL" -std=c++14 -I"$SRC_DIR" "$SRC_DIR/scanner.cc" -o "$OBJ_SCANNER"; then
+    if ! "$CC_CPP" -c $PIC_FLAG "$OPT_LEVEL" -std=c++14 -Wno-switch -I"$SRC_DIR" "$SRC_DIR/scanner.cc" -o "$OBJ_SCANNER"; then
       echo "❌ Compilation failed for $NAME (scanner.cc)" >&2; return 1
     fi
     local EXTRA_OBJS=()
@@ -170,7 +170,7 @@ compile_parser() {
   else
     local CC_C2
     CC_C2=$(detect_compiler "false")
-    local FLAGS=("-shared" $PIC_FLAG "$OPT_LEVEL" "-std=c11" "-I$SRC_DIR" "$SRC_DIR/parser.c")
+    local FLAGS=("-shared" $PIC_FLAG "$OPT_LEVEL" "-std=c11" "-Wno-switch" "-I$SRC_DIR" "$SRC_DIR/parser.c")
     [ -f "$SRC_DIR/scanner.c" ] && FLAGS+=("$SRC_DIR/scanner.c")
     FLAGS+=("-o" "$DEST")
     "$CC_C2" "${FLAGS[@]}" || { echo "❌ Compilation failed for $NAME" >&2; return 1; }
@@ -184,7 +184,7 @@ SUCCESS=0
 FAILED=()
 
 for ENTRY in "${PARSERS[@]}"; do
-  IFS='|' read -r NAME REPO SUBDIR BRANCH <<< "${ENTRY}|||"
+  IFS='|' read -r NAME REPO SUBDIR BRANCH <<< "$ENTRY"
   if compile_parser "$NAME" "$REPO" "$SUBDIR" "$BRANCH"; then
     (( SUCCESS++ )) || true
   else
