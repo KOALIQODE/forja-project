@@ -12,6 +12,22 @@ export interface PluginInfo {
     dir_path: string;
 }
 
+/** One permission entry returned by `plugin_preflight`. */
+export interface PermissionDetail {
+    id: string;
+    description: string;
+    /** "low" | "medium" | "high" | "unknown" */
+    risk: string;
+}
+
+/** Pre-flight manifest info — returned WITHOUT loading the plugin. */
+export interface PluginPreflightInfo {
+    name: string;
+    version: string;
+    kind: "plugin" | "theme";
+    permissions: PermissionDetail[];
+}
+
 export interface ThemeColors {
     bg?: string;
     fg?: string;
@@ -59,6 +75,15 @@ export interface EventResult {
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
+
+/**
+ * Parse a plugin's manifest.lua source and return its metadata + permission
+ * details WITHOUT loading the plugin into the runtime.
+ * Call this before any install or load-from-path to show the consent dialog.
+ */
+export async function pluginPreflight(manifestSrc: string): Promise<PluginPreflightInfo> {
+    return invoke<PluginPreflightInfo>("plugin_preflight", { manifestSrc });
+}
 
 /** Load all built-in plugins embedded in the binary (tokyo-night-dark + bracket-pair-colorizer). */
 export async function pluginLoadBuiltins(): Promise<string[]> {

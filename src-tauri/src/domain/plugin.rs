@@ -50,6 +50,48 @@ pub const ALL_PERMISSIONS: &[&str] = &[
     "workspace:read",
 ];
 
+/// Human-readable metadata for a single permission — shown in the consent dialog.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionDetail {
+    /// The permission identifier (e.g. `"buffer:read"`).
+    pub id: String,
+    /// One-line description shown to the user.
+    pub description: String,
+    /// Subjective risk level: `"low"`, `"medium"`, or `"high"`.
+    pub risk: String,
+}
+
+/// Return human-readable detail for every permission in `ALL_PERMISSIONS`.
+/// Called by the `plugin_preflight` command to populate the consent dialog.
+pub fn permission_detail(id: &str) -> PermissionDetail {
+    let (description, risk) = match id {
+        "buffer:read"      => ("Read the current editor buffer content", "low"),
+        "buffer:write"     => ("Modify the current editor buffer content", "medium"),
+        "events:on_open"   => ("Run code when a file is opened", "low"),
+        "events:on_save"   => ("Run code when a file is saved", "medium"),
+        "events:on_change" => ("Run code on every keystroke (may affect performance)", "medium"),
+        "decorations:write"=> ("Draw bracket colours and editor decorations", "low"),
+        "theme:register"   => ("Register a colour theme", "low"),
+        "workspace:read"   => ("Read the workspace root path", "low"),
+        other              => (other, "unknown"),
+    };
+    PermissionDetail {
+        id: id.to_string(),
+        description: description.to_string(),
+        risk: risk.to_string(),
+    }
+}
+
+/// Pre-flight information returned before loading a plugin — used for the
+/// user-facing permission consent dialog.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginPreflightInfo {
+    pub name: String,
+    pub version: String,
+    pub kind: String,
+    pub permissions: Vec<PermissionDetail>,
+}
+
 /// A validated set of permissions granted to a plugin at load time.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]

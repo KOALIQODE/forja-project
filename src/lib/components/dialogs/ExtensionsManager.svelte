@@ -31,8 +31,9 @@
     enablePlugin,
   } from "../../stores/pluginStore";
   import { clearTheme } from "../../utils/themeEngine";
-  import { pluginUnload, pluginLoadFromPath } from "../../utils/pluginClient";
-  import type { PluginInfo } from "../../utils/pluginClient";
+  import { pluginUnload, pluginLoadFromPath, pluginPreflight } from "../../utils/pluginClient";
+  import type { PluginInfo, PluginPreflightInfo } from "../../utils/pluginClient";
+  import PermissionConsentDialog from "./PermissionConsentDialog.svelte";
 
   interface LspServer {
     id: string;
@@ -60,6 +61,41 @@
 
   let searchQuery = $state('');
   let togglingPlugin = $state<string | null>(null);
+
+  // ── Permission Consent State ───────────────────────────────────────────────
+
+  let consentPending = $state<{
+    info: PluginPreflightInfo;
+    resolve: (approved: boolean) => void;
+  } | null>(null);
+
+  /**
+   * Show the permission consent dialog for the given manifest source.
+   * Returns true if the user approved, false if denied.
+   * Skips the dialog for built-in plugins (no external install needed).
+   */
+  async function requestConsent(manifestSrc: string): Promise<boolean> {
+    let info: PluginPreflightInfo;
+    try {
+      info = await pluginPreflight(manifestSrc);
+    } catch (e) {
+      console.error('preflight failed:', e);
+      return false;
+    }
+    return new Promise<boolean>((resolve) => {
+      consentPending = { info, resolve };
+    });
+  }
+
+  function handleConsentApprove() {
+    consentPending?.resolve(true);
+    consentPending = null;
+  }
+
+  function handleConsentDeny() {
+    consentPending?.resolve(false);
+    consentPending = null;
+  }
 
   // Reactive from stores
   let plugins = $derived($knownPlugins.filter(p => p.kind === "plugin"));
@@ -156,6 +192,20 @@
     if (!plugin.dir_path) return;
     togglingPlugin = plugin.name;
     try {
+      // Read the manifest from disk so we can show the consent dialog
+      const manifestPath = `${plugin.dir_path}/manifest.lua`;
+      let manifestSrc: string | null = null;
+      try {
+        manifestSrc = await invoke<string>('read_file', { path: manifestPath });
+      } catch {
+        // If we can't read the manifest, proceed without consent (built-in or stale path)
+      }
+
+      if (manifestSrc) {
+        const approved = await requestConsent(manifestSrc);
+        if (!approved) return;
+      }
+
       await pluginLoadFromPath(plugin.dir_path);
       await refreshPlugins();
     } catch (e) {
@@ -540,6 +590,15 @@
 
   </div>
 </div>
+
+<!-- Permission Consent Dialog — rendered above everything else -->
+{#if consentPending}
+  <PermissionConsentDialog
+    info={consentPending.info}
+    onApprove={handleConsentApprove}
+    onDeny={handleConsentDeny}
+  />
+{/if}
 
 <style>
   .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }

@@ -203,6 +203,7 @@ pub fn run() {
             commands::lsp::lsp_change_document,
             commands::lsp::lsp_close_document,
             // Plugin Host
+            commands::plugin_host::plugin_preflight,
             commands::plugin_host::plugin_load_builtins,
             commands::plugin_host::plugin_scan_user_plugins,
             commands::plugin_host::plugin_load_from_path,

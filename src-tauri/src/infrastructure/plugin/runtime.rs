@@ -214,6 +214,31 @@ impl PluginRuntime {
                 .map_err(|e| format!("set editor.register_bracket_provider: {}", e))?;
         }
 
+        // ── editor.workspace_root() ───────────────────────────────────────
+        {
+            let granted_ws = granted.clone();
+            let ws_root_fn = lua
+                .create_function(move |_lua_ctx, ()| {
+                    if !granted_ws.contains(&"workspace:read".to_string()) {
+                        return Err(LuaError::RuntimeError(
+                            "permission 'workspace:read' not granted".into(),
+                        ));
+                    }
+                    // Return the current working directory as the workspace root.
+                    // In Tauri desktop apps this is typically the project root.
+                    let root = std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    Ok(root)
+                })
+                .map_err(|e| format!("create editor.workspace_root: {}", e))?;
+
+            let editor_table: LuaTable = lua.globals().get("editor").map_err(|e| e.to_string())?;
+            editor_table
+                .set("workspace_root", ws_root_fn)
+                .map_err(|e| format!("set editor.workspace_root: {}", e))?;
+        }
+
         // ── Execute plugin source ─────────────────────────────────────────
         lua.load(source)
             .set_name(&manifest.name)
@@ -424,5 +449,28 @@ mod tests {
         let result = runtime.execute_command("nonexistent_cmd", "some buffer text");
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
+    }
+
+    /// Calling editor.workspace_root() without workspace:read permission must fail.
+    #[test]
+    fn workspace_root_without_permission_fails() {
+        let manifest = minimal_manifest(); // no permissions
+        let src = r#"editor.workspace_root()"#;
+        let result = PluginRuntime::new(manifest, src);
+        assert!(result.is_err(), "expected Err (workspace:read not granted)");
+    }
+
+    /// Calling editor.workspace_root() WITH workspace:read permission must succeed.
+    #[test]
+    fn workspace_root_with_permission_succeeds() {
+        let manifest = PluginManifest {
+            name: "ws-plugin".into(),
+            version: "1.0.0".into(),
+            kind: PluginKind::Plugin,
+            permissions: vec!["workspace:read".into()],
+        };
+        let src = r#"local root = editor.workspace_root()"#;
+        let result = PluginRuntime::new(manifest, src);
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result.err());
     }
 }

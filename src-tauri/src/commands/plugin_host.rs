@@ -38,7 +38,7 @@ use std::path::PathBuf;
 
 use tauri::State;
 
-use crate::domain::plugin::BracketRange;
+use crate::domain::plugin::{BracketRange, PluginPreflightInfo, permission_detail};
 use crate::infrastructure::plugin::themes::ThemeDefinition;
 use crate::plugin_host::{
     EventResult, PluginHost, PluginInfo,
@@ -48,6 +48,36 @@ use crate::plugin_host::{
     verify_sha256, RegistryMeta,
 };
 use crate::plugin_host::event_bus::EventPayload;
+
+// ── Pre-flight / consent command ──────────────────────────────────────────────
+
+/// Parse a plugin's `manifest.lua` source and return its metadata + permission
+/// details **without** loading the plugin into the runtime.
+///
+/// The Extensions UI calls this before installing or loading any external plugin
+/// so it can display a permission-consent dialog and block installation if the
+/// user denies.
+#[tauri::command]
+pub fn plugin_preflight(manifest_src: String) -> Result<PluginPreflightInfo, String> {
+    use crate::domain::plugin::PermissionSet;
+    use crate::plugin_host::manifest::load_manifest;
+
+    let manifest = load_manifest(&manifest_src)?;
+    // Validate all declared permissions are known — same check the runtime enforces.
+    PermissionSet::from_manifest(&manifest)?;
+    let permissions = manifest
+        .permissions
+        .iter()
+        .map(|id| permission_detail(id))
+        .collect();
+
+    Ok(PluginPreflightInfo {
+        name: manifest.name,
+        version: manifest.version,
+        kind: manifest.kind.to_string(),
+        permissions,
+    })
+}
 
 // ── Lifecycle commands ────────────────────────────────────────────────────────
 
@@ -437,5 +467,50 @@ mod tests {
         let msg = result.unwrap_err();
         assert!(msg.contains("integrity check FAILED"));
         assert!(msg.contains("test-file"));
+    }
+
+    // ── plugin_preflight ─────────────────────────────────────────────────────
+
+    /// Valid manifest returns correct name, version, kind, and permissions.
+    #[test]
+    fn preflight_valid_manifest_returns_info() {
+        let manifest = r#"return { name = "my-plugin", version = "1.0.0", kind = "plugin", permissions = {"buffer:read", "events:on_save"} }"#;
+        let result = plugin_preflight(manifest.to_string());
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result.err());
+        let info = result.unwrap();
+        assert_eq!(info.name, "my-plugin");
+        assert_eq!(info.version, "1.0.0");
+        assert_eq!(info.kind, "plugin");
+        assert_eq!(info.permissions.len(), 2);
+        assert_eq!(info.permissions[0].id, "buffer:read");
+        assert_eq!(info.permissions[1].id, "events:on_save");
+    }
+
+    /// Preflight with no permissions returns empty list.
+    #[test]
+    fn preflight_no_permissions_returns_empty() {
+        let manifest = r#"return { name = "minimal", version = "0.1.0" }"#;
+        let info = plugin_preflight(manifest.to_string()).unwrap();
+        assert!(info.permissions.is_empty());
+    }
+
+    /// Preflight with unknown permission returns error (manifest validation).
+    #[test]
+    fn preflight_unknown_permission_errors() {
+        let manifest = r#"return { name = "bad", version = "1.0.0", permissions = {"unknown:perm"} }"#;
+        let result = plugin_preflight(manifest.to_string());
+        assert!(result.is_err());
+    }
+
+    /// Each permission detail carries a non-empty description and a valid risk level.
+    #[test]
+    fn preflight_permissions_have_descriptions_and_risk() {
+        let manifest = r#"return { name = "p", version = "1.0.0", permissions = {"buffer:write", "workspace:read"} }"#;
+        let info = plugin_preflight(manifest.to_string()).unwrap();
+        for perm in &info.permissions {
+            assert!(!perm.description.is_empty(), "description empty for {}", perm.id);
+            assert!(["low", "medium", "high", "unknown"].contains(&perm.risk.as_str()),
+                "unexpected risk '{}' for {}", perm.risk, perm.id);
+        }
     }
 }
