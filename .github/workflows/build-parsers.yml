@@ -33,30 +33,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # Linux: gcc + unzip are pre-installed on ubuntu-latest, just verify
+      - name: Verify build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          gcc --version
+          unzip -v | head -1
 
-      # Cache Cargo registry + compiled deps to speed up subsequent runs
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+      # macOS: clang + unzip are pre-installed on macos runners
+      - name: Verify build tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          clang --version
+          unzip -v | head -1
 
-      # Windows: make sure we have a working C/C++ compiler in PATH
+      # Windows: install LLVM/Clang + use Git Bash for the shell script
       - name: Install LLVM/Clang (Windows)
         if: runner.os == 'Windows'
         run: choco install llvm -y
 
-      - name: Compile all parsers for ${{ matrix.platform }}
-        working-directory: src-tauri
-        run: cargo run --bin build-parsers --release -- --platform ${{ matrix.platform }} --out-dir ../dist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build all parsers
+        shell: bash
+        run: |
+          chmod +x .github/scripts/build-parsers.sh
+          PLATFORM=${{ matrix.platform }} OUT_DIR=dist bash .github/scripts/build-parsers.sh
 
       - name: List produced artifacts
         shell: bash

@@ -4,17 +4,10 @@ version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
-default-run = "forja-studio-editor"
 
 [lib]
 name = "forja_backend"
 crate-type = ["staticlib", "cdylib", "rlib"]
-
-# CLI tool used by GitHub Actions to compile all parsers and publish prebuilt binaries.
-# Run: cargo run --bin build-parsers -- --platform linux-x86_64 --out-dir ../dist
-[[bin]]
-name = "build-parsers"
-path = "src/bin/build_parsers.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
