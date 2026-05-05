@@ -4,7 +4,7 @@
   import { activeBufferId } from '$lib/stores/bufferStore';
   import { expandedPaths, pinnedPath, directoryCache, inlineAction, type FileEntry } from '$lib/stores/explorerStore';
   import { slide } from 'svelte/transition';
-  import { GIT_STATUS_COLORS, GIT_STATUS_LABELS } from '$lib/utils/explorerHelpers';
+  import { GIT_STATUS_LABELS } from '$lib/utils/explorerHelpers';
   import { getFileIcon } from '$lib/utils/fileIcons';
   import { tick } from 'svelte';
   import FileTreeItem from './FileTreeItem.svelte';
@@ -145,13 +145,17 @@
     </div>
 
     <span class="mr-2 flex items-center opacity-90 transition-opacity duration-150 group-hover:opacity-100 {$activeBufferId === entry.path ? 'scale-[1.04]' : ''}" 
-          style={!entry.is_dir && iconConfig && !entry.git_status ? `color: ${iconConfig.color}` : ''}
-          class:text-(--forja-ui-explorer-folder,#7a7a8a)={entry.is_dir && !entry.git_status} 
-          class:text-orange-400={entry.git_status === 'modified'}
-          class:text-green-400={entry.git_status === 'added'}
-          class:text-blue-400-git={entry.git_status === 'renamed'}
-          class:text-red-400={entry.git_status === 'deleted'}
-          class:text-(--forja-ui-text-muted,#71717a)={entry.is_ignored || entry.git_status === 'untracked'}>
+          style={
+            entry.is_dir && !entry.git_status
+              ? 'color: var(--forja-ui-explorer-folder, #7a7a8a)'
+              : entry.git_status === 'modified'  ? 'color: var(--forja-ui-git-modified, #fb923c)'
+              : entry.git_status === 'added'     ? 'color: var(--forja-ui-git-added, #4ade80)'
+              : entry.git_status === 'renamed'   ? 'color: var(--forja-ui-git-renamed, #60a5fa)'
+              : entry.git_status === 'deleted'   ? 'color: var(--forja-ui-git-deleted, #f87171)'
+              : entry.is_ignored || entry.git_status === 'untracked'
+                ? 'color: var(--forja-ui-text-muted, #71717a)'
+                : !entry.is_dir && iconConfig ? `color: ${iconConfig.color}` : ''
+          }>
       {#if entry.is_dir}
         {#if isExpanded}<FolderOpen size="15" strokeWidth={2.75} />{:else}<Folder size="15" strokeWidth={2.75} />{/if}
       {:else if iconConfig}
@@ -172,9 +176,16 @@
         onclick={(e) => e.stopPropagation()}
       />
     {:else}
-      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium transition-colors group-hover:text-(--forja-ui-text-primary,#f4f4f5)
-                  {$activeBufferId === entry.path || entry.git_status ? 'text-(--forja-ui-text-primary,#f4f4f5)' : 'text-(--forja-ui-text-secondary,#a1a1aa)'}
-                  {entry.git_status ? GIT_STATUS_COLORS[entry.git_status as keyof typeof GIT_STATUS_COLORS] || '' : ''}">
+      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium transition-colors group-hover:text-(--forja-ui-text-primary,#f4f4f5)"
+            style={
+              entry.git_status === 'modified'  ? 'color: var(--forja-ui-git-modified, #fb923c)'
+              : entry.git_status === 'added'   ? 'color: var(--forja-ui-git-added, #4ade80)'
+              : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)'
+              : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)'
+              : entry.git_status === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)'
+              : $activeBufferId === entry.path  ? 'color: var(--forja-ui-text-primary, #f4f4f5)'
+              : 'color: var(--forja-ui-text-secondary, #a1a1aa)'
+            }>
         {entry.name}
       </span>
     {/if}
@@ -182,8 +193,14 @@
     <!-- Área de acciones derecha -->
     <div class="ml-auto flex items-center justify-end gap-1 pr-3">
       {#if entry.git_status}
-        <span class="text-[9px] font-bold uppercase tracking-tighter w-3.5 text-center
-                     {GIT_STATUS_COLORS[entry.git_status as keyof typeof GIT_STATUS_COLORS] || 'text-(--forja-ui-text-muted,#71717a)'}">
+        <span class="text-[9px] font-bold uppercase tracking-tighter w-3.5 text-center"
+              style={
+                entry.git_status === 'modified'  ? 'color: var(--forja-ui-git-modified, #fb923c)'
+                : entry.git_status === 'added'   ? 'color: var(--forja-ui-git-added, #4ade80)'
+                : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)'
+                : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)'
+                : 'color: var(--forja-ui-text-muted, #71717a)'
+              }>
           {GIT_STATUS_LABELS[entry.git_status as keyof typeof GIT_STATUS_LABELS] || '?'}
         </span>
       {/if}

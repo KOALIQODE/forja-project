@@ -8,6 +8,7 @@
     import { ChunkRenderer } from "$lib/utils/ChunkRenderer";
     import { TextMetricsCache } from "$lib/utils/TextMetricsCache";
     import { WrapLayout } from "$lib/utils/WrapLayout";
+    import { renderEditorFrame, type DrawMutations, type DrawState } from "./EditorRenderer";
     import { DocumentBridge } from "$lib/utils/documentBridge";
     import {
         DiffScheduler,
@@ -33,6 +34,14 @@
     import { pluginRunBracketProviders, pluginEmitEvent, type BracketRange } from "$lib/utils/pluginClient";
     import { activeTheme, bracketRanges, loadedPlugins, pluginsReady, pluginActivityVersion } from "$lib/stores/pluginStore";
     import { bracketRangesToColors } from "$lib/utils/themeEngine";
+    import {
+        handleCommandModeKeyDown,
+        handleInsertModeKeyDown,
+        handleNormalModeKeyDown,
+        handleVisualModeKeyDown,
+        type VimHandlerContext,
+    } from "./VimHandlers";
+    import EditorFileInfo from "./EditorFileInfo.svelte";
 
     interface Props {
         filePath: string;
@@ -58,9 +67,10 @@
     let pendingSequence = $state("");
     let commandLine = $state("");
     let visualAnchor = $state<CursorPosition | null>(null);
-    let register = $state<VimRegister>({ text: "", linewise: false });
     let lastFindChar = $state("");
-    let lastFindMotion = $state<"f" | "F" | "t" | "T" | "">(""); 
+    let lastFindDir = $state<1 | -1>(1);
+    let lastFindStop = $state(false);
+    let lastSearchQuery = $state("");
 
     // ── Bracket pair colorizer state ─────────────────────────────────────────────
     let bracketColors = $state<Array<{ start: number; finish: number; color: string }>>([]);
@@ -258,6 +268,17 @@
         linewise: boolean;
     }
 
+    const DEFAULT_VIM_REGISTER: VimRegister = { text: "", linewise: false };
+    const vimRegisters = new Map<string, VimRegister>([['"', { ...DEFAULT_VIM_REGISTER }]]);
+
+    function getCurrentRegister(): VimRegister {
+        return vimRegisters.get('"') ?? DEFAULT_VIM_REGISTER;
+    }
+
+    function setCurrentRegister(value: VimRegister) {
+        vimRegisters.set('"', value);
+    }
+
     function queueRedraw() {
         needsRedraw = true;
     }
@@ -334,6 +355,29 @@
 
     function setLine(line: number, text: string) {
         lineCache.set(line, text);
+    }
+
+    function insertLine(line: number, text: string) {
+        const target = Math.max(0, Math.min(line, totalLines));
+        shiftLinesDown(target, 1);
+        setLine(target, text);
+        totalLines++;
+    }
+
+    function deleteLine(line: number) {
+        if (totalLines <= 1) {
+            totalLines = 1;
+            setLine(0, "");
+            cursorLine = 0;
+            cursorChar = 0;
+            return;
+        }
+
+        const target = clampLine(line);
+        shiftLinesUp(target, 1);
+        totalLines = Math.max(totalLines - 1, 1);
+        cursorLine = Math.min(cursorLine, totalLines - 1);
+        cursorChar = clampChar(cursorLine, cursorChar);
     }
 
     function cloneSnapshot(): EditorSnapshot {
@@ -1010,7 +1054,7 @@
     async function deleteRange(start: CursorPosition, end: CursorPosition) {
         await mutateDocument(() => {
             const [from, to] = sortPositions(start, end);
-            register = { text: getRangeText(from, to), linewise: false };
+            setCurrentRegister({ text: getRangeText(from, to), linewise: false });
 
             if (from.line === to.line) {
                 const line = getLine(from.line);
@@ -1039,7 +1083,7 @@
                 removed.push(getLine(i));
             }
 
-            register = { text: removed.join("\n"), linewise: true };
+            setCurrentRegister({ text: removed.join("\n"), linewise: true });
             shiftLinesUp(start, end - start + 1);
             totalLines = Math.max(totalLines - (end - start + 1), 1);
 
@@ -1055,7 +1099,7 @@
 
     function yankRange(start: CursorPosition, end: CursorPosition) {
         const [from, to] = sortPositions(start, end);
-        register = { text: getRangeText(from, to), linewise: false };
+        setCurrentRegister({ text: getRangeText(from, to), linewise: false });
     }
 
     function yankCurrentLine(count = 1) {
@@ -1065,7 +1109,7 @@
         for (let i = start; i <= end; i++) {
             lines.push(getLine(i));
         }
-        register = { text: lines.join("\n"), linewise: true };
+        setCurrentRegister({ text: lines.join("\n"), linewise: true });
     }
 
     async function insertTextAtCursor(text: string) {
@@ -1101,6 +1145,7 @@
     }
 
     async function pasteRegister(after: boolean) {
+        const register = getCurrentRegister();
         if (!register.text) return;
 
         await mutateDocument(() => {
@@ -1424,634 +1469,73 @@
             return;
         }
 
-        const frameStart = performance.now();
-        const dpr = window.devicePixelRatio || 1;
-        const rect = canvas.getBoundingClientRect();
-
-        if (rect.width === 0 || rect.height === 0) {
-            requestAnimationFrame(draw);
-            return;
-        }
-
-        const ctx = canvas.getContext("2d", { alpha: false });
-        if (!ctx) return;
-
-        // Resize only when dimensions actually changed
-        const targetW = Math.floor(rect.width * dpr);
-        const targetH = Math.floor(rect.height * dpr);
-        if (canvas.width !== targetW || canvas.height !== targetH) {
-            canvas.width = targetW;
-            canvas.height = targetH;
-            // Phase 4: canvas resized → cached OffscreenCanvases are wrong size
-            chunkRenderer.clear();
-        }
-
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        if (!needsRedraw) {
-            requestAnimationFrame(draw);
-            return;
-        }
-
-        needsRedraw = false;
-
-        // ── Phase 7: frame budget ────────────────────────────────────────────────
-        // If the last frame took too long, skip expensive chunk re-renders
-        // (overlays like cursor blink still draw at full speed).
-        const overBudget = lastFrameDuration > 14; // > 14ms ≈ below 60fps
-
-        const scrollPos = untrack(() => currentScrollTop);
-
-        // ── Soft wrap: recompute layout when stale ───────────────────────────────
-        if (softWrapEnabled) {
-            const charWidth = metricsCache.getCharWidth(ctx, editorFont);
-            const contentWidth = rect.width - contentStartX - 8;
-            if (charWidth !== lastWrapCharWidth || contentWidth !== lastWrapContentWidth || wrapLayoutDirty) {
-                wrapLayout.compute(totalLines, (i) => lineCache.get(i), charWidth, contentWidth);
-                lastWrapCharWidth = charWidth;
-                lastWrapContentWidth = contentWidth;
-                wrapLayoutDirty = false;
-                visualRowCount = wrapLayout.totalVisualRows;
-            }
-        }
-
-        let startLine: number;
-        let endLine: number;
-        let startVisualRow: number;
-        if (softWrapEnabled && wrapLayout.totalVisualRows > 0) {
-            startVisualRow = Math.floor(scrollPos / editorLineHeight);
-            const endVisualRow = startVisualRow + Math.ceil(rect.height / editorLineHeight) + 1;
-            const { line: swStartLogical } = wrapLayout.visualToLogical(startVisualRow);
-            const { line: swEndLogical } = wrapLayout.visualToLogical(
-                Math.min(endVisualRow, wrapLayout.totalVisualRows - 1)
-            );
-            startLine = swStartLogical;
-            endLine = Math.min(swEndLogical + 1, totalLines);
-        } else {
-            startLine = Math.floor(scrollPos / editorLineHeight);
-            endLine = Math.min(
-                startLine + Math.ceil(rect.height / editorLineHeight) + 1,
-                totalLines,
-            );
-            startVisualRow = startLine;
-        }
-        const yOffset = -(scrollPos % editorLineHeight);
-        // Y pixel where startLine begins on the canvas
-        const yStart = yOffset;
-
-        // ── Background ──────────────────────────────────────────────────────────
-        ctx.fillStyle = editorBgColor;
-        ctx.fillRect(0, 0, rect.width, rect.height);
-
-        // ── Pass 1: line backgrounds (active line, hover, selection) ────────────
-        const visualBounds = vimMode === "visual" ? getVisualRange() : null;
-
-        ctx.font = editorFont;
-        ctx.textBaseline = "middle";
-
-        for (let i = startLine; i < endLine; i++) {
-            if (softWrapEnabled) {
-                const firstVRow = wrapLayout.logicalToVisualRow(i);
-                const vCount = wrapLayout.visualRowCount(i);
-                for (let s = 0; s < vCount; s++) {
-                    const vRow = firstVRow + s;
-                    const y = (vRow - startVisualRow) * editorLineHeight + yOffset + editorLineHeight / 2;
-                    if (y + editorLineHeight / 2 < 0 || y - editorLineHeight / 2 > rect.height) continue;
-
-                    if (highlightActiveLine && i === cursorLine) {
-                        ctx.fillStyle = "rgba(52, 211, 153, 0.08)";
-                        ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
-                    }
-
-                    if (i === mouseLine) {
-                        ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
-                        ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
-                    }
-
-                    if (visualBounds) {
-                        const [selectionStart, selectionEnd] = visualBounds;
-                        if (i >= selectionStart.line && i <= selectionEnd.line) {
-                            ctx.fillStyle = "rgba(52, 211, 153, 0.18)";
-                            ctx.fillRect(contentStartX, y - editorLineHeight / 2 + 2, rect.width - contentStartX, editorLineHeight - 4);
-                        }
-                    }
-
-                    const _dBg = diagByLine.get(i);
-                    if (_dBg) {
-                        if (_dBg.severity === 'error') {
-                            ctx.fillStyle = "rgba(239, 68, 68, 0.07)";
-                        } else if (_dBg.severity === 'warning') {
-                            ctx.fillStyle = "rgba(245, 158, 11, 0.05)";
-                        } else {
-                            ctx.fillStyle = "rgba(96, 165, 250, 0.05)";
-                        }
-                        ctx.fillRect(gutterWidth, y - editorLineHeight / 2, rect.width - gutterWidth, editorLineHeight);
-                    }
-                }
-            } else {
-                const y = (i - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
-
-                if (highlightActiveLine && i === cursorLine) {
-                    ctx.fillStyle = "rgba(52, 211, 153, 0.08)";
-                    ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
-                }
-
-                if (i === mouseLine) {
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
-                    ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
-                }
-
-                if (visualBounds) {
-                    const [selectionStart, selectionEnd] = visualBounds;
-                    if (i >= selectionStart.line && i <= selectionEnd.line) {
-                        const line = getLine(i);
-                        const sc = i === selectionStart.line ? selectionStart.char : 0;
-                        const ec = i === selectionEnd.line ? selectionEnd.char : line.length;
-                        // Phase 5: use metrics cache for selection bounds
-                        const highlightStart = contentStartX + metricsCache.measure(ctx, line.slice(0, sc), editorFont);
-                        const highlightEnd = contentStartX + metricsCache.measure(ctx, line.slice(0, Math.max(ec, sc)), editorFont);
-                        ctx.fillStyle = "rgba(52, 211, 153, 0.18)";
-                        ctx.fillRect(
-                            highlightStart,
-                            y - editorLineHeight / 2 + 2,
-                            Math.max(highlightEnd - highlightStart, 4),
-                            editorLineHeight - 4,
-                        );
-                    }
-                }
-
-                // Diff: 3px gutter bar on the left edge for added / modified lines
-                // NOTE: drawn in Pass 1 as background; redrawn in Pass 3 to stay on top of blit
-
-                // Error Lens: subtle full-line background tint
-                const _dBg = diagByLine.get(i);
-                if (_dBg) {
-                    if (_dBg.severity === 'error') {
-                        ctx.fillStyle = "rgba(239, 68, 68, 0.07)";
-                    } else if (_dBg.severity === 'warning') {
-                        ctx.fillStyle = "rgba(245, 158, 11, 0.05)";
-                    } else {
-                        ctx.fillStyle = "rgba(96, 165, 250, 0.05)";
-                    }
-                    ctx.fillRect(gutterWidth, y - editorLineHeight / 2, rect.width - gutterWidth, editorLineHeight);
-                }
-            }
-        }
-
-        // Diff: thin deleted-block markers between gutter rows
-        for (const marker of viewportDiffCache.getDeletedMarkersInViewport()) {
-            const markerRow = marker.afterLine + 1 - startLine;
-            if (markerRow < 0 || markerRow > endLine - startLine + 1) continue;
-            const markerY = markerRow * editorLineHeight + yOffset - 2;
-            ctx.fillStyle = DIFF_COLORS.deleted;
-            ctx.fillRect(0, markerY, gutterWidth, 3);
-        }
-
-        // ── Pass 2: blit OffscreenCanvas text chunks (Phase 4) ─────────────────
-        // Skipped when soft wrap is active — text is drawn directly in Pass 3.
-        if (!softWrapEnabled) {
-            const chunkConfig = {
-                lineHeight: editorLineHeight,
-                fontSize: editorFontSize,
-                fontFamily: editorFontFamily,
-                contentStartX,
-                canvasWidth: rect.width,
-                tokenColors: currentTokenColors,
-            };
-
-            // Determine which chunks intersect the visible range
-            const firstChunkId = Math.floor(startLine / CHUNK_SIZE);
-            const lastChunkId = Math.floor(Math.max(endLine - 1, startLine) / CHUNK_SIZE);
-
-            for (let chunkId = firstChunkId; chunkId <= lastChunkId; chunkId++) {
-                if (chunkRenderer.isDirty(chunkId)) {
-                    chunkRenderer.renderChunk(
-                        chunkId,
-                        chunkConfig,
-                        (i) => lineCache.get(i),
-                        (i) => (highlightEnabled ? tokenCache.get(i) : undefined),
-                        totalLines
-                    );
-                }
-                chunkRenderer.blit(ctx, chunkId, startLine, endLine, yStart, editorLineHeight);
-            }
-        }
-
-        // ── Pass 3: overlays — diff bars, line numbers, cursor, blame ─────────
-        for (let i = startLine; i < endLine; i++) {
-            if (softWrapEnabled) {
-                // ── Soft-wrap path: render text + overlays per visual sub-row ──
-                const line = lineCache.get(i);
-                const charsPerRow = wrapLayout.charsPerRow;
-                const firstVRow = wrapLayout.logicalToVisualRow(i);
-                const vCount = wrapLayout.visualRowCount(i);
-                const charWidth = metricsCache.getCharWidth(ctx, editorFont);
-                const tokens = highlightEnabled ? tokenCache.get(i) : undefined;
-
-                // Pre-compute cumulative char start for each token
-                const tokenStarts: number[] = [];
-                if (tokens) {
-                    let off = 0;
-                    for (const t of tokens) { tokenStarts.push(off); off += t.text.length; }
-                }
-
-                for (let s = 0; s < vCount; s++) {
-                    const vRow = firstVRow + s;
-                    const rowY = (vRow - startVisualRow) * editorLineHeight + yOffset + editorLineHeight / 2;
-                    if (rowY + editorLineHeight / 2 < 0 || rowY - editorLineHeight / 2 > rect.height) continue;
-
-                    // Diff: 4px gutter bar (only on first sub-row)
-                    if (s === 0) {
-                        const diffDeco = viewportDiffCache.getDecoration(i);
-                        if (diffDeco) {
-                            ctx.fillStyle = diffDeco.color;
-                            ctx.fillRect(0, (vRow - startVisualRow) * editorLineHeight + yOffset, 4, editorLineHeight);
-                        }
-                    }
-
-                    // Line number (only on first sub-row)
-                    if (showLineNumbers) {
-                        ctx.textAlign = "right";
-                        if (s === 0) {
-                            ctx.fillStyle = "#3a3a3a";
-                            const lineNumberText = vimModeEnabled && vimMode !== "insert"
-                                ? Math.abs(i - cursorLine).toString()
-                                : (i + 1).toString();
-                            ctx.fillText(lineNumberText, lineNumberX, rowY);
-                        }
-                    }
-                    ctx.textAlign = "left";
-
-                    if (line === undefined) {
-                        if (s === 0) {
-                            ctx.fillStyle = '#1a1a1a';
-                            ctx.fillRect(contentStartX, rowY - 2, 80, 4);
-                        }
-                        continue;
-                    }
-
-                    const sliceStart = s * charsPerRow;
-                    const sliceEnd = Math.min((s + 1) * charsPerRow, line.length);
-
-                    // Text rendering
-                    if (tokens && tokens.length > 0) {
-                        for (let ti = 0; ti < tokens.length; ti++) {
-                            const token = tokens[ti];
-                            const tokenStart = tokenStarts[ti];
-                            const tokenEnd = tokenStart + token.text.length;
-                            if (tokenEnd <= sliceStart || tokenStart >= sliceEnd) continue;
-                            const clipStart = Math.max(tokenStart, sliceStart);
-                            const clipEnd = Math.min(tokenEnd, sliceEnd);
-                            const tokenText = token.text.slice(clipStart - tokenStart, clipEnd - tokenStart);
-                            if (!tokenText) continue;
-                            ctx.fillStyle = currentTokenColors[token.token_type] ?? currentTokenColors['Unknown'] ?? '#d4d4d4';
-                            ctx.fillText(tokenText, contentStartX + (clipStart - sliceStart) * charWidth, rowY);
-                        }
-                    } else {
-                        ctx.fillStyle = '#cccccc';
-                        ctx.fillText(line.slice(sliceStart, sliceEnd), contentStartX, rowY);
-                    }
-
-                    // Cursor
-                    if (i === cursorLine && cursorVisible) {
-                        const cursorSubRow = Math.floor(cursorChar / charsPerRow);
-                        if (cursorSubRow === s) {
-                            const cx = contentStartX + (cursorChar % charsPerRow) * charWidth;
-                            if (vimModeEnabled && vimMode !== "insert") {
-                                const ch = line[cursorChar] || " ";
-                                ctx.fillStyle = "rgba(52, 211, 153, 0.6)";
-                                ctx.fillRect(cx, rowY - editorLineHeight / 2 + 2, charWidth, editorLineHeight - 4);
-                                ctx.fillStyle = "#ffffff";
-                                ctx.fillText(ch, cx, rowY);
-                            } else {
-                                ctx.fillStyle = "#34d399";
-                                ctx.fillRect(cx, rowY - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
-                            }
-                        }
-                    }
-
-                    // Git blame ghost text (only on first sub-row, cursor line)
-                    if (s === 0 && i === cursorLine && blameCache[i]) {
-                        const blame = blameCache[i];
-                        const blameTokens = highlightEnabled ? tokenCache.get(i) : null;
-                        let lineWidth = 0;
-                        if (blameTokens) {
-                            for (const t of blameTokens) lineWidth += metricsCache.measure(ctx, t.text, editorFont);
-                        } else {
-                            lineWidth = metricsCache.measure(ctx, line, editorFont);
-                        }
-                        const blameFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
-                        ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
-                        ctx.font = blameFont;
-                        const blameText = blame.author
-                            ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`
-                            : `  • ${blame.summary}`;
-                        ctx.fillText(blameText, contentStartX + lineWidth + 20, rowY);
-                        ctx.font = editorFont;
-                    }
-
-                    // Error Lens (only on first sub-row)
-                    if (s === 0) {
-                        const _diag = diagByLine.get(i);
-                        if (_diag) {
-                            const _dotColor = _diag.severity === 'error'
-                                ? 'rgba(239, 68, 68, 0.85)'
-                                : _diag.severity === 'warning'
-                                ? 'rgba(245, 158, 11, 0.80)'
-                                : 'rgba(96, 165, 250, 0.70)';
-                            ctx.fillStyle = _dotColor;
-                            ctx.beginPath();
-                            ctx.arc(8, rowY, 2.5, 0, Math.PI * 2);
-                            ctx.fill();
-
-                            const _hasBlame = i === cursorLine && blameCache[i];
-                            if (!_hasBlame) {
-                                const _lTokens = highlightEnabled ? tokenCache.get(i) : null;
-                                let _lw = 0;
-                                if (_lTokens) {
-                                    for (const t of _lTokens) _lw += metricsCache.measure(ctx, t.text, editorFont);
-                                } else {
-                                    _lw = metricsCache.measure(ctx, line, editorFont);
-                                }
-                                const _msgX = contentStartX + _lw + 32;
-                                if (_msgX < rect.width - 40) {
-                                    const _diagFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
-                                    ctx.font = _diagFont;
-                                    if (_diag.severity === 'error') {
-                                        ctx.fillStyle = "rgba(239, 68, 68, 0.60)";
-                                    } else if (_diag.severity === 'warning') {
-                                        ctx.fillStyle = "rgba(245, 158, 11, 0.60)";
-                                    } else {
-                                        ctx.fillStyle = "rgba(96, 165, 250, 0.55)";
-                                    }
-                                    const _prefix = _diag.severity === 'error' ? '⛔ '
-                                        : _diag.severity === 'warning' ? '⚠ ' : '› ';
-                                    const _raw = _diag.message.length > 80
-                                        ? _diag.message.slice(0, 80) + '…'
-                                        : _diag.message;
-                                    ctx.fillText(_prefix + _raw, _msgX, rowY);
-                                    ctx.font = editorFont;
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                // ── Hard-wrap / no-wrap path (original) ──────────────────────────
-                const y = (i - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
-
-                // Diff: 4px gutter bar at left edge (drawn on top of chunk blit)
-                const diffDeco = viewportDiffCache.getDecoration(i);
-                if (diffDeco) {
-                    ctx.fillStyle = diffDeco.color;
-                    ctx.fillRect(0, (i - startLine) * editorLineHeight + yOffset, 4, editorLineHeight);
-                }
-
-                if (showLineNumbers) {
-                    ctx.fillStyle = "#3a3a3a";
-                    ctx.textAlign = "right";
-                    const lineNumberText = vimModeEnabled && vimMode !== "insert"
-                        ? Math.abs(i - cursorLine).toString()
-                        : (i + 1).toString();
-                    ctx.fillText(lineNumberText, lineNumberX, y);
-                }
-
-                ctx.textAlign = "left";
-                const line = lineCache.get(i);
-                if (line === undefined) continue;
-
-                if (i === cursorLine && cursorVisible) {
-                    // Phase 5: use metrics cache for cursor position
-                    const cursorX = contentStartX + metricsCache.measure(ctx, line.substring(0, cursorChar), editorFont);
-
-                    if (vimModeEnabled && vimMode !== "insert") {
-                        const char = line[cursorChar] || " ";
-                        const charWidth = metricsCache.measure(ctx, char, editorFont);
-                        ctx.fillStyle = "rgba(52, 211, 153, 0.6)";
-                        ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, charWidth, editorLineHeight - 4);
-                        ctx.fillStyle = "#ffffff";
-                        ctx.fillText(char, cursorX, y);
-                    } else {
-                        ctx.fillStyle = "#34d399";
-                        ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
-                    }
-                }
-
-                // Git blame ghost text on active line
-                if (i === cursorLine && blameCache[i]) {
-                    const blame = blameCache[i];
-                    // Phase 5: estimate line content width for blame placement
-                    const tokens = highlightEnabled ? tokenCache.get(i) : null;
-                    let lineWidth = 0;
-                    if (tokens) {
-                        for (const t of tokens) lineWidth += metricsCache.measure(ctx, t.text, editorFont);
-                    } else {
-                        lineWidth = metricsCache.measure(ctx, line, editorFont);
-                    }
-                    const blameFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
-                    ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
-                    ctx.font = blameFont;
-                    const blameText = blame.author
-                        ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`
-                        : `  • ${blame.summary}`;
-                    ctx.fillText(blameText, contentStartX + lineWidth + 20, y);
-                    ctx.font = editorFont;
-                }
-
-                // ── Error Lens: gutter indicator dot + inline message ─────────────────
-                const _diag = diagByLine.get(i);
-                if (_diag) {
-                    // Gutter dot (right edge of gutter, above the line number)
-                    const _dotColor = _diag.severity === 'error'
-                        ? 'rgba(239, 68, 68, 0.85)'
-                        : _diag.severity === 'warning'
-                        ? 'rgba(245, 158, 11, 0.80)'
-                        : 'rgba(96, 165, 250, 0.70)';
-                    ctx.fillStyle = _dotColor;
-                    ctx.beginPath();
-                    ctx.arc(8, y, 2.5, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    // Inline message (skip cursor line when blame is visible to avoid overlap)
-                    const _hasBlame = i === cursorLine && blameCache[i];
-                    if (!_hasBlame) {
-                        const _lTokens = highlightEnabled ? tokenCache.get(i) : null;
-                        let _lw = 0;
-                        if (_lTokens) {
-                            for (const t of _lTokens) _lw += metricsCache.measure(ctx, t.text, editorFont);
-                        } else {
-                            _lw = metricsCache.measure(ctx, line, editorFont);
-                        }
-                        const _msgX = contentStartX + _lw + 32;
-                        if (_msgX < rect.width - 40) {
-                            const _diagFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
-                            ctx.font = _diagFont;
-                            if (_diag.severity === 'error') {
-                                ctx.fillStyle = "rgba(239, 68, 68, 0.60)";
-                            } else if (_diag.severity === 'warning') {
-                                ctx.fillStyle = "rgba(245, 158, 11, 0.60)";
-                            } else {
-                                ctx.fillStyle = "rgba(96, 165, 250, 0.55)";
-                            }
-                            const _prefix = _diag.severity === 'error' ? '⛔ '
-                                : _diag.severity === 'warning' ? '⚠ ' : '› ';
-                            const _raw = _diag.message.length > 80
-                                ? _diag.message.slice(0, 80) + '…'
-                                : _diag.message;
-                            ctx.fillText(_prefix + _raw, _msgX, y);
-                            ctx.font = editorFont;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Phase 7: track frame duration for next budget check
-        lastFrameDuration = performance.now() - frameStart;
-
-        // ── Pass 4: bracket pair colored characters ──────────────────────────────
-        if (bracketColors.length > 0) {
-            // Pre-compute cumulative char offsets for all lines (needed for offset→line lookup)
-            const lineOffsets: number[] = [];
-            let offset = 0;
-            for (let l = 0; l < totalLines; l++) {
-                lineOffsets.push(offset);
-                offset += (lineCache.get(l) ?? "").length + 1; // +1 for \n
-            }
-
-            ctx.save();
-            ctx.font = editorFont;
-            ctx.textBaseline = "middle";
-
-            const paintBracketChar = (charOffset: number, color: string) => {
-                // Binary-search: find which line this offset belongs to
-                let lo = 0, hi = lineOffsets.length - 1;
-                while (lo < hi) {
-                    const mid = (lo + hi + 1) >> 1;
-                    if (lineOffsets[mid] <= charOffset) lo = mid; else hi = mid - 1;
-                }
-                const line = lo;
-                if (line < startLine || line >= endLine) return; // outside viewport
-                const col = charOffset - lineOffsets[line];
-                const lineText = lineCache.get(line) ?? "";
-                const ch = lineText[col];
-                if (!ch) return;
-                const x = contentStartX + metricsCache.measure(ctx, lineText.slice(0, col), editorFont);
-                const charWidth = metricsCache.measure(ctx, ch, editorFont);
-                const y = softWrapEnabled
-                    ? (wrapLayout.visualRowOfChar(line, col) - startVisualRow) * editorLineHeight + yOffset + editorLineHeight / 2
-                    : (line - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
-                // Erase background for this character, then redraw in bracket color
-                ctx.fillStyle = editorBgColor;
-                ctx.fillRect(x, y - editorLineHeight / 2, charWidth, editorLineHeight);
-                ctx.fillStyle = color;
-                ctx.fillText(ch, x, y);
-            };
-
-            for (const { start, finish, color } of bracketColors) {
-                paintBracketChar(start - 1, color);  // Lua is 1-based
-                paintBracketChar(finish - 1, color);
-            }
-
-            ctx.restore();
-        }
-
-        // ── Pass 5: bracket match highlight (works with or without plugin) ──────
-        {
-            const OPEN  = new Set(['{', '(', '[']);
-            const CLOSE = new Set(['}', ')', ']']);
-            const PAIRS: Record<string, string> = {
-                '{': '}', '(': ')', '[': ']',
-                '}': '{', ')': '(', ']': '[',
-            };
-
-            const curLineText = lineCache.get(cursorLine) ?? "";
-            const ch = curLineText[cursorChar];
-
-            let matchLine = -1;
-            let matchCol  = -1;
-
-            if (ch && (OPEN.has(ch) || CLOSE.has(ch))) {
-                const isOpen = OPEN.has(ch);
-                let depth = 0;
-
-                if (isOpen) {
-                    scan_fwd:
-                    for (let l = cursorLine; l < totalLines; l++) {
-                        const text = lineCache.get(l) ?? "";
-                        const c0 = l === cursorLine ? cursorChar : 0;
-                        for (let c = c0; c < text.length; c++) {
-                            const t = text[c];
-                            if (t === ch)         depth++;
-                            else if (t === PAIRS[ch]) { depth--; if (depth === 0) { matchLine = l; matchCol = c; break scan_fwd; } }
-                        }
-                    }
-                } else {
-                    scan_bwd:
-                    for (let l = cursorLine; l >= 0; l--) {
-                        const text = lineCache.get(l) ?? "";
-                        const c0 = l === cursorLine ? cursorChar : text.length - 1;
-                        for (let c = c0; c >= 0; c--) {
-                            const t = text[c];
-                            if (t === ch)         depth++;
-                            else if (t === PAIRS[ch]) { depth--; if (depth === 0) { matchLine = l; matchCol = c; break scan_bwd; } }
-                        }
-                    }
-                }
-            }
-
-            if (matchLine !== -1) {
-                // Use the bracket-colorizer color for this pair when available
-                let pairColor = "#34d399";
-                if (bracketColors.length > 0) {
-                    const lineOffsets2: number[] = [];
-                    let off = 0;
-                    for (let l = 0; l < totalLines; l++) {
-                        lineOffsets2.push(off);
-                        off += (lineCache.get(l) ?? "").length + 1;
-                    }
-                    const curOff = (lineOffsets2[cursorLine] ?? 0) + cursorChar + 1;
-                    const matOff = (lineOffsets2[matchLine]  ?? 0) + matchCol  + 1;
-                    const found  = bracketColors.find(
-                        (b) => (b.start === curOff || b.finish === curOff) &&
-                               (b.start === matOff  || b.finish === matOff)
-                    );
-                    if (found) pairColor = found.color;
-                }
-
-                ctx.save();
-                ctx.font = editorFont;
-                ctx.textBaseline = "middle";
-
-                const drawBox = (bLine: number, bCol: number, isActive: boolean) => {
-                    if (bLine < startLine || bLine >= endLine) return;
-                    const text = lineCache.get(bLine) ?? "";
-                    const bch  = text[bCol];
-                    if (!bch) return;
-                    const x  = contentStartX + metricsCache.measure(ctx, text.slice(0, bCol), editorFont);
-                    const cw = metricsCache.measure(ctx, bch, editorFont);
-                    const y  = softWrapEnabled
-                        ? (wrapLayout.visualRowOfChar(bLine, bCol) - startVisualRow) * editorLineHeight + yOffset + editorLineHeight / 2
-                        : (bLine - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
-                    if (isActive) {
-                        ctx.fillStyle = pairColor + "44";
-                        ctx.fillRect(x, y - editorLineHeight / 2 + 2, cw, editorLineHeight - 4);
-                        ctx.fillStyle = "#ffffff";
-                        ctx.fillText(bch, x, y);
-                    }
-                    ctx.strokeStyle = pairColor;
-                    ctx.lineWidth = 1.5;
-                    ctx.strokeRect(x + 0.5, y - editorLineHeight / 2 + 2.5, cw - 1, editorLineHeight - 5);
-                };
-
-                drawBox(cursorLine, cursorChar, true);
-                drawBox(matchLine,  matchCol,  false);
-
-                ctx.restore();
-            }
-        }
-
-        requestAnimationFrame(draw);
+        const state: DrawState = {
+            canvas,
+            scrollContainer,
+            needsRedraw,
+            lastFrameDuration,
+            currentScrollTop,
+            softWrapEnabled,
+            lineCache,
+            totalLines,
+            cursorLine,
+            cursorChar,
+            vimMode,
+            vimModeEnabled,
+            mouseLine,
+            highlightActiveLine,
+            showLineNumbers,
+            cursorVisible,
+            highlightEnabled,
+            lastWrapCharWidth,
+            lastWrapContentWidth,
+            wrapLayoutDirty,
+            visualRowCount,
+            metricsCache,
+            wrapLayout,
+            chunkRenderer,
+            viewportDiffCache,
+            diagByLine,
+            editorFont,
+            editorFontSize,
+            editorFontFamily,
+            editorLineHeight,
+            gutterWidth,
+            lineNumberX,
+            contentStartX,
+            currentTokenColors,
+            editorBgColor,
+            getLine,
+            getVisualRange,
+            untrack,
+            tokenCache,
+            bracketColors,
+            blameCache,
+            scheduleNextFrame: () => requestAnimationFrame(draw),
+        };
+
+        const mutations: DrawMutations = {
+            setNeedsRedraw: (value) => {
+                needsRedraw = value;
+            },
+            setVisualRowCount: (value) => {
+                visualRowCount = value;
+            },
+            setLastWrapCharWidth: (value) => {
+                lastWrapCharWidth = value;
+            },
+            setLastWrapContentWidth: (value) => {
+                lastWrapContentWidth = value;
+            },
+            setWrapLayoutDirty: (value) => {
+                wrapLayoutDirty = value;
+            },
+            setLastFrameDuration: (value) => {
+                lastFrameDuration = value;
+            },
+        };
+
+        renderEditorFrame(state, mutations);
     }
 
     // --- Basic Editing Support ---
@@ -2427,595 +1911,104 @@
         enterNormalMode();
     }
 
-    async function handleInsertModeKeyDown(e: KeyboardEvent, useVimEscape = true) {
-        if (e.key === "Escape") {
-            e.preventDefault();
-            if (useVimEscape) {
-                enterNormalMode(true);
-            } else {
-                (e.currentTarget as HTMLElement).blur();
-            }
-            return;
-        }
-
-        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Backspace", "Enter", "Tab"].includes(e.key)) {
-            e.preventDefault();
-        }
-
-        if (e.key === "Enter") {
-            await handleInsertEnter();
-            return;
-        }
-
-        if (e.key === "Backspace") {
-            await handleInsertBackspace();
-            return;
-        }
-
-        if (e.key === "Tab") {
-            await handleInsertCharacter("  ");
-            return;
-        }
-
-        if (e.key === "ArrowLeft") {
-            if (cursorChar > 0) {
-                setCursor(cursorLine, cursorChar - 1);
-            } else if (cursorLine > 0) {
-                setCursor(cursorLine - 1, lineLength(cursorLine - 1));
-            }
-            return;
-        }
-
-        if (e.key === "ArrowRight") {
-            if (cursorChar < lineLength(cursorLine)) {
-                setCursor(cursorLine, cursorChar + 1);
-            } else if (cursorLine < totalLines - 1) {
-                setCursor(cursorLine + 1, 0);
-            }
-            return;
-        }
-
-        if (e.key === "ArrowUp") {
-            setCursor(cursorLine - 1, cursorChar);
-            return;
-        }
-
-        if (e.key === "ArrowDown") {
-            setCursor(cursorLine + 1, cursorChar);
-            return;
-        }
-
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            await handleInsertCharacter(e.key);
-        }
-    }
-
-    async function handleCommandModeKeyDown(e: KeyboardEvent) {
-        e.preventDefault();
-
-        if (e.key === "Escape") {
-            commandLine = "";
-            enterNormalMode();
-            return;
-        }
-
-        if (e.key === "Enter") {
-            await executeCommandLine();
-            return;
-        }
-
-        if (e.key === "Backspace") {
-            commandLine = commandLine.slice(0, -1);
-            syncVimStatus();
-            queueRedraw();
-            return;
-        }
-
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            commandLine += e.key;
-            syncVimStatus();
-            queueRedraw();
-        }
-    }
-
-    async function handleVisualModeKeyDown(e: KeyboardEvent) {
-        if (e.key === "Escape") {
-            e.preventDefault();
-            enterNormalMode();
-            return;
-        }
-
-        if (e.key === "y" || e.key === "d" || e.key === "c") {
-            e.preventDefault();
-            const range = getVisualRange();
-            if (!range) {
-                enterNormalMode();
-                return;
-            }
-
-            if (e.key === "y") {
-                yankRange(range[0], range[1]);
-                enterNormalMode();
-                return;
-            }
-
-            await deleteRange(range[0], range[1]);
-            if (e.key === "c") {
-                enterInsertMode();
-            } else {
-                enterNormalMode();
-            }
-            return;
-        }
-
-        if (e.key === "p" || e.key === "P") {
-            e.preventDefault();
-            const range = getVisualRange();
-            if (range) {
-                await deleteRange(range[0], range[1]);
-            }
-            await pasteRegister(e.key === "p");
-            enterNormalMode();
-            return;
-        }
-
-        if (e.key === "o") {
-            e.preventDefault();
-            if (visualAnchor) {
-                const oldAnchor = clonePosition(visualAnchor);
-                visualAnchor = currentPosition();
-                setCursor(oldAnchor.line, oldAnchor.char);
-            }
-            return;
-        }
-
-        if (e.key === ">" || e.key === "<") {
-            e.preventDefault();
-            const visualRange = getVisualBounds();
-            if (visualRange) {
-                const [vStart, vEnd] = visualRange;
-                await indentLines(vStart.line, vEnd.line, e.key === ">" ? 1 : -1);
-            }
-            enterNormalMode();
-            return;
-        }
-
-        if (e.key === "~") {
-            e.preventDefault();
-            const visualRange = getVisualBounds();
-            if (visualRange) {
-                const [vStart, vEnd] = visualRange;
-                await mutateDocument(() => {
-                    for (let l = vStart.line; l <= vEnd.line; l++) {
-                        const line = getLine(l);
-                        const from = l === vStart.line ? vStart.char : 0;
-                        const to = l === vEnd.line ? vEnd.char + 1 : line.length;
-                        const toggled =
-                            line.slice(0, from) +
-                            line.slice(from, to).split("").map((c) =>
-                                c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()
-                            ).join("") +
-                            line.slice(to);
-                        setLine(l, toggled);
-                    }
-                });
-            }
-            enterNormalMode();
-            return;
-        }
-
-        await handleNormalModeKeyDown(e);
-    }
-
-    async function handleNormalModeKeyDown(e: KeyboardEvent) {
-        const key = e.key;
-
-        if (key === "Escape") {
-            e.preventDefault();
-            enterNormalMode();
-            return;
-        }
-
-        if (pendingOperator) {
-            e.preventDefault();
-            await applyPendingOperator(key);
-            return;
-        }
-
-        if (pendingSequence === "r") {
-            e.preventDefault();
-            if (key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                await mutateDocument(() => {
-                    const line = getLine(cursorLine);
-                    if (cursorChar < line.length) {
-                        setLine(cursorLine, line.slice(0, cursorChar) + key + line.slice(cursorChar + 1));
-                    }
-                });
-            }
-            clearPendingState();
-            return;
-        }
-
-        if (pendingSequence === "z") {
-            e.preventDefault();
-            if (scrollContainer) {
-                if (key === "z") {
-                    scrollContainer.scrollTop = Math.max(0, cursorLine * editorLineHeight - scrollContainer.clientHeight / 2);
-                } else if (key === "t") {
-                    scrollContainer.scrollTop = cursorLine * editorLineHeight;
-                } else if (key === "b") {
-                    scrollContainer.scrollTop = Math.max(0, (cursorLine + 1) * editorLineHeight - scrollContainer.clientHeight);
-                }
-                queueRedraw();
-            }
-            clearPendingState();
-            return;
-        }
-
-        if (pendingSequence === "f" || pendingSequence === "F" || pendingSequence === "t" || pendingSequence === "T") {
-            e.preventDefault();
-            if (key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                const cnt = getCount();
-                const motion = pendingSequence as "f" | "F" | "t" | "T";
-                lastFindChar = key;
-                lastFindMotion = motion;
-                if (motion === "f") setNormalCursor(cursorLine, findCharForward(key, cnt));
-                else if (motion === "F") setNormalCursor(cursorLine, findCharBackward(key, cnt));
-                else if (motion === "t") setNormalCursor(cursorLine, findCharForward(key, cnt, true));
-                else if (motion === "T") setNormalCursor(cursorLine, findCharBackward(key, cnt, true));
-            }
-            clearPendingState();
-            return;
-        }
-
-        if (pendingSequence === ">") {
-            e.preventDefault();
-            if (key === ">") {
-                const cnt = getCount();
-                await indentLines(cursorLine, Math.min(cursorLine + cnt - 1, totalLines - 1), 1);
-            }
-            clearPendingState();
-            return;
-        }
-
-        if (pendingSequence === "<") {
-            e.preventDefault();
-            if (key === "<") {
-                const cnt = getCount();
-                await indentLines(cursorLine, Math.min(cursorLine + cnt - 1, totalLines - 1), -1);
-            }
-            clearPendingState();
-            return;
-        }
-
-        if (pendingSequence === "g") {
-            e.preventDefault();
-            if (key === "g") {
-                moveToFirstLine();
-            }
-            clearPendingState();
-            return;
-        }
-
-        if (key >= "1" && key <= "9") {
-            e.preventDefault();
-            pendingCount += key;
-            syncVimStatus();
-            return;
-        }
-
-        if (key === "0" && pendingCount) {
-            e.preventDefault();
-            pendingCount += key;
-            syncVimStatus();
-            return;
-        }
-
-        const countPrefix = pendingCount;
-        const hadCount = countPrefix !== "";
-        const count = getCount();
-        clearPendingState();
-
-        if (e.ctrlKey && key === "r") {
-            e.preventDefault();
-            for (let i = 0; i < count; i++) redo();
-            clearPendingState();
-            return;
-        }
-
-        if (e.ctrlKey && (key === "d" || key === "u")) {
-            e.preventDefault();
-            if (scrollContainer) {
-                const halfPage = Math.floor(scrollContainer.clientHeight / editorLineHeight / 2);
-                const delta = key === "d" ? halfPage : -halfPage;
-                const newLine = Math.max(0, Math.min(totalLines - 1, cursorLine + delta));
-                setCursor(newLine, cursorChar);
-                normalizeNormalCursor();
-                ensureCursorVisible();
-            }
-            clearPendingState();
-            return;
-        }
-
-        if (e.ctrlKey && (key === "f" || key === "b")) {
-            e.preventDefault();
-            if (scrollContainer) {
-                const fullPage = Math.floor(scrollContainer.clientHeight / editorLineHeight) - 1;
-                const delta = key === "f" ? fullPage : -fullPage;
-                const newLine = Math.max(0, Math.min(totalLines - 1, cursorLine + delta));
-                setCursor(newLine, cursorChar);
-                normalizeNormalCursor();
-                ensureCursorVisible();
-            }
-            clearPendingState();
-            return;
-        }
-
-        switch (key) {
-            case "0":
-                e.preventDefault();
-                moveCursorToLineStart();
-                normalizeNormalCursor();
-                break;
-            case "^":
-                e.preventDefault();
-                moveCursorToFirstNonWhitespace();
-                normalizeNormalCursor();
-                break;
-            case "$":
-                e.preventDefault();
-                moveCursorToLineEnd();
-                break;
-            case "h":
-            case "ArrowLeft":
-                e.preventDefault();
-                moveHorizontalWrap(-count);
-                break;
-            case "l":
-            case "ArrowRight":
-                e.preventDefault();
-                moveHorizontalWrap(count);
-                break;
-            case "j":
-            case "ArrowDown":
-                e.preventDefault();
-                moveVertical(count);
-                break;
-            case "k":
-            case "ArrowUp":
-                e.preventDefault();
-                moveVertical(-count);
-                break;
-            case "w": {
-                e.preventDefault();
-                const target = findNextWordStart(currentPosition(), count);
-                setNormalCursor(target.line, target.char);
-                break;
-            }
-            case "b": {
-                e.preventDefault();
-                const target = findPreviousWordStart(currentPosition(), count);
-                setNormalCursor(target.line, target.char);
-                break;
-            }
-            case "e": {
-                e.preventDefault();
-                const target = findWordEnd(currentPosition(), count);
-                setNormalCursor(target.line, target.char);
-                break;
-            }
-            case "g":
-                e.preventDefault();
-                pendingSequence = "g";
-                syncVimStatus();
-                break;
-            case "G":
-                e.preventDefault();
-                if (hadCount) {
-                    setNormalCursor(clampLine(count - 1), 0);
-                } else {
-                    moveToLastLine();
-                }
-                break;
-            case "i":
-                e.preventDefault();
-                enterInsertMode();
-                break;
-            case "I":
-                e.preventDefault();
-                moveCursorToFirstNonWhitespace();
-                enterInsertMode();
-                break;
-            case "a":
-                e.preventDefault();
-                setCursor(cursorLine, Math.min(cursorChar + 1, lineLength(cursorLine)));
-                enterInsertMode();
-                break;
-            case "A":
-                e.preventDefault();
-                setCursor(cursorLine, lineLength(cursorLine));
-                enterInsertMode();
-                break;
-            case "o":
-                e.preventDefault();
-                await insertNewLineBelow();
-                break;
-            case "O":
-                e.preventDefault();
-                await insertNewLineAbove();
-                break;
-            case "x":
-                e.preventDefault();
-                await deleteCharAtCursor(count);
-                break;
-            case "p":
-                e.preventDefault();
-                await pasteRegister(true);
-                break;
-            case "P":
-                e.preventDefault();
-                await pasteRegister(false);
-                break;
-            case "u":
-                e.preventDefault();
-                for (let i = 0; i < count; i++) undo();
-                break;
-            case "v":
-                e.preventDefault();
-                enterVisualMode();
-                break;
-            case ":":
-                e.preventDefault();
-                enterCommandMode();
-                break;
-            case "d":
-                e.preventDefault();
-                pendingCount = countPrefix;
-                pendingOperator = "delete";
-                pendingSequence = "d";
-                syncVimStatus();
-                break;
-            case "c":
-                e.preventDefault();
-                pendingCount = countPrefix;
-                pendingOperator = "change";
-                pendingSequence = "c";
-                syncVimStatus();
-                break;
-            case "y":
-                e.preventDefault();
-                pendingCount = countPrefix;
-                pendingOperator = "yank";
-                pendingSequence = "y";
-                syncVimStatus();
-                break;
-            case "D":
-                e.preventDefault();
-                await deleteRange(currentPosition(), {
-                    line: cursorLine,
-                    char: lineLength(cursorLine),
-                });
-                break;
-            case "C":
-                e.preventDefault();
-                await deleteRange(currentPosition(), {
-                    line: cursorLine,
-                    char: lineLength(cursorLine),
-                });
-                enterInsertMode();
-                break;
-            case "s":
-                e.preventDefault();
-                await deleteCharAtCursor(count);
-                enterInsertMode();
-                break;
-            case "S":
-                e.preventDefault();
-                await mutateDocument(() => {
-                    register = { text: getLine(cursorLine), linewise: false };
-                    setLine(cursorLine, "");
-                    cursorChar = 0;
-                });
-                enterInsertMode();
-                break;
-            case "J": {
-                e.preventDefault();
-                const joinCount = Math.max(count, 1);
-                await mutateDocument(() => {
-                    for (let n = 0; n < joinCount && cursorLine < totalLines - 1; n++) {
-                        const cur = getLine(cursorLine);
-                        const next = getLine(cursorLine + 1);
-                        const joined = cur + (next.trimStart() ? " " + next.trimStart() : "");
-                        setLine(cursorLine, joined);
-                        shiftLinesUp(cursorLine + 1, 1);
-                        totalLines--;
-                        cursorChar = cur.length;
-                    }
-                });
-                break;
-            }
-            case "~": {
-                e.preventDefault();
-                await mutateDocument(() => {
-                    const line = getLine(cursorLine);
-                    let newLine = line;
-                    for (let i = 0; i < count && cursorChar + i < line.length; i++) {
-                        const ch = line[cursorChar + i];
-                        const toggled = ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase();
-                        newLine = newLine.slice(0, cursorChar + i) + toggled + newLine.slice(cursorChar + i + 1);
-                    }
-                    setLine(cursorLine, newLine);
-                    cursorChar = Math.min(cursorChar + count, Math.max(lineLength(cursorLine) - 1, 0));
-                });
-                break;
-            }
-            case "%": {
-                e.preventDefault();
-                const lineText = getLine(cursorLine);
-                const openBrackets = "({[";
-                const closeBrackets = ")}]";
-                const ch = lineText[cursorChar];
-                if (ch && (openBrackets.includes(ch) || closeBrackets.includes(ch))) {
-                    const matchResult = findMatchingBracket(cursorLine, cursorChar);
-                    if (matchResult) setNormalCursor(matchResult.line, matchResult.char);
-                }
-                break;
-            }
-            case "r":
-                e.preventDefault();
-                pendingSequence = "r";
-                syncVimStatus();
-                break;
-            case "z":
-                e.preventDefault();
-                pendingSequence = "z";
-                syncVimStatus();
-                break;
-            case "f":
-            case "F":
-            case "t":
-            case "T":
-                e.preventDefault();
-                pendingSequence = key;
-                pendingCount = countPrefix;
-                syncVimStatus();
-                break;
-            case ";":
-                e.preventDefault();
-                if (lastFindChar && lastFindMotion) {
-                    if (lastFindMotion === "f") setNormalCursor(cursorLine, findCharForward(lastFindChar, count));
-                    else if (lastFindMotion === "F") setNormalCursor(cursorLine, findCharBackward(lastFindChar, count));
-                    else if (lastFindMotion === "t") setNormalCursor(cursorLine, findCharForward(lastFindChar, count, true));
-                    else if (lastFindMotion === "T") setNormalCursor(cursorLine, findCharBackward(lastFindChar, count, true));
-                    queueRedraw();
-                }
-                break;
-            case ",":
-                e.preventDefault();
-                if (lastFindChar && lastFindMotion) {
-                    const reversed: Record<string, "f" | "F" | "t" | "T"> = { f: "F", F: "f", t: "T", T: "t" };
-                    const rev = reversed[lastFindMotion];
-                    if (rev === "f") setNormalCursor(cursorLine, findCharForward(lastFindChar, count));
-                    else if (rev === "F") setNormalCursor(cursorLine, findCharBackward(lastFindChar, count));
-                    else if (rev === "t") setNormalCursor(cursorLine, findCharForward(lastFindChar, count, true));
-                    else if (rev === "T") setNormalCursor(cursorLine, findCharBackward(lastFindChar, count, true));
-                    queueRedraw();
-                }
-                break;
-            case ">":
-                e.preventDefault();
-                pendingSequence = ">";
-                pendingCount = countPrefix;
-                syncVimStatus();
-                break;
-            case "<":
-                e.preventDefault();
-                pendingSequence = "<";
-                pendingCount = countPrefix;
-                syncVimStatus();
-                break;
-        }
-    }
+    const vimCtx: VimHandlerContext = {
+        getVimMode: () => vimMode,
+        getVimModeEnabled: () => vimModeEnabled,
+        getPendingOperator: () => pendingOperator,
+        getPendingSequence: () => pendingSequence,
+        getPendingCount: () => pendingCount,
+        getCursorLine: () => cursorLine,
+        getCursorChar: () => cursorChar,
+        getTotalLines: () => totalLines,
+        getLine,
+        getVisualAnchor: () => visualAnchor,
+        getVimRegisters: () => vimRegisters,
+        getCommandLine: () => commandLine,
+        getLastSearchQuery: () => lastSearchQuery,
+        setVimMode: (mode) => {
+            vimMode = mode as VimMode;
+        },
+        setPendingOperator: (operator) => {
+            pendingOperator = operator as typeof pendingOperator;
+        },
+        setPendingSequence: (sequence) => {
+            pendingSequence = sequence;
+        },
+        setPendingCount: (count) => {
+            pendingCount = count;
+        },
+        setVisualAnchor: (anchor) => {
+            visualAnchor = anchor;
+        },
+        setCommandLine: (value) => {
+            commandLine = value;
+        },
+        setLastSearchQuery: (value) => {
+            lastSearchQuery = value;
+        },
+        setCursor,
+        setNormalCursor,
+        enterNormalMode,
+        enterInsertMode,
+        enterVisualMode,
+        clearPendingState,
+        syncVimStatus,
+        mutateDocument,
+        applyPendingOperator,
+        handleInsertEnter,
+        handleInsertBackspace,
+        handleInsertCharacter,
+        saveFile,
+        undo,
+        redo,
+        lineLength,
+        clampLine,
+        clampChar,
+        findNextWordStart,
+        findPreviousWordStart,
+        findWordEnd,
+        findCharForward,
+        findCharBackward,
+        findMatchingBracket,
+        getTextObjectRange,
+        indentLines,
+        setLine,
+        insertLine,
+        deleteLine,
+        queueRedraw,
+        highlightViewportViaDocBridge,
+        vimRegisters,
+        get lastFindChar() {
+            return lastFindChar;
+        },
+        get lastFindDir() {
+            return lastFindDir;
+        },
+        get lastFindStop() {
+            return lastFindStop;
+        },
+        setLastFindChar: (value) => {
+            lastFindChar = value;
+        },
+        setLastFindDir: (value) => {
+            lastFindDir = value;
+        },
+        setLastFindStop: (value) => {
+            lastFindStop = value;
+        },
+        dialogState,
+        executeCommandLine,
+        deleteRange,
+        yankRange,
+        pasteRegister,
+        insertNewLineBelow,
+        insertNewLineAbove,
+        deleteCharAtCursor,
+        getScrollContainer: () => scrollContainer,
+        getEditorLineHeight: () => editorLineHeight,
+        normalizeNormalCursor,
+        ensureCursorVisible,
+    };
 
     async function handleEditorKeyDown(e: KeyboardEvent) {
         let activeDlg = false;
@@ -3025,18 +2018,18 @@
         cursorVisible = true;
 
         if (!vimModeEnabled) {
-            await handleInsertModeKeyDown(e, false);
+            await handleInsertModeKeyDown(e, vimCtx, false);
             return;
         }
 
         if (vimMode === "insert") {
-            await handleInsertModeKeyDown(e);
+            await handleInsertModeKeyDown(e, vimCtx);
         } else if (vimMode === "command") {
-            await handleCommandModeKeyDown(e);
+            await handleCommandModeKeyDown(e, vimCtx);
         } else if (vimMode === "visual") {
-            await handleVisualModeKeyDown(e);
+            await handleVisualModeKeyDown(e, vimCtx);
         } else {
-            await handleNormalModeKeyDown(e);
+            await handleNormalModeKeyDown(e, vimCtx);
         }
     }
 
@@ -3516,41 +2509,8 @@
     }}
     tabindex="0"
 >
-    <!-- Colorful Enhanced Status Bar (Top Right) -->
-    <div
-        class="absolute top-4 right-6 z-50 flex items-center justify-end pointer-events-none select-none group"
-    >
-        <div
-            class="flex items-center gap-0.5 p-1 bg-[#121212]/80 backdrop-blur-xl border border-white/5 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden transition-all duration-500 hover:border-emerald-500/20"
-        >
-            <!-- File Path Section -->
-            <div
-                class="px-3 py-1.5 bg-white/5 rounded-lg flex items-center gap-2 border border-white/5"
-            >
-                {#if isDirty}
-                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                {/if}
-                <span
-                    class="text-[11px] font-bold text-zinc-100 tracking-tight"
-                >
-                    {filePath.split(/[\/\\]/).pop()}
-                </span>
-            </div>
-
-            <!-- Stats Section -->
-            <div class="px-3 py-1.5 flex items-center gap-4">
-                <div class="flex flex-col items-end">
-                    <span
-                        class="text-[9px] uppercase tracking-[0.1em] text-zinc-500 font-bold leading-none mb-0.5"
-                        >Lines</span
-                    >
-                    <span class="text-[11px] text-zinc-300 font-medium"
-                        >{totalLines.toLocaleString()}</span
-                    >
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- File Info (top-right) -->
+    <EditorFileInfo {filePath} {isDirty} {totalLines} />
 
     <!-- Main Editor Area -->
     <div class="flex-1 min-h-0 relative overflow-hidden">
