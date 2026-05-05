@@ -260,7 +260,7 @@
 
 <!-- Backdrop -->
 <div
-  class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-12 backdrop-blur-md"
+  class="fixed inset-0 z-[100] flex items-center justify-center p-12"
   role="button"
   tabindex="0"
   onclick={(e) => e.target === e.currentTarget && closeDialog()}
@@ -273,12 +273,12 @@
   }}
 >
   <!-- Panel -->
-  <div class="flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.9)]">
+  <div class="flex h-full w-full max-w-4xl flex-col overflow-hidden border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.9)]">
 
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-white/5 bg-white/[0.03] px-8 py-6">
       <div class="flex items-center gap-4">
-        <div class="rounded-xl bg-violet-500/10 p-2.5 text-violet-400">
+        <div class="bg-violet-500/10 p-2.5 text-violet-400">
           <Puzzle size={24} />
         </div>
         <div>
@@ -294,12 +294,12 @@
             type="text"
             bind:value={searchQuery}
             placeholder="Search…"
-            class="w-full rounded-full border border-white/5 bg-white/5 py-2 pl-9 pr-4 text-xs text-white outline-none focus:border-violet-500/30"
+            class="w-full border border-white/5 bg-white/5 py-2 pl-9 pr-4 text-xs text-white outline-none focus:border-violet-500/30"
           />
         </div>
         <button
           onclick={closeDialog}
-          class="rounded-full p-2 text-white/20 transition-all hover:bg-white/5 hover:text-white"
+          class="p-2 text-white/20 transition-all hover:bg-white/5 hover:text-white"
         >
           <X size={20} />
         </button>
@@ -315,12 +315,12 @@
       ] as tab}
         <button
           onclick={() => activeTab = tab.id as any}
-          class="flex items-center gap-2 rounded-t-lg px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-all {activeTab === tab.id ? 'border-b-2 border-violet-500 bg-white/5 text-violet-300' : 'text-white/30 hover:text-white/60'}"
+          class="flex items-center gap-2 px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-all {activeTab === tab.id ? 'border-b-2 border-violet-500 bg-white/5 text-violet-300' : 'text-white/30 hover:text-white/60'}"
         >
           <tab.icon size={13} />
           {tab.label}
           {#if tab.count > 0}
-            <span class="rounded-full bg-white/5 px-1.5 py-0.5 text-[9px]">{tab.count}</span>
+            <span class="bg-white/5 px-1.5 py-0.5 text-[9px]">{tab.count}</span>
           {/if}
         </button>
       {/each}
@@ -350,9 +350,9 @@
           <div class="flex flex-col gap-3">
             {#each filteredPlugins as plugin (plugin.name)}
               {@const isDisabled = disabled.has(plugin.name)}
-              <div class="group flex items-start justify-between gap-4 rounded-xl border p-5 transition-all {isDisabled ? 'border-white/5 bg-white/[0.01] opacity-60' : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'}">
+              <div class="group flex items-start justify-between gap-4 border p-5 transition-all {isDisabled ? 'border-white/5 bg-white/[0.01] opacity-60' : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'}">
                 <div class="flex min-w-0 items-start gap-4">
-                  <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/40 {isDisabled ? 'text-white/20' : 'text-violet-400/50'}">
+                  <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center bg-black/40 {isDisabled ? 'text-white/20' : 'text-violet-400/50'}">
                     <Puzzle size={20} />
                   </div>
                   <div class="min-w-0">
@@ -360,12 +360,12 @@
                       <h3 class="text-sm font-medium {isDisabled ? 'text-white/40' : 'text-white'}">{plugin.name}</h3>
                       <span class="text-[9px] text-white/20">v{plugin.version}</span>
                       {#if isDisabled}
-                        <span class="rounded-full bg-white/5 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/25">Disabled</span>
+                        <span class="bg-white/5 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/25">Disabled</span>
                       {/if}
                     </div>
                     <div class="mt-1.5 flex flex-wrap gap-1">
                       {#each plugin.permissions as perm}
-                        <span class="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
+                        <span class="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
                           {perm}
                         </span>
                       {/each}
@@ -382,7 +382,7 @@
                   {:else if isDisabled}
                     <button
                       onclick={() => togglePlugin(plugin)}
-                      class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/30 transition-all hover:bg-emerald-500/20 hover:text-emerald-400"
+                      class="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/30 transition-all hover:bg-emerald-500/20 hover:text-emerald-400"
                       title="Enable plugin"
                     >
                       <Power size={12} />
@@ -391,7 +391,7 @@
                   {:else}
                     <button
                       onclick={() => togglePlugin(plugin)}
-                      class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/40 transition-all hover:bg-rose-500/20 hover:text-rose-400"
+                      class="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/40 transition-all hover:bg-rose-500/20 hover:text-rose-400"
                       title="Disable plugin"
                     >
                       <PowerOff size={12} />
@@ -425,19 +425,19 @@
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             {#each filteredThemes as theme (theme.name)}
               {@const isActive = currentTheme?.name === theme.name}
-              <div class="group relative flex flex-col gap-4 rounded-xl border p-5 transition-all {isActive ? 'border-violet-500/40 bg-violet-500/5' : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'}">
+              <div class="group relative flex flex-col gap-4 border p-5 transition-all {isActive ? 'border-violet-500/40 bg-violet-500/5' : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'}">
 
                 <!-- Top row -->
                 <div class="flex items-start justify-between gap-3">
                   <div class="flex items-start gap-3">
-                    <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/40 {isActive ? 'text-violet-400' : 'text-white/20'}">
+                    <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center bg-black/40 {isActive ? 'text-violet-400' : 'text-white/20'}">
                       <Palette size={20} />
                     </div>
                     <div>
                       <div class="flex items-center gap-2">
                         <h3 class="text-sm font-medium text-white">{theme.name}</h3>
                         {#if isActive}
-                          <span class="flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-300">
+                          <span class="flex items-center gap-1 bg-violet-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-300">
                             <Sparkles size={8} />
                             Active
                           </span>
@@ -452,7 +452,7 @@
                     {#if isActive}
                       <button
                         onclick={() => deactivateTheme(theme.name)}
-                        class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-violet-300/60 transition-all hover:bg-rose-500/20 hover:text-rose-400"
+                        class="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-violet-300/60 transition-all hover:bg-rose-500/20 hover:text-rose-400"
                       >
                         <PowerOff size={12} />
                         Deactivate
@@ -460,7 +460,7 @@
                     {:else}
                       <button
                         onclick={() => activateTheme(theme)}
-                        class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/50 transition-all hover:bg-violet-500 hover:text-white"
+                        class="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/50 transition-all hover:bg-violet-500 hover:text-white"
                       >
                         <Power size={12} />
                         Activate
@@ -473,8 +473,8 @@
                 {#if isActive && currentTheme}
                   <div class="flex flex-wrap gap-1">
                     {#each Object.entries({ bg: currentTheme.colors?.bg, fg: currentTheme.colors?.fg, keyword: currentTheme.syntax?.keyword, string: currentTheme.syntax?.string, comment: currentTheme.syntax?.comment, function: currentTheme.syntax?.function_name }).filter(([,v]) => !!v) as [label, color]}
-                      <div class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[8px] text-white/40" style="background: {color}18; border: 1px solid {color}30">
-                        <div class="h-2 w-2 rounded-full" style="background: {color}"></div>
+                      <div class="flex items-center gap-1 px-1.5 py-0.5 text-[8px] text-white/40" style="background: {color}18; border: 1px solid {color}30">
+                        <div class="h-2 w-2" style="background: {color}"></div>
                         {label}
                       </div>
                     {/each}
@@ -482,7 +482,7 @@
                 {:else}
                   <div class="flex gap-1.5">
                     {#each theme.permissions as perm}
-                      <span class="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
+                      <span class="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
                         {perm}
                       </span>
                     {/each}
@@ -513,15 +513,15 @@
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             {#each filteredServers as server (server.id)}
               {@const badge = methodBadge(server.method)}
-              <div class="group relative flex items-start justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:border-white/10 hover:bg-white/[0.04]">
+              <div class="group relative flex items-start justify-between gap-4 border border-white/5 bg-white/[0.02] p-5 transition-all hover:border-white/10 hover:bg-white/[0.04]">
                 <div class="flex min-w-0 items-start gap-4">
-                  <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/40 text-white/30 transition-colors group-hover:text-violet-400">
+                  <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center bg-black/40 text-white/30 transition-colors group-hover:text-violet-400">
                     <Server size={20} />
                   </div>
                   <div class="min-w-0">
                     <div class="flex items-center gap-2">
                       <h3 class="truncate text-sm font-medium text-white">{server.name}</h3>
-                      <span class={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badge.cls}`}>
+                      <span class={`shrink-0 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badge.cls}`}>
                         {badge.label}
                       </span>
                     </div>
@@ -554,7 +554,7 @@
                     <div class="flex flex-col items-end gap-1">
                       <button
                         onclick={() => install(server.id)}
-                        class="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-violet-500 hover:text-white"
+                        class="flex items-center gap-2 bg-white/5 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-violet-500 hover:text-white"
                       >
                         <Download size={13} />
                         Install

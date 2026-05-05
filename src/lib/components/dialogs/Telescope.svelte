@@ -134,7 +134,7 @@
     try {
       const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(`(${escapedTerm})`, 'gi');
-      return safe.replace(regex, '<mark class="bg-emerald-500/20 text-emerald-400 rounded-sm px-0.5 border-b border-emerald-500/30">$1</mark>');
+      return safe.replace(regex, '<mark class="bg-emerald-500/20 text-emerald-400 px-0.5 border-b border-emerald-500/30">$1</mark>');
     } catch {
       return safe;
     }
@@ -247,17 +247,17 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div 
-  class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-12 transition-all duration-300"
+  class="fixed inset-0 z-[100] flex items-center justify-center p-12 transition-all duration-300"
   onclick={(e) => e.target === e.currentTarget && closeDialog()}
 >
   <!-- Telescope Container -->
   <div 
-    class="flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.9)]"
+    class="flex h-full w-full max-w-6xl flex-col overflow-hidden border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.9)]"
     onkeydown={handleKeydown}
   >
     <!-- Header/Input Area -->
     <div class="flex items-center gap-4 border-b border-white/5 bg-white/[0.03] px-8 py-5">
-      <div class="flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-[9px] font-black tracking-[0.2em] text-emerald-400">
+      <div class="flex items-center gap-2 bg-emerald-500/10 px-3 py-1.5 text-[9px] font-black tracking-[0.2em] text-emerald-400">
         {getModeLabel()}
       </div>
       <div class="relative flex-1">
@@ -272,11 +272,11 @@
       </div>
       <div class="flex items-center gap-4">
         {#if isLoading}
-            <div class="h-4 w-4 animate-spin rounded-full border border-white/10 border-t-white/40"></div>
+            <div class="h-4 w-4 animate-spin border border-white/10 border-t-white/40"></div>
         {/if}
         <button 
             onclick={closeDialog}
-            class="rounded-full p-2 text-white/20 transition-all hover:bg-white/5 hover:text-white"
+            class="p-2 text-white/20 transition-all hover:bg-white/5 hover:text-white"
         >
             <X size={20} />
         </button>
@@ -299,12 +299,12 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div 
-                class="group relative flex cursor-pointer flex-col rounded-lg px-4 py-3 transition-all {selectedIdx === i ? 'bg-emerald-500/10' : 'hover:bg-white/[0.03]'}"
+                class="group relative flex cursor-pointer flex-col px-4 py-3 transition-all {selectedIdx === i ? 'bg-emerald-500/10' : 'hover:bg-white/[0.03]'}"
                 onclick={() => { selectedIdx = i; confirmSelection(); }}
                 onmouseenter={() => { selectedIdx = i; updatePreview(); }}
               >
                 {#if selectedIdx === i}
-                  <div class="absolute left-0 top-2 h-[calc(100%-16px)] w-1 rounded-full bg-emerald-500"></div>
+                  <div class="absolute left-0 top-2 h-[calc(100%-16px)] w-1 bg-emerald-500"></div>
                 {/if}
                 
                 <div class="flex items-center gap-3">
@@ -349,7 +349,7 @@
       <div class="relative flex-1 bg-[#090909]">
         {#if previewLoading}
           <div class="flex h-full items-center justify-center">
-            <div class="h-6 w-6 animate-spin rounded-full border border-emerald-500/10 border-t-emerald-500"></div>
+            <div class="h-6 w-6 animate-spin border border-emerald-500/10 border-t-emerald-500"></div>
           </div>
         {:else if previewHighlightedHtml}
           <div class="absolute inset-0 flex flex-col overflow-hidden font-mono text-[12px] leading-relaxed">

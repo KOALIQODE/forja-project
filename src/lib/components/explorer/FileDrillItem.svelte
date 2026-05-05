@@ -89,7 +89,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="flex flex-col w-full" style={themeStyle}>
   <div 
-    class="group flex h-[26px] w-full cursor-pointer items-center pl-3 text-[12px] transition-all duration-150 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04)) 
+    class="group flex h-[26px] w-full cursor-pointer items-center pl-3 text-[12px] transition-all duration-150 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))
           {$activeBufferId === entry.path ? 'bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.06))' : ''}" 
     class:opacity-40={entry.is_ignored || entry.git_status === 'deleted'} 
     class:grayscale={entry.is_ignored}
@@ -104,16 +104,7 @@
   >
     <div class="flex w-3 shrink-0 items-center justify-center"></div>
     <span class="mr-2 flex shrink-0 items-center opacity-90 transition-opacity duration-150 group-hover:opacity-100 {$activeBufferId === entry.path ? 'scale-[1.04]' : ''}" 
-          style={
-            entry.is_dir && !entry.git_status
-              ? 'color: var(--forja-ui-explorer-folder, #7a7a8a)'
-              : entry.git_status === 'modified'  ? 'color: var(--forja-ui-git-modified, #fb923c)'
-              : entry.git_status === 'added'     ? 'color: var(--forja-ui-git-added, #4ade80)'
-              : entry.git_status === 'renamed'   ? 'color: var(--forja-ui-git-renamed, #60a5fa)'
-              : entry.git_status === 'deleted'   ? 'color: var(--forja-ui-git-deleted, #f87171)'
-              : entry.is_ignored || entry.git_status === 'untracked'
-                ? 'color: var(--forja-ui-text-muted, #71717a)'
-                : !entry.is_dir && iconConfig ? `color: ${iconConfig.color}` : ''
+          style={entry.is_dir && !entry.git_status ? 'color: var(--forja-ui-explorer-folder, #7a7a8a)' : entry.git_status === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : entry.git_status === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : entry.is_ignored || entry.git_status === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)' : !entry.is_dir && iconConfig ? `color: ${iconConfig.color}` : ''
           }>
       {#if entry.is_dir}
         {#if isExpanded}<FolderOpen size="15" strokeWidth={2.75} />{:else}<Folder size="15" strokeWidth={2.75} />{/if}
@@ -126,7 +117,7 @@
       <input
         bind:this={inputElement}
         bind:value={newName}
-        class="h-5 w-[calc(100%-40px)] bg-(--forja-ui-btn-bg,#0a0a0a) ring-1 ring-(--forja-ui-btn-border,#27272a) px-1 text-[12px] text-(--forja-ui-text-primary,#f4f4f5) outline-none rounded-sm"
+        class="h-5 w-[calc(100%-40px)] bg-(--forja-ui-btn-bg,#0a0a0a) ring-1 ring-(--forja-ui-btn-border,#27272a) px-1 text-[12px] text-(--forja-ui-text-primary,#f4f4f5) outline-none"
         onblur={handleRename}
         onkeydown={(e) => {
           if (e.key === 'Enter') handleRename();
@@ -136,15 +127,7 @@
       />
     {:else}
       <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left font-medium transition-colors group-hover:text-(--forja-ui-text-primary,#f4f4f5)"
-            style={
-              entry.git_status === 'modified'  ? 'color: var(--forja-ui-git-modified, #fb923c)'
-              : entry.git_status === 'added'   ? 'color: var(--forja-ui-git-added, #4ade80)'
-              : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)'
-              : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)'
-              : entry.git_status === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)'
-              : $activeBufferId === entry.path  ? 'color: var(--forja-ui-text-primary, #f4f4f5)'
-              : 'color: var(--forja-ui-text-secondary, #a1a1aa)'
-            }>
+            style={entry.git_status === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : entry.git_status === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : entry.git_status === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)' : $activeBufferId === entry.path ? 'color: var(--forja-ui-text-primary, #f4f4f5)' : 'color: var(--forja-ui-text-secondary, #a1a1aa)'}>
         {entry.name}
       </span>
     {/if}
@@ -152,13 +135,7 @@
     <div class="flex w-20 shrink-0 items-center justify-end gap-1 pr-3 ml-auto">
       {#if entry.git_status}
         <span class="text-[9px] font-bold uppercase w-3.5 text-center"
-              style={
-                entry.git_status === 'modified'  ? 'color: var(--forja-ui-git-modified, #fb923c)'
-                : entry.git_status === 'added'   ? 'color: var(--forja-ui-git-added, #4ade80)'
-                : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)'
-                : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)'
-                : 'color: var(--forja-ui-text-muted, #71717a)'
-              }>
+              style={entry.git_status === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : entry.git_status === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : 'color: var(--forja-ui-text-muted, #71717a)'}>
           {GIT_STATUS_LABELS[entry.git_status as keyof typeof GIT_STATUS_LABELS] || '?'}
         </span>
       {/if}
@@ -181,7 +158,7 @@
         bind:this={inputElement}
         bind:value={creationName}
         placeholder={isCreatingFile ? "filename..." : "folder name..."}
-        class="h-5 w-[calc(100%-40px)] bg-(--forja-ui-btn-bg,#0a0a0a) ring-1 ring-(--forja-ui-btn-border,#27272a) px-1 text-[12px] text-(--forja-ui-text-primary,#f4f4f5) outline-none rounded-sm"
+        class="h-5 w-[calc(100%-40px)] bg-(--forja-ui-btn-bg,#0a0a0a) ring-1 ring-(--forja-ui-btn-border,#27272a) px-1 text-[12px] text-(--forja-ui-text-primary,#f4f4f5) outline-none"
         onblur={handleCreate}
         onkeydown={(e) => {
           if (e.key === 'Enter') handleCreate();

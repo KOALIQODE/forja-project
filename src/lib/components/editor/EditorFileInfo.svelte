@@ -19,13 +19,13 @@
 <!-- Floating file info — top-right of editor, reacts to active theme -->
 <div
   class="absolute top-3 right-4 z-50 flex items-center gap-0 pointer-events-none select-none divide-x"
-  style="{themeStyle};background:var(--forja-editor-bg,#0e0e0e);outline:1px solid var(--forja-ui-btn-border,rgba(255,255,255,0.06));backdrop-filter:blur(8px);divide-color:var(--forja-ui-btn-border,rgba(255,255,255,0.06));"
+  style="{themeStyle};background:var(--forja-editor-bg,#0e0e0e);outline:1px solid var(--forja-ui-btn-border,rgba(255,255,255,0.06));divide-color:var(--forja-ui-btn-border,rgba(255,255,255,0.06));"
   data-testid="editor-file-info"
 >
   <!-- Filename -->
   <div class="flex items-center gap-1.5 px-2.5 py-1.5">
     {#if isDirty}
-      <div class="w-1.5 h-1.5 rounded-full shrink-0" style="background:var(--forja-ui-picker-active-text,#4ade80)" title="Unsaved changes"></div>
+      <div class="w-1.5 h-1.5 shrink-0" style="background:var(--forja-ui-picker-active-text,#4ade80)" title="Unsaved changes"></div>
     {/if}
     {#if fileIcon}
       <fileIcon.icon size={13} style={`color: ${fileIcon.color}`} />

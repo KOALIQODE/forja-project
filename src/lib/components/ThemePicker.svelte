@@ -71,7 +71,7 @@
     tabindex="-1"
     role="listbox"
     aria-label="Select theme"
-    class="w-[380px] outline-none overflow-hidden backdrop-blur-xl
+    class="w-[380px] outline-none overflow-hidden
            bg-(--forja-ui-picker-bg,rgba(14,14,17,0.97))
            border border-(--forja-ui-picker-border,#2a2a2e)
            shadow-[0_20px_60px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.04)]

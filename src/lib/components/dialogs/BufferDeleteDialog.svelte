@@ -82,12 +82,12 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div 
-  class="fixed inset-0 z-[2000] flex items-start justify-center bg-black/40 backdrop-blur-[2px] pt-[15vh] px-4"
+  class="fixed inset-0 z-[2000] flex items-start justify-center pt-[15vh] px-4"
   transition:fade={{ duration: 150 }}
   onclick={closeDialog}
 >
   <div
-    class="relative flex w-full max-w-xl flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black outline-none"
+    class="relative flex w-full max-w-xl flex-col overflow-hidden border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black outline-none"
     transition:scale={{ duration: 200, start: 0.98, opacity: 0 }}
     onclick={(e) => e.stopPropagation()}
   >
@@ -102,14 +102,14 @@
         class="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
       />
       <div class="flex items-center gap-2">
-        <div class="flex items-center gap-1 rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-mono text-zinc-500">
+        <div class="flex items-center gap-1 border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-mono text-zinc-500">
           <Command size={10} />
           <span>B</span>
         </div>
         <button 
           type="button"
           onclick={closeDialog}
-          class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-zinc-500 transition-all hover:bg-white/5 hover:text-zinc-100"
+          class="flex h-6 w-6 cursor-pointer items-center justify-center text-zinc-500 transition-all hover:bg-white/5 hover:text-zinc-100"
         >
           <X size={16} />
         </button>
@@ -129,11 +129,11 @@
             {@const isSelected = index === selectedIndex}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              class="group relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left transition-all duration-75 {isSelected ? 'bg-emerald-500/10 border-l-2 border-emerald-500 pl-2.5' : ''}"
+              class="group relative flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left transition-all duration-75 {isSelected ? 'bg-emerald-500/10 border-l-2 border-emerald-500 pl-2.5' : ''}"
               onclick={() => selectBuffer(buffer.id)}
               onmouseenter={() => selectedIndex = index}
             >
-              <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-900 text-zinc-500 transition-colors"
+              <div class="flex h-8 w-8 shrink-0 items-center justify-center bg-zinc-900 text-zinc-500 transition-colors"
                    class:text-emerald-400={isSelected || isActive}>
                 <FileCode size={16} />
               </div>
@@ -144,7 +144,7 @@
                     {getFileName(buffer.filePath)}
                   </span>
                   {#if isActive}
-                    <span class="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">active</span>
+                    <span class="bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">active</span>
                   {/if}
                 </div>
                 <span class="truncate font-mono text-[10px] text-zinc-600 tracking-tight">{getDirectory(buffer.filePath)}</span>
@@ -153,7 +153,7 @@
               <!-- Close Action -->
               <button 
                 type="button"
-                class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-zinc-700 transition-all hover:bg-red-500/10 hover:text-red-400"
+                class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center text-zinc-700 transition-all hover:bg-red-500/10 hover:text-red-400"
                 class:opacity-100={isSelected}
                 class:opacity-0={!isSelected}
                 onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
@@ -171,11 +171,11 @@
     <footer class="flex items-center justify-between border-t border-zinc-800/50 bg-zinc-900/30 px-4 py-2">
       <div class="flex items-center gap-4 text-[10px] text-zinc-500">
         <div class="flex items-center gap-1">
-          <kbd class="rounded border border-zinc-800 bg-zinc-900 px-1 py-0.5 font-mono">↵</kbd>
+          <kbd class="border border-zinc-800 bg-zinc-900 px-1 py-0.5 font-mono">↵</kbd>
           <span>select</span>
         </div>
         <div class="flex items-center gap-1">
-          <kbd class="rounded border border-zinc-800 bg-zinc-900 px-1 py-0.5 font-mono">ctrl+d</kbd>
+          <kbd class="border border-zinc-800 bg-zinc-900 px-1 py-0.5 font-mono">ctrl+d</kbd>
           <span>close</span>
         </div>
       </div>

@@ -116,7 +116,7 @@
 </script>
 
 <div
-  class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-12 transition-all duration-300"
+  class="fixed inset-0 z-[100] flex items-center justify-center p-12 transition-all duration-300"
   role="button"
   tabindex="0"
   onclick={(e) => e.target === e.currentTarget && closeDialog()}
@@ -128,12 +128,12 @@
     }
   }}
 >
-  <div class="flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.9)]">
+  <div class="flex h-full w-full max-w-4xl flex-col overflow-hidden border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.9)]">
 
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-white/5 bg-white/[0.03] px-8 py-6">
       <div class="flex items-center gap-4">
-        <div class="rounded-xl bg-emerald-500/10 p-2.5 text-emerald-400">
+        <div class="bg-emerald-500/10 p-2.5 text-emerald-400">
           <Cpu size={24} />
         </div>
         <div>
@@ -149,12 +149,12 @@
             type="text"
             bind:value={searchQuery}
             placeholder="Search languages…"
-            class="w-full rounded-full border border-white/5 bg-white/5 py-2 pl-9 pr-4 text-xs text-white outline-none focus:border-emerald-500/30"
+            class="w-full border border-white/5 bg-white/5 py-2 pl-9 pr-4 text-xs text-white outline-none focus:border-emerald-500/30"
           />
         </div>
         <button
           onclick={closeDialog}
-          class="rounded-full p-2 text-white/20 transition-all hover:bg-white/5 hover:text-white"
+          class="p-2 text-white/20 transition-all hover:bg-white/5 hover:text-white"
         >
           <X size={20} />
         </button>
@@ -170,10 +170,10 @@
       {:else}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           {#each filteredParsers as parser}
-            <div class="group relative flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:border-white/10 hover:bg-white/[0.04]">
+            <div class="group relative flex items-center justify-between border border-white/5 bg-white/[0.02] p-5 transition-all hover:border-white/10 hover:bg-white/[0.04]">
               <!-- Left: icon + name -->
               <div class="flex items-center gap-4">
-                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-black/40 text-white/40 group-hover:text-emerald-400 transition-colors">
+                <div class="flex h-10 w-10 items-center justify-center bg-black/40 text-white/40 group-hover:text-emerald-400 transition-colors">
                   <Package size={20} />
                 </div>
                 <div>
@@ -194,7 +194,7 @@
                   {:else}
                     <button
                       onclick={() => repairQueries(parser.language)}
-                      class="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-white/30 transition-all hover:bg-amber-500/20 hover:text-amber-400"
+                      class="flex items-center gap-1 bg-white/5 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-white/30 transition-all hover:bg-amber-500/20 hover:text-amber-400"
                       title="Re-download highlight queries"
                     >
                       <Wrench size={10} />
@@ -207,14 +207,14 @@
                       <Loader2 size={14} class="animate-spin text-emerald-500" />
                       <span class="text-[9px] text-emerald-400">{progress[parser.language]?.toFixed(0) ?? 0}%</span>
                     </div>
-                    <div class="w-full h-0.5 bg-white/5 rounded-full overflow-hidden">
+                    <div class="w-full h-0.5 bg-white/5 overflow-hidden">
                       <div class="h-full bg-emerald-500 transition-all duration-300" style:width="{progress[parser.language] ?? 0}%"></div>
                     </div>
                   </div>
                 {:else}
                   <button
                     onclick={() => install(parser.language)}
-                    class="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-emerald-500 hover:text-black"
+                    class="flex items-center gap-2 bg-white/5 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-emerald-500 hover:text-black"
                   >
                     <Download size={14} />
                     Install

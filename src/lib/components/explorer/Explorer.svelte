@@ -502,7 +502,7 @@
                     >
                     {#if gitBranch}
                         <span
-                            class="ml-auto flex shrink-0 items-center gap-1 rounded-sm bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) px-1.5 py-0.5 text-[10px] font-semibold text-(--forja-ui-text-primary,#f4f4f5)"
+                            class="ml-auto flex shrink-0 items-center gap-1 bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) px-1.5 py-0.5 text-[10px] font-semibold text-(--forja-ui-text-primary,#f4f4f5)"
                         >
                             <GitBranch size="11" strokeWidth={2.25} />
                             <span>{gitBranch}</span>
@@ -523,7 +523,7 @@
         {#if loading || isSearching}
             <div class="flex flex-col items-center justify-center p-10 gap-3">
                 <div
-                    class="w-4 h-4 rounded-full border-2 border-transparent border-t-(--forja-ui-text-muted,rgba(113,113,122,0.5)) animate-spin"
+                    class="w-4 h-4 border-2 border-transparent border-t-(--forja-ui-text-muted,rgba(113,113,122,0.5)) animate-spin"
                 ></div>
                 <span
                     class="text-[10px] text-(--forja-ui-text-muted,#71717a) font-bold uppercase tracking-widest"

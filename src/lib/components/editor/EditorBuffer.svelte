@@ -1792,13 +1792,7 @@
     role="textbox"
     aria-label="Code editor"
     aria-multiline="true"
-    style="
-        background: {editorBgColor};
-        font-family: {editorFontFamily};
-        --eb-bg: {editorBgColor};
-        --eb-scrollbar-thumb: {editorScrollbarThumb};
-        --eb-scrollbar-hover: {editorFgColor};
-    "
+    style="background: {editorBgColor}; font-family: {editorFontFamily}; --eb-bg: {editorBgColor}; --eb-scrollbar-thumb: {editorScrollbarThumb}; --eb-scrollbar-hover: {editorFgColor};"
     onkeydown={(e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === "s") {
             e.preventDefault();
@@ -1871,7 +1865,7 @@
     </div>
 
     {#if vimMode === "command"}
-        <div class="pointer-events-none absolute bottom-8 left-0 right-0 z-40 flex items-center border-t border-white/5 bg-black/50 px-4 py-1 font-mono text-[12px] text-zinc-200 backdrop-blur-md">
+        <div class="pointer-events-none absolute bottom-8 left-0 right-0 z-40 flex items-center border-t border-white/5 bg-black/50 px-4 py-1 font-mono text-[12px] text-zinc-200">
             <span class="mr-2 text-emerald-400">:</span>
             <span>{commandLine}</span>
         </div>
