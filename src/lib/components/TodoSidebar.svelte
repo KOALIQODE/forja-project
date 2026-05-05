@@ -2,7 +2,7 @@
     import { todoList, isTodoSidebarOpen, isScanningTodos, scanTodos } from "$lib/stores/todoStore";
     import { openBuffer } from "$lib/stores/bufferStore";
     import { activeUITheme } from "$lib/stores/uiThemeStore";
-    import { X, RefreshCw, ListTodo, FileText, Hash } from "@lucide/svelte";
+    import { X, RefreshCw } from "@lucide/svelte";
     import { fly } from "svelte/transition";
 
     let themeStyle = $derived(
@@ -61,7 +61,7 @@
 
 {#if $isTodoSidebarOpen}
     <div
-        class="fixed inset-y-0 right-0 z-50 flex h-full flex-col border-l select-none shadow-2xl transition-colors duration-300 font-sans
+        class="fixed inset-y-0 right-0 z-50 flex h-full flex-col border-l select-none
                bg-(--forja-ui-explorer-bg,#0a0a0a) border-(--forja-ui-picker-border,#2a2a2e) text-(--forja-ui-text-secondary,#a1a1aa)"
         style="width: {sidebarWidth}px; {themeStyle}"
         transition:fly={{ x: 320, duration: 300 }}
@@ -81,86 +81,68 @@
             }}
         ></div>
 
-        <header class="shrink-0 border-b backdrop-blur-sm p-4
-                       border-(--forja-ui-picker-border,#2a2a2e) bg-(--forja-ui-explorer-bg,#0a0a0a)/80">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <ListTodo size="16" class="text-(--forja-ui-gradient-from,#34d399)" />
-                    <h3 class="m-0 text-[11px] font-bold tracking-[0.15em] uppercase font-mono
-                               text-(--forja-ui-text-secondary,#a1a1aa)">
-                        TODO LIST
-                    </h3>
-                    <span class="rounded-sm px-2 py-0.5 text-[10px]
-                                 bg-(--forja-ui-btn-bg,#09090b) text-(--forja-ui-text-muted,#71717a)">
-                        {$todoList.length}
-                    </span>
-                </div>
-                <div class="flex items-center gap-1">
-                    <button
-                        type="button"
-                        onclick={scanTodos}
-                        title="Refresh TODOs"
-                        class="flex cursor-pointer items-center p-1.5 transition-all
-                               hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05))
-                               hover:text-(--forja-ui-picker-active-text,#34d399)"
-                        disabled={$isScanningTodos}
-                    >
-                        <RefreshCw size="14" class={$isScanningTodos ? "animate-spin" : ""} />
-                    </button>
-                    <button
-                        type="button"
-                        onclick={closeSidebar}
-                        class="close-btn flex cursor-pointer items-center p-1.5 transition-all
-                               hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05))"
-                    >
-                        <X size="14" />
-                    </button>
-                </div>
+        <header class="shrink-0 border-b px-3 py-2 flex items-center justify-between
+                       border-(--forja-ui-picker-border,#2a2a2e) bg-(--forja-ui-explorer-bg,#0a0a0a)">
+            <div class="flex items-center gap-1.5">
+                <span class="text-[11px] font-semibold uppercase tracking-wider font-mono
+                             text-(--forja-ui-text-muted,#71717a)">
+                    TODO
+                </span>
+                <span class="text-[10px] font-mono text-(--forja-ui-text-muted,#71717a)/60">
+                    ({$todoList.length})
+                </span>
+            </div>
+            <div class="flex items-center gap-0.5">
+                <button
+                    type="button"
+                    onclick={scanTodos}
+                    title="Refresh TODOs"
+                    class="flex cursor-pointer items-center p-1 transition-colors
+                           text-(--forja-ui-text-muted,#71717a)
+                           hover:text-(--forja-ui-text-secondary,#a1a1aa)"
+                    disabled={$isScanningTodos}
+                >
+                    <RefreshCw size="13" class={$isScanningTodos ? "animate-spin" : ""} />
+                </button>
+                <button
+                    type="button"
+                    onclick={closeSidebar}
+                    class="close-btn flex cursor-pointer items-center p-1 transition-colors
+                           text-(--forja-ui-text-muted,#71717a)
+                           hover:text-(--forja-ui-text-secondary,#a1a1aa)"
+                >
+                    <X size="13" />
+                </button>
             </div>
         </header>
 
         <div class="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
             {#if $isScanningTodos && $todoList.length === 0}
-                <div class="flex flex-col items-center justify-center h-40 gap-3">
-                    <RefreshCw size="24" class="animate-spin text-(--forja-ui-gradient-from,#34d399)/50" />
-                    <span class="text-[11px] font-medium text-(--forja-ui-text-muted,#71717a)">Scanning project...</span>
+                <div class="flex items-center gap-2 px-3 py-2">
+                    <RefreshCw size="12" class="animate-spin text-(--forja-ui-text-muted,#71717a)" />
+                    <span class="text-[11px] font-mono text-(--forja-ui-text-muted,#71717a)">Scanning...</span>
                 </div>
             {:else if $todoList.length === 0}
-                <div class="flex flex-col items-center justify-center h-60 gap-4 p-8 text-center">
-                    <div class="p-4 bg-(--forja-ui-btn-bg,#09090b)/50">
-                        <ListTodo size="32" class="text-(--forja-ui-text-muted,#71717a)/40" />
-                    </div>
-                    <div>
-                        <p class="text-[11px] font-bold uppercase tracking-widest mb-1
-                                  text-(--forja-ui-text-muted,#71717a)">No todos found</p>
-                        <p class="text-[10px] text-(--forja-ui-text-muted,#71717a)/70">
-                            Start adding comments with // TODO: to track your tasks.
-                        </p>
-                    </div>
-                </div>
+                <p class="px-3 py-2 text-[11px] font-mono text-(--forja-ui-text-muted,#71717a)">
+                    No TODOs found.
+                </p>
             {:else}
                 <div class="todo-list">
                     {#each $todoList as todo}
+                        {@const colonIdx = todo.content.indexOf(':')}
+                        {@const title = (colonIdx !== -1 ? todo.content.slice(colonIdx + 1).trim() : todo.content.trim()) || 'Empty task'}
                         <button
                             type="button"
                             onclick={() => goToTodo(todo)}
-                            class="todo-item w-full text-left p-3.5 transition-colors group relative overflow-hidden"
+                            class="todo-item w-full text-left px-3 py-2 transition-colors"
                         >
-                            <div class="flex flex-col gap-1.5">
-                                <p class="text-[11px] line-clamp-2 leading-relaxed font-medium break-words
-                                          text-(--forja-ui-text-primary,#f4f4f5)">
-                                    {todo.content.replace('// TODO:', '').trim() || 'Empty task'}
-                                </p>
-                                <div class="flex items-center gap-3">
-                                    <div class="todo-meta flex items-center gap-1 transition-colors">
-                                        <FileText size="10" />
-                                        <span class="text-[9px] font-mono truncate max-w-[120px]">{todo.fileName}</span>
-                                    </div>
-                                    <div class="todo-meta flex items-center gap-1 transition-colors">
-                                        <Hash size="10" />
-                                        <span class="text-[9px] font-mono">{todo.lineNum}</span>
-                                    </div>
-                                </div>
+                            <p class="text-[12px] font-mono leading-snug break-words
+                                      text-(--forja-ui-text-primary,#f4f4f5)">
+                                {title}
+                            </p>
+                            <div class="flex items-center gap-1.5 mt-1">
+                                <span class="text-[11px] font-mono text-(--forja-ui-text-secondary,#a1a1aa)">{todo.fileName}</span>
+                                <span class="text-[11px] font-mono text-(--forja-ui-text-secondary,#a1a1aa)">:{todo.lineNum}</span>
                             </div>
                         </button>
                     {/each}
@@ -181,17 +163,10 @@
         background: var(--forja-ui-explorer-scrollbar, rgba(63, 63, 70, 0.4));
         border-radius: 10px;
     }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 30%, transparent);
-    }
 
     .resize-handle:hover,
     .resize-handle:focus {
         background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 30%, transparent);
-    }
-
-    .close-btn:hover {
-        color: color-mix(in srgb, var(--forja-ui-git-deleted, #f87171) 80%, transparent);
     }
 
     .todo-list {
@@ -206,14 +181,6 @@
     }
 
     .todo-item:hover {
-        background: var(--forja-ui-picker-active, rgba(52, 211, 153, 0.08));
-    }
-
-    .todo-meta {
-        color: var(--forja-ui-text-muted, #71717a);
-    }
-
-    .todo-item:hover .todo-meta {
-        color: color-mix(in srgb, var(--forja-ui-picker-active-text, #34d399) 70%, transparent);
+        background: var(--forja-ui-picker-active, rgba(52, 211, 153, 0.06));
     }
 </style>
