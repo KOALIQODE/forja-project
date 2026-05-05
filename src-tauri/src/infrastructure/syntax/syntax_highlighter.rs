@@ -98,8 +98,19 @@ impl SyntaxHighlighter {
         let mut type_map = vec![TokenType::Unknown; content_len];
         self.fill_type_map(content, &tree, &query, &mut type_map);
 
-        for (inj_lang, start, end) in Self::find_injection_ranges(&tree, language_name, content.as_bytes()) {
-            self.inject_highlight(content, start, end, &inj_lang, &mut type_map);
+        let injections = Self::find_injection_ranges(&tree, language_name, content.as_bytes());
+
+        // For Svelte chunks with no detected injection ranges that don't look like
+        // HTML/Svelte markup (i.e. mid-file TypeScript content), highlight the whole
+        // chunk directly as TypeScript so keywords, types, etc. get proper colors.
+        if language_name == "svelte" && injections.is_empty()
+            && !content.trim_start().starts_with('<')
+        {
+            self.inject_highlight(content, 0, content_len, "typescript", &mut type_map);
+        } else {
+            for (inj_lang, start, end) in injections {
+                self.inject_highlight(content, start, end, &inj_lang, &mut type_map);
+            }
         }
 
         Ok(SyntaxHighlight {
@@ -171,6 +182,30 @@ impl SyntaxHighlighter {
                     let inj_lang: Option<&str> = match node.kind() {
                         "script_element" => Some(script_lang(node, content)),
                         "style_element"  => Some("css"),
+                        // Incomplete chunk: the Svelte parser wraps an unclosed <script> or
+                        // <style> in an ERROR node instead of script_element/style_element.
+                        // Detect it by checking for a start_tag whose tag_name is "script"/"style".
+                        "ERROR" => {
+                            let mut detected: Option<&'static str> = None;
+                            'outer: for i in 0..node.child_count() {
+                                let Some(tag) = node.child(i) else { continue };
+                                if tag.kind() != "start_tag" { continue }
+                                for j in 0..tag.child_count() {
+                                    let Some(c) = tag.child(j) else { continue };
+                                    if c.kind() != "tag_name" { continue }
+                                    let name = std::str::from_utf8(
+                                        &content[c.start_byte()..c.end_byte()]
+                                    ).unwrap_or("");
+                                    detected = match name {
+                                        "script" => Some(script_lang(node, content)),
+                                        "style"  => Some("css"),
+                                        _ => None,
+                                    };
+                                    if detected.is_some() { break 'outer; }
+                                }
+                            }
+                            detected
+                        }
                         _ => None,
                     };
                     if let Some(lang) = inj_lang {
