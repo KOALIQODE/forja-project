@@ -365,11 +365,19 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                     if (showLineNumbers) {
                         ctx.textAlign = "right";
                         if (s === 0) {
-                            ctx.fillStyle = "#3a3a3a";
-                            const lineNumberText = vimModeEnabled && vimMode !== "insert"
-                                ? Math.abs(i - cursorLine).toString()
-                                : (i + 1).toString();
-                            ctx.fillText(lineNumberText, lineNumberX, rowY);
+                            const isRelative = vimModeEnabled && vimMode !== "insert";
+                            if (isRelative) {
+                                if (i === cursorLine) {
+                                    ctx.fillStyle = "#c0c0c0";
+                                    ctx.fillText((i + 1).toString(), lineNumberX, rowY);
+                                } else {
+                                    ctx.fillStyle = "#3a3a3a";
+                                    ctx.fillText(Math.abs(i - cursorLine).toString(), lineNumberX, rowY);
+                                }
+                            } else {
+                                ctx.fillStyle = i === cursorLine ? "#c0c0c0" : "#3a3a3a";
+                                ctx.fillText((i + 1).toString(), lineNumberX, rowY);
+                            }
                         }
                     }
                     ctx.textAlign = "left";
@@ -502,10 +510,19 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                 if (showLineNumbers) {
                     ctx.fillStyle = "#3a3a3a";
                     ctx.textAlign = "right";
-                    const lineNumberText = vimModeEnabled && vimMode !== "insert"
-                        ? Math.abs(i - cursorLine).toString()
-                        : (i + 1).toString();
-                    ctx.fillText(lineNumberText, lineNumberX, y);
+                    const isRelative = vimModeEnabled && vimMode !== "insert";
+                    if (isRelative) {
+                        if (i === cursorLine) {
+                            ctx.fillStyle = "#c0c0c0";
+                            ctx.fillText((i + 1).toString(), lineNumberX, y);
+                        } else {
+                            ctx.fillStyle = "#3a3a3a";
+                            ctx.fillText(Math.abs(i - cursorLine).toString(), lineNumberX, y);
+                        }
+                    } else {
+                        ctx.fillStyle = i === cursorLine ? "#c0c0c0" : "#3a3a3a";
+                        ctx.fillText((i + 1).toString(), lineNumberX, y);
+                    }
                 }
 
                 ctx.textAlign = "left";
