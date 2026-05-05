@@ -27,7 +27,6 @@
     } from "$lib/stores/editorStore";
     import { closeBuffer } from "$lib/stores/bufferStore";
     import { bufferPreferences } from "$lib/stores/preferencesStore";
-    import StatusBar from "$lib/components/StatusBar.svelte";
     import { dialogState } from "../../stores/dialogStore";
     import { diagnosticsByFile, type Diagnostic } from "$lib/stores/diagnosticsStore";
     import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "$lib/utils/lspClient";
@@ -3629,8 +3628,6 @@
         </div>
     {/if}
 
-    <!-- 🔧 Status Bar at the bottom of the editor -->
-    <StatusBar />
 </div>
 
 <style>

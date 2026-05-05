@@ -5,6 +5,8 @@
   import ParserPrompt from "../lib/components/ParserPrompt.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
   import ThemePicker from "../lib/components/ThemePicker.svelte";
+  import StatusBar from "$lib/components/StatusBar.svelte";
+  import { currentProject } from "$lib/stores/projectStore";
   import "../lib/stores/preferencesStore";
   import { openTelescope, openGrammarHub, openPreferencesDialog, closeDialog, dialogState } from "../lib/stores/dialogStore";
   import { activeUITheme } from "../lib/stores/uiThemeStore";
@@ -130,6 +132,9 @@
   <main class="flex-1 overflow-hidden relative">
     {@render children()}
   </main>
+  {#if $currentProject}
+    <StatusBar />
+  {/if}
 </div>
 
 <div data-program-ui>
