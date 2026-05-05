@@ -95,7 +95,7 @@
     <div class="mx-1 h-3 w-px shrink-0 bg-(--forja-ui-btn-border,#27272a)"></div>
 
     <button
-      class="flex h-full items-center gap-1.5 px-2 text-(--forja-ui-text-secondary,#a1a1aa) hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))"
+      class="flex h-full items-center gap-1.5 px-2 text-(--forja-ui-text-secondary,#a1a1aa)"
       onclick={handleOpenBufferDialog}
       type="button"
     >

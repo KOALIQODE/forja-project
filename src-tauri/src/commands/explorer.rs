@@ -105,7 +105,6 @@ pub async fn search_files(path: String, query: String) -> Result<Vec<FileEntry>,
 
     let walker = WalkBuilder::new(&target_path)
         .standard_filters(true)
-        .hidden(false)
         .build();
 
     let mut results = Vec::new();
@@ -222,7 +221,6 @@ pub async fn search_in_files(
     let target_path = PathBuf::from(&path);
     let walker = WalkBuilder::new(&target_path)
         .standard_filters(true)
-        .hidden(false)
         .build();
 
     let mut results = Vec::new();
@@ -443,4 +441,23 @@ pub async fn list_directory_from_path(path: String) -> Result<Vec<FileEntry>, St
     });
 
     Ok(result)
+}
+
+/// Returns the git status (modified/added/deleted/renamed/untracked) for the given file paths.
+/// `project_path` should be any path inside the git repo (used to discover the repo root).
+#[tauri::command]
+pub fn get_files_git_status(
+    project_path: String,
+    file_paths: Vec<String>,
+) -> HashMap<String, String> {
+    let base = PathBuf::from(&project_path);
+    let all_statuses = get_git_statuses(&base);
+
+    file_paths
+        .into_iter()
+        .filter_map(|p| {
+            let normalized = simplify_path(&PathBuf::from(&p));
+            all_statuses.get(&normalized).map(|s| (p, s.clone()))
+        })
+        .collect()
 }

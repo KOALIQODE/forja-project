@@ -5,6 +5,7 @@
   import ParserManager from "./ParserManager.svelte";
   import PreferencesDialog from "./PreferencesDialog.svelte";
   import ExtensionsManager from "./ExtensionsManager.svelte";
+  import ThemePicker from "../ThemePicker.svelte";
   import { dialogState, closeDialog, DIALOG_IDS } from "../../stores/dialogStore";
 
   let currentDialog: any = null;
@@ -51,6 +52,10 @@
   {:else if currentDialog.id === DIALOG_IDS.EXTENSIONS}
     <div data-program-ui>
       <ExtensionsManager />
+    </div>
+  {:else if currentDialog.id === DIALOG_IDS.THEME_PICKER}
+    <div data-program-ui>
+      <ThemePicker />
     </div>
   {/if}
 {/if}

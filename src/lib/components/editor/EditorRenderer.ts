@@ -455,7 +455,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                             lineWidth = metricsCache.measure(ctx, line, editorFont);
                         }
                         const blameFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
-                        ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
+                        ctx.fillStyle = "rgba(180, 180, 190, 0.55)";
                         ctx.font = blameFont;
                         const blameText = blame.author
                             ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`
@@ -574,7 +574,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                         lineWidth = metricsCache.measure(ctx, line, editorFont);
                     }
                     const blameFont = `italic ${editorFontSize - 1}px ${editorFontFamily}`;
-                    ctx.fillStyle = "rgba(120, 120, 120, 0.45)";
+                    ctx.fillStyle = "rgba(180, 180, 190, 0.55)";
                     ctx.font = blameFont;
                     const blameText = blame.author
                         ? `  • ${blame.author}, ${blame.date} • ${blame.summary}`

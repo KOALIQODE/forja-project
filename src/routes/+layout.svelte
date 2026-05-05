@@ -4,11 +4,10 @@
   import TitleBar from "../lib/components/TitleBar.svelte";
   import ParserPrompt from "../lib/components/ParserPrompt.svelte";
   import DialogManager from "../lib/components/dialogs/DialogManager.svelte";
-  import ThemePicker from "../lib/components/ThemePicker.svelte";
   import StatusBar from "$lib/components/StatusBar.svelte";
   import { currentProject } from "$lib/stores/projectStore";
   import "../lib/stores/preferencesStore";
-  import { openTelescope, openGrammarHub, openPreferencesDialog, closeDialog, dialogState } from "../lib/stores/dialogStore";
+  import { openTelescope, openGrammarHub, openPreferencesDialog, openBufferDeleteDialog, openThemePicker, closeDialog, dialogState } from "../lib/stores/dialogStore";
   import { activeUITheme } from "../lib/stores/uiThemeStore";
   import { get } from 'svelte/store';
   import "../app.css";
@@ -27,7 +26,6 @@
     )
   );
 
-  let themePickerOpen = $state(false);
   let lastTabTime = 0;
   let ctrlKTime = 0;
 
@@ -48,16 +46,14 @@
         e.preventDefault();
         e.stopImmediatePropagation();
         ctrlKTime = 0;
-        themePickerOpen = !themePickerOpen;
+        openThemePicker();
         return;
       }
 
       // Any other key resets the chord
       if (ctrlKTime > 0) ctrlKTime = 0;
 
-      // ── Guard: theme picker handles its own keys ────────────────────────
-      if (themePickerOpen) return;
-
+      // ── Guard: dialog handles its own keys ─────────────────────────────
       const currentState = get(dialogState);
       
       if (currentState.activeDialog) {
@@ -97,7 +93,7 @@
       if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
         e.preventDefault();
         e.stopImmediatePropagation();
-        openTelescope('buffers');
+        openBufferDeleteDialog();
         return;
       }
 
@@ -141,10 +137,6 @@
   <ParserPrompt />
 </div>
 <DialogManager />
-
-{#if themePickerOpen}
-  <ThemePicker onClose={() => { themePickerOpen = false; }} />
-{/if}
 
 <style>
   :global(html, body) {

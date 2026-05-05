@@ -3,8 +3,9 @@
   import { Palette, Moon, Sun, Check } from '@lucide/svelte';
   import { allUIThemes, activeUIThemeId, activeUITheme, setUITheme } from '$lib/stores/uiThemeStore';
   import { activateThemeByName } from '$lib/stores/pluginStore';
+  import { closeDialog } from '$lib/stores/dialogStore';
 
-  let { onClose }: { onClose: () => void } = $props();
+  let { onClose = closeDialog }: { onClose?: () => void } = $props();
 
   let themes = $derived($allUIThemes);
 
@@ -72,10 +73,10 @@
     role="listbox"
     aria-label="Select theme"
     class="w-[380px] outline-none overflow-hidden
-           bg-(--forja-ui-picker-bg,rgba(14,14,17,0.97))
+           bg-(--forja-ui-picker-bg,#0e0e11)
            border border-(--forja-ui-picker-border,#2a2a2e)
-           shadow-[0_20px_60px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.04)]
            animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
+    data-dialog-shell
   >
     <!-- Header -->
     <header class="flex items-center gap-2 px-3.5 pt-3 pb-2.5

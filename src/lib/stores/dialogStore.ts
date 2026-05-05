@@ -10,7 +10,8 @@ export const DIALOG_IDS = {
   TELESCOPE: 'telescope',
   GRAMMAR_HUB: 'grammar-hub',
   PREFERENCES: 'preferences',
-  EXTENSIONS: 'extensions'
+  EXTENSIONS: 'extensions',
+  THEME_PICKER: 'theme-picker',
 } as const;
 
 // Dialog types
@@ -97,5 +98,12 @@ export function openExtensionsManager() {
   openDialog({
     id: DIALOG_IDS.EXTENSIONS,
     component: 'ExtensionsManager'
+  });
+}
+
+export function openThemePicker() {
+  openDialog({
+    id: DIALOG_IDS.THEME_PICKER,
+    component: 'ThemePicker'
   });
 }
