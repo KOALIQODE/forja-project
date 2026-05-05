@@ -1,50 +1,48 @@
 <script lang="ts">
-    import { invoke } from "@tauri-apps/api/core";
-    import { get } from 'svelte/store'
+    import { invoke } from '@tauri-apps/api/core';
+    import { listen } from '@tauri-apps/api/event';
+    import { ask } from '@tauri-apps/plugin-dialog';
+
     import {
-        Folder,
-        FolderOpen,
-        FileCode,
         ChevronLeft,
-        LogOut,
+        Edit2,
+        FolderPlus,
+        GitBranch,
         LayoutList,
+        ListTodo,
         ListTree,
-        Search,
-        X,
+        LogOut,
         Pin,
         PinOff,
-        GitBranch,
         Plus,
-        FolderPlus,
-        Edit2,
         RefreshCw,
         Trash2,
-        ListTodo,
-        File as FileIcon
-    } from "@lucide/svelte";
-    import { openBuffer, activeBufferId } from "$lib/stores/bufferStore";
+    } from '@lucide/svelte';
+    import { onMount, untrack } from 'svelte';
+
+    import ContextMenu from '../ContextMenu.svelte';
+    import FileDrillItem from './FileDrillItem.svelte';
+    import FileTreeItem from './FileTreeItem.svelte';
+
+    import { openBuffer } from '$lib/stores/bufferStore';
     import {
-        currentProject,
-        closeProject,
-        openProject,
-    } from "$lib/stores/projectStore";
-    import { toggleTodoSidebar } from "$lib/stores/todoStore";
-    import {
-        expandedPaths,
         directoryCache,
-        pinnedPath,
+        expandedPaths,
         inlineAction,
-        type FileEntry
-    } from "$lib/stores/explorerStore";
+        pinnedPath,
+        type FileEntry,
+    } from '$lib/stores/explorerStore';
     import {
         programPreferences,
         setProgramPreference,
-    } from "$lib/stores/preferencesStore";
-    import FileDrillItem from "./FileDrillItem.svelte";
-    import FileTreeItem from "./FileTreeItem.svelte";
-    import ContextMenu from "../ContextMenu.svelte";
-    import { open as openDialog, ask } from "@tauri-apps/plugin-dialog";
-    import { untrack, onMount } from "svelte";
+    } from '$lib/stores/preferencesStore';
+    import { closeProject, currentProject } from '$lib/stores/projectStore';
+    import { toggleTodoSidebar } from '$lib/stores/todoStore';
+    import { activeUITheme } from '$lib/stores/uiThemeStore';
+
+    let themeStyle = $derived(
+        Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+    );
 
     const STORAGE_KEY_VIEW = "forja-explorer-view-mode";
     let viewMode = $state<"drill" | "tree">(
@@ -79,8 +77,6 @@
             .split(/[\/\\]/)
             .pop() || "Raíz",
     );
-    
-    import { listen } from "@tauri-apps/api/event"; // ← agregar import
     
     onMount(() => {
         const onWindowFocus = () => refresh(true);
@@ -138,35 +134,21 @@
         }
     }
 
+    // Search is not yet wired to a UI input — keeping state for future use.
     async function handleSearch() {
-        if (!searchQuery.trim() || !effectiveRoot) {
-            searchResults = [];
-            isSearching = false;
-            return;
-        }
-
         isSearching = true;
         try {
-            searchResults = await invoke("search_files", {
-                path: effectiveRoot,
-                query: searchQuery,
-            });
-        } catch (error) {
-            console.error("Error en búsqueda:", error);
+            searchResults = [];
         } finally {
             isSearching = false;
         }
     }
 
-    function onSearchInput() {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(handleSearch, 300);
-    }
-    let searchTimeout: any;
+    // function onSearchInput() { ... }
+    function clearSearch() { searchQuery = ''; searchResults = []; }
 
-    function clearSearch() {
-        searchQuery = "";
-        searchResults = [];
+    function getInlineActionTarget(parentPath?: string) {
+        return parentPath || currentPath || effectiveRoot;
     }
 
     const ITEM_HEIGHT = 28;
@@ -338,23 +320,15 @@
         };
     });
 
-    onMount(() => {
-        const onWindowFocus = () => refresh(true);
-        window.addEventListener("focus", onWindowFocus);
-        return () => {
-            window.removeEventListener("focus", onWindowFocus);
-        };
-    });
-
     // File Operations with Inline Action Store
     function createNewFile(parentPath?: string) {
-        const target = parentPath || currentPath || effectiveRoot;
+        const target = getInlineActionTarget(parentPath);
         if (!target) return;
         inlineAction.setAction('create_file', target);
     }
 
     function createNewDirectory(parentPath?: string) {
-        const target = parentPath || currentPath || effectiveRoot;
+        const target = getInlineActionTarget(parentPath);
         if (!target) return;
         inlineAction.setAction('create_dir', target);
     }
@@ -440,24 +414,24 @@
 </script>
 
 <div
-    class="relative flex shrink-0 flex-col border-r border-zinc-800/50 bg-[#0a0a0a] text-zinc-400 select-none h-full transition-colors duration-300 font-sans"
+    class="relative flex shrink-0 flex-col bg-(--forja-ui-explorer-bg,#0a0a0a) text-(--forja-ui-text-secondary,#a1a1aa) select-none h-full transition-colors duration-300 font-sans"
     data-program-ui
-    style="width: {sidebarWidth}px;"
+    style="width: {sidebarWidth}px; {themeStyle}"
     onauxclick={(e) => e.preventDefault()}
 >
     <header
-        class="shrink-0 border-b border-zinc-800/40 bg-[#0a0a0a]/80 backdrop-blur-sm p-3.5 pb-3"
+        class="shrink-0 bg-(--forja-ui-explorer-bg,#0a0a0a) p-3 pb-2"
     >
-        <div class="mb-3 flex items-center justify-between">
+        <div class="mb-2 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 <h3
-                    class="m-0 text-[10px] font-bold tracking-[0.15em] text-zinc-500 uppercase font-mono"
+                    class="m-0 text-[10px] font-bold tracking-[0.12em] text-(--forja-ui-text-muted,#71717a) uppercase font-sans"
                 >
                     Explorer
                 </h3>
                 {#if $pinnedPath}
                     <span
-                        class="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-500 uppercase tracking-tighter font-mono"
+                        class="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold text-(--forja-ui-text-muted,#52525b) uppercase tracking-tighter"
                     >
                         <Pin size="10" /> Focus
                     </span>
@@ -465,113 +439,62 @@
             </div>
 
             {#if hasProject}
-                <div class="flex items-center gap-1">
-                    <!-- <button
-                        type="button"
-                        onclick={() => createNewFile()}
-                        title="New File"
-                        class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-emerald-400"
-                    >
-                        <Plus size="14" />
-                    </button> -->
-                    <!-- <button
-                        type="button"
-                        onclick={() => createNewDirectory()}
-                        title="New Folder"
-                        class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-emerald-400"
-                    >
-                        <FolderPlus size="14" />
-                    </button> -->
-                    <!-- <button
-                        type="button"
-                        onclick={() => refresh()}
-                        title="Refresh"
-                        class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-emerald-400"
-                    >
-                        <RefreshCw
-                            size="14"
-                            class={loading ? "animate-spin" : ""}
-                        />
-                    </button> -->
+                <div class="flex items-center gap-0.5">
                     {#if $pinnedPath}
                         <button
                             type="button"
                             onclick={unpin}
                             title="Volver a la raíz del proyecto"
-                            class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-emerald-400"
+                            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
                         >
-                            <PinOff size="14" />
+                            <PinOff size="13" />
                         </button>
                     {/if}
                     <button
                         type="button"
                         onclick={toggleTodoSidebar}
                         title="Lista de TODOs del proyecto"
-                        class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-emerald-400"
+                        class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
                     >
-                        <ListTodo size="14" />
+                        <ListTodo size="13" />
                     </button>
                     <button
                         type="button"
                         onclick={toggleViewMode}
                         title="Cambiar modo de vista"
-                        class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-zinc-200"
+                        class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
                     >
                         {#if viewMode === "drill"}<ListTree
-                                size="14"
-                            />{:else}<LayoutList size="14" />{/if}
+                                size="13"
+                            />{:else}<LayoutList size="13" />{/if}
                     </button>
                     <button
                         type="button"
                         onclick={goHome}
                         title="Cerrar proyecto"
-                        class="flex cursor-pointer items-center rounded-md p-1.5 transition-all hover:bg-white/5 hover:text-red-400/80"
-                        ><LogOut size="14" /></button
+                        class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
+                        ><LogOut size="13" /></button
                     >
                 </div>
             {/if}
         </div>
 
         {#if hasProject}
-            <div class="relative mb-3 group">
-                <div
-                    class="absolute inset-y-0 left-2.5 flex items-center pointer-events-none text-zinc-600 group-focus-within:text-emerald-500/70 transition-colors"
-                >
-                    <Search size="12" />
-                </div>
-                <input
-                    type="text"
-                    bind:value={searchQuery}
-                    oninput={onSearchInput}
-                    placeholder="Search files..."
-                    class="w-full bg-zinc-900/50 border border-zinc-800/50 rounded-lg py-1.5 pl-8 pr-8 text-[11px] text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/30 focus:bg-zinc-900/80 transition-all font-medium"
-                />
-                {#if searchQuery}
-                    <button
-                        type="button"
-                        onclick={clearSearch}
-                        class="absolute inset-y-0 right-2 flex items-center text-zinc-600 hover:text-zinc-300 transition-colors cursor-pointer"
-                    >
-                        <X size="12" />
-                    </button>
-                {/if}
-            </div>
-
             <div
-                class="flex min-h-[28px] items-center gap-2 rounded-lg bg-zinc-900/50 px-2.5 py-1 border border-zinc-800/30"
+                class="flex min-h-[26px] items-center gap-2 px-2 py-0.5"
             >
                 {#if viewMode === "drill" && canGoUp && !searchQuery}
                     <button
                         type="button"
-                        class="flex cursor-pointer items-center p-0 text-zinc-500 transition-colors hover:text-zinc-200"
+                        class="flex cursor-pointer items-center p-0 text-(--forja-ui-text-muted,#71717a) transition-colors hover:text-(--forja-ui-text-primary,#f4f4f5)"
                         onclick={goUp}
                         title="Subir nivel"
                     >
-                        <ChevronLeft size="14" />
+                        <ChevronLeft size="13" />
                     </button>
                 {/if}
                 <span
-                    class="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-medium tracking-tight text-zinc-400 w-full font-mono"
+                    class="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold tracking-tight text-(--forja-ui-text-secondary,#a1a1aa) w-full"
                     title={currentPath}
                 >
                     <span class="truncate shrink-0"
@@ -579,9 +502,9 @@
                     >
                     {#if gitBranch}
                         <span
-                            class="flex items-center gap-1 text-[10px] text-emerald-500/90 font-bold border-l border-zinc-800/60 pl-2 ml-auto shrink-0"
+                            class="ml-auto flex shrink-0 items-center gap-1 rounded-sm bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) px-1.5 py-0.5 text-[10px] font-semibold text-(--forja-ui-text-primary,#f4f4f5)"
                         >
-                            <GitBranch size="11" />
+                            <GitBranch size="11" strokeWidth={2.25} />
                             <span>{gitBranch}</span>
                         </span>
                     {/if}
@@ -600,10 +523,10 @@
         {#if loading || isSearching}
             <div class="flex flex-col items-center justify-center p-10 gap-3">
                 <div
-                    class="w-4 h-4 border-2 border-zinc-700 border-t-emerald-500/50 rounded-full animate-spin"
+                    class="w-4 h-4 rounded-full border-2 border-transparent border-t-(--forja-ui-text-muted,rgba(113,113,122,0.5)) animate-spin"
                 ></div>
                 <span
-                    class="text-[10px] text-zinc-600 font-medium uppercase tracking-widest font-mono"
+                    class="text-[10px] text-(--forja-ui-text-muted,#71717a) font-bold uppercase tracking-widest"
                     >Loading</span
                 >
             </div>
@@ -642,8 +565,8 @@
     </div>
 
     <button
-        class="absolute top-0 right-0 z-[100] h-full w-[2px] cursor-col-resize transition-all duration-300 hover:bg-zinc-600/50 p-0 border-none"
-        class:bg-zinc-600={isResizing}
+        class="absolute top-0 right-0 z-[100] h-full w-[2px] cursor-col-resize transition-all duration-300 hover:bg-(--forja-ui-explorer-resize,rgba(82,82,91,0.5)) p-0 border-none"
+        class:bg-(--forja-ui-explorer-resize,rgba(82,82,91,0.5))={isResizing}
         class:w-[3px]={isResizing}
         onmousedown={startResizing}
         onclick={(e) => {
@@ -675,10 +598,10 @@
         background: transparent;
     }
     .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #1a1a1a;
+        background: var(--forja-ui-explorer-scrollbar, #1e1e1e);
         border-radius: 10px;
     }
     .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-        background: #2a2a2a;
+        background: var(--forja-ui-explorer-scrollbar-hover, #2e2e2e);
     }
 </style>

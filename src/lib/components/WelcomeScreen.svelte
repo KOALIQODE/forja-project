@@ -30,12 +30,12 @@
 {#snippet actionButton(Icon: Component, label: string, handler: () => void)}
   <button
     type="button"
-    class="group relative flex cursor-pointer items-center overflow-hidden rounded-lg border border-(--forja-ui-btn-border,#27272a) bg-(--forja-ui-btn-bg,rgba(9,9,11,0.3)) px-5 py-4 font-medium text-(--forja-ui-btn-text,#a1a1aa) transition-all duration-300 hover:border-(--forja-ui-btn-hover-border,rgba(16,185,129,0.5)) hover:bg-(--forja-ui-btn-hover-bg,rgba(16,185,129,0.05)) hover:text-(--forja-ui-btn-hover-text,#f4f4f5) hover:shadow-(--forja-ui-btn-hover-shadow,0_0_25px_rgba(16,185,129,0.1))"
+    class="group relative flex cursor-pointer items-center overflow-hidden rounded-md bg-(--forja-ui-btn-bg,#09090b) px-5 py-4 font-medium text-(--forja-ui-btn-text,#a1a1aa) transition-all duration-300 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.06)) hover:text-(--forja-ui-btn-hover-text,#f4f4f5)"
     onclick={handler}
   >
     <div class="absolute top-0 -left-full h-full w-full bg-linear-to-r from-transparent via-white/5 to-transparent transition-all duration-1000 group-hover:left-full"></div>
     <div class="flex items-center gap-4">
-      <Icon size="15" class="text-(--forja-ui-btn-icon,#71717a) transition-colors group-hover:text-(--forja-ui-btn-icon-hover,#34d399)" />
+      <Icon size="15" class="text-(--forja-ui-btn-icon,#71717a) transition-colors group-hover:text-(--forja-ui-btn-icon-hover,#d4d4d8)" />
       <span>{label}</span>
     </div>
   </button>

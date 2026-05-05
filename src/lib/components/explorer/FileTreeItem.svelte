@@ -1,11 +1,13 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { Folder, FolderOpen, ChevronRight, Pin, Edit2, File as FileIcon, Trash2, Plus, FolderPlus } from '@lucide/svelte';
-  import { openBuffer, activeBufferId } from '$lib/stores/bufferStore';
+  import { ChevronRight, Folder, FolderOpen, Pin, File as FileIcon } from '@lucide/svelte';
+  import { activeBufferId } from '$lib/stores/bufferStore';
   import { expandedPaths, pinnedPath, directoryCache, inlineAction, type FileEntry } from '$lib/stores/explorerStore';
   import { slide } from 'svelte/transition';
+  import { GIT_STATUS_COLORS, GIT_STATUS_LABELS } from '$lib/utils/explorerHelpers';
   import { getFileIcon } from '$lib/utils/fileIcons';
   import { tick } from 'svelte';
+  import { activeUITheme } from '$lib/stores/uiThemeStore';
 
   let { entry, depth = 0, handleEntryClick, isVirtual = false, onContextMenu }: { 
     entry: FileEntry, 
@@ -15,6 +17,10 @@
     onContextMenu?: (e: MouseEvent, entry: FileEntry) => void
   } = $props();
 
+  let themeStyle = $derived(
+    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+  );
+
   // El estado de expansión ahora es reactivo al store global
   let isExpanded = $derived($expandedPaths.has(entry.path));
   
@@ -23,22 +29,6 @@
 
   // Get icon config for files
   let iconConfig = $derived(!entry.is_dir ? getFileIcon(entry.name) : null);
-
-  const gitStatusColor = {
-    modified: 'text-orange-400',
-    added: 'text-green-400',
-    untracked: 'text-zinc-500',
-    renamed: 'text-blue-400',
-    deleted: 'text-red-400'
-  };
-
-  const gitStatusLabel = {
-    modified: 'M',
-    added: 'A',
-    untracked: 'U',
-    renamed: 'R',
-    deleted: 'D'
-  };
 
   // Inline action state
   let isRenaming = $derived($inlineAction?.type === 'rename' && $inlineAction?.path === entry.path);
@@ -122,12 +112,12 @@
   }
 </script>
 
-<div class="flex flex-col w-full">
+<div class="flex flex-col w-full" style={themeStyle}>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div 
-    class="group flex h-7 cursor-pointer items-center border-l-2 transition-all duration-150 hover:bg-white/5
-           {$activeBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}"
+    class="group flex h-[26px] cursor-pointer items-center transition-all duration-150 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))
+           {$activeBufferId === entry.path ? 'bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.06))' : ''}"
     class:opacity-40={entry.is_ignored}
     onclick={(e) => {
       handleEntryClick(entry);
@@ -139,30 +129,30 @@
         onContextMenu(e, entry);
       }
     }}
-    style="padding-left: {depth * 12 + 16}px"
+    style="padding-left: {depth * 12 + 12}px"
   >
     <!-- ÁREA FIJA IZQUIERDA -->
-    <div class="flex w-5 shrink-0 items-center justify-center">
+    <div class="flex w-4 shrink-0 items-center justify-center">
       {#if entry.is_dir}
-        <span class="text-zinc-600 transition-transform duration-200 group-hover:text-zinc-400"
+        <span class="text-(--forja-ui-text-muted,#71717a) transition-transform duration-200 group-hover:text-(--forja-ui-text-secondary,#a1a1aa)"
               class:rotate-90={isExpanded}>
-          <ChevronRight size="12" />
+          <ChevronRight size="11" strokeWidth={2.4} />
         </span>
       {/if}
     </div>
 
-    <span class="mr-2.5 flex items-center opacity-70 transition-opacity group-hover:opacity-100" 
+    <span class="mr-2 flex items-center opacity-90 transition-opacity duration-150 group-hover:opacity-100 {$activeBufferId === entry.path ? 'scale-[1.04]' : ''}" 
           style={!entry.is_dir && iconConfig && !entry.git_status ? `color: ${iconConfig.color}` : ''}
-          class:text-blue-400={entry.is_dir && !entry.git_status} 
+          class:text-(--forja-ui-explorer-folder,#7a7a8a)={entry.is_dir && !entry.git_status} 
           class:text-orange-400={entry.git_status === 'modified'}
           class:text-green-400={entry.git_status === 'added'}
           class:text-blue-400-git={entry.git_status === 'renamed'}
           class:text-red-400={entry.git_status === 'deleted'}
-          class:text-zinc-500={entry.is_ignored || entry.git_status === 'untracked'}>
+          class:text-(--forja-ui-text-muted,#71717a)={entry.is_ignored || entry.git_status === 'untracked'}>
       {#if entry.is_dir}
-        {#if isExpanded}<FolderOpen size="15" />{:else}<Folder size="15" />{/if}
+        {#if isExpanded}<FolderOpen size="15" strokeWidth={2.75} />{:else}<Folder size="15" strokeWidth={2.75} />{/if}
       {:else if iconConfig}
-        <iconConfig.icon size="15" />
+        <iconConfig.icon size="15" strokeWidth={2.6} />
       {/if}
     </span>
 
@@ -170,7 +160,7 @@
       <input
         bind:this={inputElement}
         bind:value={newName}
-        class="h-5 w-[calc(100%-100px)] bg-zinc-800 px-1 text-[13px] text-zinc-200 outline-none ring-1 ring-emerald-500"
+        class="h-5 w-[calc(100%-40px)] bg-(--forja-ui-btn-bg,#0a0a0a) ring-1 ring-(--forja-ui-btn-border,#27272a) px-1 text-[12px] text-(--forja-ui-text-primary,#f4f4f5) outline-none rounded-sm"
         onblur={handleRename}
         onkeydown={(e) => {
           if (e.key === 'Enter') handleRename();
@@ -179,45 +169,45 @@
         onclick={(e) => e.stopPropagation()}
       />
     {:else}
-      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium transition-colors group-hover:text-zinc-200
-                  {$activeBufferId === entry.path || entry.git_status ? 'text-zinc-200' : 'text-zinc-400'}
-                  {entry.git_status ? gitStatusColor[entry.git_status as keyof typeof gitStatusColor] || '' : ''}">
+      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium transition-colors group-hover:text-(--forja-ui-text-primary,#f4f4f5)
+                  {$activeBufferId === entry.path || entry.git_status ? 'text-(--forja-ui-text-primary,#f4f4f5)' : 'text-(--forja-ui-text-secondary,#a1a1aa)'}
+                  {entry.git_status ? GIT_STATUS_COLORS[entry.git_status as keyof typeof GIT_STATUS_COLORS] || '' : ''}">
         {entry.name}
       </span>
     {/if}
 
     <!-- Área de acciones derecha -->
-    <div class="ml-auto flex items-center justify-end gap-1 pr-4">
+    <div class="ml-auto flex items-center justify-end gap-1 pr-3">
       {#if entry.git_status}
-        <span class="text-[10px] font-bold uppercase tracking-tighter w-4 text-center
-                     {gitStatusColor[entry.git_status as keyof typeof gitStatusColor] || 'text-zinc-500'}">
-          {gitStatusLabel[entry.git_status as keyof typeof gitStatusLabel] || '?'}
+        <span class="text-[9px] font-bold uppercase tracking-tighter w-3.5 text-center
+                     {GIT_STATUS_COLORS[entry.git_status as keyof typeof GIT_STATUS_COLORS] || 'text-(--forja-ui-text-muted,#71717a)'}">
+          {GIT_STATUS_LABELS[entry.git_status as keyof typeof GIT_STATUS_LABELS] || '?'}
         </span>
       {/if}
 
       {#if entry.is_dir && !entry.is_ignored}
         <button 
-          class="opacity-0 group-hover:opacity-100 p-1 text-zinc-600 hover:text-emerald-400 transition-all cursor-pointer"
+          class="opacity-0 group-hover:opacity-100 p-1 text-(--forja-ui-text-muted,#71717a) hover:text-(--forja-ui-text-primary,#f4f4f5) transition-colors cursor-pointer"
           onclick={(e) => { e.stopPropagation(); pinFolder(); }}
           title="Anclar esta carpeta como raíz"
         >
-          <Pin size={12} />
+          <Pin size={11} strokeWidth={2.25} />
         </button>
       {/if}
     </div>
   </div>
 
   {#if (isCreatingFile || isCreatingDir) && isExpanded}
-    <div class="flex h-7 items-center" style="padding-left: {(depth + 1) * 12 + 16}px">
-      <div class="flex w-5 shrink-0 items-center justify-center"></div>
-      <span class="mr-2.5 flex items-center opacity-70">
-        {#if isCreatingFile}<FileIcon size="15" />{:else}<Folder size="15" class="text-blue-400" />{/if}
+    <div class="flex h-[26px] items-center" style="padding-left: {(depth + 1) * 12 + 12}px">
+      <div class="flex w-4 shrink-0 items-center justify-center"></div>
+      <span class="mr-2 flex items-center opacity-70">
+        {#if isCreatingFile}<FileIcon size="15" strokeWidth={2.6} />{:else}<Folder size="15" strokeWidth={2.75} class="text-(--forja-ui-explorer-folder,#7a7a8a)" />{/if}
       </span>
       <input
         bind:this={inputElement}
         bind:value={creationName}
         placeholder={isCreatingFile ? "filename..." : "folder name..."}
-        class="h-5 w-[calc(100%-100px)] bg-zinc-800 px-1 text-[13px] text-zinc-200 outline-none ring-1 ring-emerald-500"
+        class="h-5 w-[calc(100%-40px)] bg-(--forja-ui-btn-bg,#0a0a0a) ring-1 ring-(--forja-ui-btn-border,#27272a) px-1 text-[12px] text-(--forja-ui-text-primary,#f4f4f5) outline-none rounded-sm"
         onblur={handleCreate}
         onkeydown={(e) => {
           if (e.key === 'Enter') handleCreate();
@@ -229,10 +219,10 @@
   {/if}
 
   {#if !isVirtual && isExpanded}
-    <div transition:slide={{ duration: 200 }}>
+    <div transition:slide={{ duration: 150 }}>
       {#if isLoading && children.length === 0}
-        <div class="py-1 text-[11px] text-zinc-600 font-medium" style="padding-left: {(depth + 1) * 12 + 32}px">
-          Cargando...
+        <div class="py-1 text-[10px] text-(--forja-ui-text-muted,#71717a) font-bold uppercase tracking-wider" style="padding-left: {(depth + 1) * 12 + 28}px">
+          Loading...
         </div>
       {:else}
         {#each children as child}

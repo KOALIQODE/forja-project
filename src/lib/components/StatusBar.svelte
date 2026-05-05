@@ -5,6 +5,11 @@
   import { FileCode, AlertCircle, AlertTriangle, List, ChevronRight } from "@lucide/svelte";
   import { getFileIcon } from "$lib/utils/fileIcons";
   import { errorCount, warningCount } from "$lib/stores/diagnosticsStore";
+  import { activeUITheme } from "$lib/stores/uiThemeStore";
+
+  let themeStyle = $derived(
+    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+  );
   
   // Mock diagnostics for now
   // let errors = 0;
@@ -66,51 +71,55 @@
   );
 </script>
 
-<footer class="h-8 bg-black/15 backdrop-blur-xl border-t border-white/5 flex items-center justify-between px-3 text-[11px] text-[#cccccc] select-none z-50" data-program-ui style="font-family: var(--forja-buffer-font-family);">
+<footer 
+  class="h-8 bg-(--forja-ui-explorer-bg,#0a0a0a) backdrop-blur-xl flex items-center justify-between px-3 text-[11px] text-(--forja-ui-text-secondary,#a1a1aa) select-none z-50 transition-colors" 
+  data-program-ui 
+  style="font-family: var(--forja-buffer-font-family); {themeStyle}"
+>
   <div class="flex items-center gap-1 h-full overflow-hidden">
     <!-- Breadcrumb -->
     {#if $activeBuffer}
-      <div class="flex items-center hover:bg-white/5 px-2 h-full cursor-pointer transition-colors shrink-0 gap-1.5">
+      <div class="flex items-center hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04)) px-2 h-full cursor-pointer transition-colors shrink-0 gap-1.5">
         {#if activeFileIcon}
-          <activeFileIcon.icon size={14} style={`color: ${activeFileIcon.color}`} />
+          <activeFileIcon.icon size={13} style={`color: ${activeFileIcon.color}`} />
         {:else}
-          <FileCode size={14} class="text-[#ce9178]" />
+          <FileCode size={13} class="text-(--forja-ui-text-muted,#71717a)" />
         {/if}
-        <span class="opacity-70 text-[11px]">{activeFileName}</span>
+        <span class="opacity-80 text-[10.5px] font-medium">{activeFileName}</span>
       </div>
       
       {#if $currentBreadcrumb && $currentBreadcrumb.items.length > 0}
         {#each $currentBreadcrumb.items as item, i (i)}
-          <ChevronRight size={12} class="text-white/10 shrink-0" />
-          <div class="flex items-center gap-1 hover:bg-white/5 px-2 h-full cursor-pointer transition-colors shrink-0 max-w-[150px]">
-            <span class="text-[10px] opacity-40">{getBreadcrumbIcon(item.kind)}</span>
-            <span class="truncate opacity-80">{item.name}</span>
+          <ChevronRight size={11} class="text-(--forja-ui-text-muted,#71717a) opacity-30 shrink-0" />
+          <div class="flex items-center gap-1 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04)) px-2 h-full cursor-pointer transition-colors shrink-0 max-w-[150px]">
+            <span class="text-[9px] opacity-50">{getBreadcrumbIcon(item.kind)}</span>
+            <span class="truncate opacity-90 font-medium">{item.name}</span>
           </div>
         {/each}
       {/if}
     {:else}
       <div class="flex items-center gap-2 px-2 h-full">
-        <FileCode size={14} class="text-white/10" />
-        <span class="opacity-40">No buffer open</span>
+        <FileCode size={13} class="text-(--forja-ui-text-muted,#71717a) opacity-20" />
+        <span class="opacity-40 uppercase tracking-widest text-[9px] font-bold">No buffer open</span>
       </div>
     {/if}
 
     <!-- Diagnostics (Placeholder) -->
     <div class="flex items-center gap-0 h-full ml-4">
-      <div class="flex items-center gap-1 hover:bg-white/5 px-2 h-full cursor-pointer transition-colors">
-        <AlertCircle size={14} class="text-red-500/70" />
-        <span class="opacity-70">{$errorCount}</span>
+      <div class="flex items-center gap-1 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04)) px-2 h-full cursor-pointer transition-colors">
+        <AlertCircle size={13} class="text-rose-500/70" />
+        <span class="opacity-80 font-bold">{$errorCount}</span>
       </div>
-      <div class="flex items-center gap-1 hover:bg-white/5 px-2 h-full cursor-pointer transition-colors">
-        <AlertTriangle size={14} class="text-amber-500/70" />
-        <span class="opacity-70">{$warningCount}</span>
+      <div class="flex items-center gap-1 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04)) px-2 h-full cursor-pointer transition-colors">
+        <AlertTriangle size={13} class="text-amber-500/70" />
+        <span class="opacity-80 font-bold">{$warningCount}</span>
       </div>
     </div>
   </div>
 
   <div class="flex items-center h-full shrink-0">
-    <div class="flex items-center gap-1 hover:bg-white/5 px-3 h-full transition-colors min-w-[120px]">
-      <span class="rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-bold tracking-[0.12em] text-emerald-400">
+    <div class="flex items-center gap-1 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04)) px-3 h-full transition-colors min-w-[120px]">
+      <span class="rounded bg-(--forja-ui-gradient-from,rgba(52,211,153,0.1)) px-2 py-0.5 text-[9px] font-bold tracking-[0.08em] text-(--forja-ui-gradient-from,#34d399) uppercase">
         {vimModeLabel || 'NORMAL'}
       </span>
     </div>
@@ -119,16 +128,16 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div 
-      class="flex items-center gap-2 hover:bg-white/5 px-3 h-full cursor-pointer transition-colors"
+      class="flex items-center gap-2 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04)) px-3 h-full cursor-pointer transition-colors"
       onclick={handleOpenBufferDialog}
     >
-      <List size={14} class="opacity-60" />
-      <span class="opacity-60">{Array.from($openBuffers.keys()).length} Buffers</span>
+      <List size={13} class="opacity-50" />
+      <span class="opacity-70 font-medium">{Array.from($openBuffers.keys()).length} Buffers</span>
     </div>
 
     <!-- Cursor Position -->
-    <div class="flex items-center gap-1 hover:bg-white/5 px-3 h-full cursor-pointer transition-colors min-w-[100px] justify-end">
-      <span class="opacity-60 font-mono">Ln {$cursorPosition.line}, Col {$cursorPosition.column}</span>
+    <div class="flex items-center gap-1 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04)) px-3 h-full cursor-pointer transition-colors min-w-[100px] justify-end">
+      <span class="opacity-60 font-medium">Ln {$cursorPosition.line}, Col {$cursorPosition.column}</span>
     </div>
   </div>
 </footer>
