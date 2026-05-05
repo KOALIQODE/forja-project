@@ -98,7 +98,7 @@ impl SyntaxHighlighter {
         let mut type_map = vec![TokenType::Unknown; content_len];
         self.fill_type_map(content, &tree, &query, &mut type_map);
 
-        for (inj_lang, start, end) in Self::find_injection_ranges(&tree, language_name) {
+        for (inj_lang, start, end) in Self::find_injection_ranges(&tree, language_name, content.as_bytes()) {
             self.inject_highlight(content, start, end, &inj_lang, &mut type_map);
         }
 
@@ -125,32 +125,71 @@ impl SyntaxHighlighter {
         }
     }
 
-    fn find_injection_ranges(tree: &tree_sitter::Tree, language_name: &str) -> Vec<(String, usize, usize)> {
+    fn find_injection_ranges(tree: &tree_sitter::Tree, language_name: &str, content: &[u8]) -> Vec<(String, usize, usize)> {
         match language_name {
             "svelte" => {
-                fn walk_svelte(node: tree_sitter::Node, out: &mut Vec<(String, usize, usize)>) {
-                    let lang = match node.kind() {
-                        "script_element" => Some("javascript"),
+                fn script_lang(node: tree_sitter::Node, content: &[u8]) -> &'static str {
+                    for i in 0..node.child_count() {
+                        let Some(tag) = node.child(i) else { continue };
+                        if tag.kind() != "start_tag" { continue }
+                        for j in 0..tag.child_count() {
+                            let Some(attr) = tag.child(j) else { continue };
+                            if attr.kind() != "attribute" { continue }
+                            let mut attr_name = "";
+                            let mut attr_value = "";
+                            for k in 0..attr.child_count() {
+                                let Some(child) = attr.child(k) else { continue };
+                                let text = std::str::from_utf8(
+                                    &content[child.start_byte()..child.end_byte()]
+                                ).unwrap_or("");
+                                match child.kind() {
+                                    "attribute_name" => attr_name = text,
+                                    "attribute_value" => attr_value = text,
+                                    "quoted_attribute_value" => {
+                                        // unwrap inner attribute_value node
+                                        for l in 0..child.child_count() {
+                                            let Some(av) = child.child(l) else { continue };
+                                            if av.kind() == "attribute_value" {
+                                                attr_value = std::str::from_utf8(
+                                                    &content[av.start_byte()..av.end_byte()]
+                                                ).unwrap_or("");
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if attr_name == "lang" && matches!(attr_value, "ts" | "typescript") {
+                                return "typescript";
+                            }
+                        }
+                    }
+                    "javascript"
+                }
+
+                fn walk_svelte(node: tree_sitter::Node, content: &[u8], out: &mut Vec<(String, usize, usize)>) {
+                    let inj_lang: Option<&str> = match node.kind() {
+                        "script_element" => Some(script_lang(node, content)),
                         "style_element"  => Some("css"),
                         _ => None,
                     };
-                    if let Some(inj_lang) = lang {
+                    if let Some(lang) = inj_lang {
                         for i in 0..node.child_count() {
                             if let Some(child) = node.child(i) {
                                 if child.kind() == "raw_text" {
-                                    out.push((inj_lang.to_string(), child.start_byte(), child.end_byte()));
+                                    out.push((lang.to_string(), child.start_byte(), child.end_byte()));
                                 }
                             }
                         }
                     }
                     for i in 0..node.child_count() {
                         if let Some(child) = node.child(i) {
-                            walk_svelte(child, out);
+                            walk_svelte(child, content, out);
                         }
                     }
                 }
                 let mut result = Vec::new();
-                walk_svelte(tree.root_node(), &mut result);
+                walk_svelte(tree.root_node(), content, &mut result);
                 result
             }
 

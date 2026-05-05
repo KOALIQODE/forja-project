@@ -78,28 +78,28 @@
 
     const { CHUNK_SIZE } = EDITOR_CONFIG;
 
-    let canvas = $state<HTMLCanvasElement | null>(null);
-    let scrollContainer = $state<HTMLElement | null>(null);
+    let canvas: HTMLCanvasElement | null = $state(null);
+    let scrollContainer: HTMLElement | null = $state(null);
     let totalLines = $state(0);
     let currentScrollTop = $state(0);
     let needsRedraw = $state(true);
     let isLoading = $state(false); // Declare isLoading state
-    let mouseLine = $state<number | null>(null);
+    let mouseLine: number | null = $state(null);
     let cursorVisible = $state(true);
-    let vimMode = $state<VimMode>(get(bufferPreferences).vimModeEnabled ? "normal" : "insert");
+    let vimMode: VimMode = $state(get(bufferPreferences).vimModeEnabled ? "normal" : "insert");
     let pendingCount = $state("");
-    let pendingOperator = $state<"delete" | "change" | "yank" | null>(null);
+    let pendingOperator: "delete" | "change" | "yank" | null = $state(null);
     let pendingSequence = $state("");
     let commandLine = $state("");
-    let visualAnchor = $state<CursorPosition | null>(null);
+    let visualAnchor: CursorPosition | null = $state(null);
     let lastFindChar = $state("");
-    let lastFindDir = $state<1 | -1>(1);
+    let lastFindDir: 1 | -1 = $state(1);
     let lastFindStop = $state(false);
     let lastSearchQuery = $state("");
 
     // ── Bracket pair colorizer ────────────────────────────────────────────────────
     type BracketColor = { start: number; finish: number; color: string };
-    let bracketColors = $state<BracketColor[]>([]);
+    let bracketColors: BracketColor[] = $state([]);
     const bracketColorizer = new BracketColorizer();
 
     // ── Reactive theme colors — read from UITheme vars (same pattern as TitleBar/StatusBar)
@@ -202,10 +202,10 @@
     let hunkPreviewScreenX = $state(0);
     let hunkPreviewScreenY = $state(0);
     // Reactive snapshot of hunks for the scrollbar mini-diff overlay.
-    let scrollbarHunks     = $state<readonly Hunk[]>([]);
+    let scrollbarHunks: readonly Hunk[] = $state([]);
 
     // State to track the currently loaded file path, to avoid redundant checks
-    let currentFilePath = $state<string | null>(null);
+    let currentFilePath: string | null = $state(null);
 
     // ── Phase 4: OffscreenCanvas chunk renderer ─────────────────────────────────
     const chunkRenderer = new ChunkRenderer(CHUNK_SIZE);
@@ -292,7 +292,7 @@
         });
     }
 
-    let lastVimModeEnabled = $state<boolean | null>(null);
+    let lastVimModeEnabled: boolean | null = $state(null);
 
     $effect(() => {
         editorFontFamily;
@@ -840,7 +840,7 @@
         summary: string;
     }
 
-    let blameCache = $state<BlameLine[]>([]);
+    let blameCache: BlameLine[] = $state([]);
 
     async function fetchBlame() {
         if (!filePath) return;
@@ -973,7 +973,7 @@
         }
     }
 
-    let editorContainer = $state<HTMLElement | null>(null);
+    let editorContainer: HTMLElement | null = $state(null);
 
     function handleClick(e: MouseEvent) {
         if (!canvas || !scrollContainer) return;
