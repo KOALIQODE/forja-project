@@ -2,14 +2,15 @@ editor.register_theme({
   name = "misto-dark",
 
   colors = {
-    bg          = "#0a0a0a",
-    fg          = "#f4f4f5",
-    cursor      = "#f4f4f5",
-    selection   = "#2d4a3e",
-    line_number = "#52525b",
-    gutter_bg   = "#0a0a0a",
-    border      = "#27272a",
-    active_line = "#111111",
+    bg             = "#0a0a0a",
+    fg             = "#f4f4f5",
+    cursor         = "#34d399",
+    selection      = "rgba(52,211,153,0.18)",
+    line_number    = "#3a3a3a",
+    gutter_bg      = "#0a0a0a",
+    border         = "#27272a",
+    active_line    = "rgba(52,211,153,0.07)",
+    cursor_blink_ms = 530,
   },
 
   syntax = {

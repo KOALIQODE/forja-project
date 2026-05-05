@@ -2,14 +2,15 @@ editor.register_theme({
   name = "tokyo-night-dark",
 
   colors = {
-    bg          = "#0a0b14",
-    fg          = "#c0caf5",
-    cursor      = "#c0caf5",
-    selection   = "#1e2642",
-    line_number = "#2e3452",
-    gutter_bg   = "#0a0b14",
-    border      = "#1c1e2e",
-    active_line = "#0d0e1a",
+    bg             = "#0a0b14",
+    fg             = "#c0caf5",
+    cursor         = "#7aa2f7",
+    selection      = "rgba(122,162,247,0.20)",
+    line_number    = "#2e3452",
+    gutter_bg      = "#0a0b14",
+    border         = "#1c1e2e",
+    active_line    = "rgba(122,162,247,0.06)",
+    cursor_blink_ms = 500,
   },
 
   syntax = {
@@ -70,6 +71,20 @@ editor.register_theme({
       ["--forja-ui-logo-mid"]           = "#0f1020",
       ["--forja-ui-logo-core"]          = "#7aa2f7",
       ["--forja-ui-logo-glow"]          = "rgba(122,162,247,0.45)",
+      -- ── Git status colors ─────────────────────────────────────────────────
+      ["--forja-ui-git-modified"]       = "#e0af68",
+      ["--forja-ui-git-added"]          = "#9ece6a",
+      ["--forja-ui-git-renamed"]        = "#7aa2f7",
+      ["--forja-ui-git-deleted"]        = "#f7768e",
+      ["--forja-ui-git-untracked"]      = "#444b6a",
+      -- ── Editor canvas colors ──────────────────────────────────────────────
+      ["--forja-editor-bg"]             = "#0a0b14",
+      ["--forja-editor-fg"]             = "#c0caf5",
+      ["--forja-editor-cursor"]         = "#7aa2f7",
+      ["--forja-editor-active-line"]    = "rgba(122,162,247,0.06)",
+      ["--forja-editor-selection"]      = "rgba(122,162,247,0.20)",
+      ["--forja-editor-line-number"]    = "#2e3452",
+      ["--forja-editor-cursor-blink"]   = "500",
     },
   },
 })

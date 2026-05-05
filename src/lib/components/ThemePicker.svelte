@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { Palette, Moon, Sun, Check } from '@lucide/svelte';
   import { allUIThemes, activeUIThemeId, activeUITheme, setUITheme } from '$lib/stores/uiThemeStore';
+  import { activateThemeByName } from '$lib/stores/pluginStore';
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -21,6 +22,9 @@
 
   function selectTheme(id: string) {
     setUITheme(id);
+    // Sync the editor canvas theme with the UI theme (same name/id).
+    // Fire-and-forget — canvas updates reactively when activeTheme store changes.
+    void activateThemeByName(id);
     onClose();
   }
 

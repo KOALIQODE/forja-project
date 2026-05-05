@@ -188,12 +188,14 @@ export async function refreshPlugins(): Promise<void> {
 }
 
 /** Apply theme only if user previously activated one (reads localStorage preference).
- *  On first run (no preference saved), no theme is applied — user must activate manually. */
+ *  Falls back to the saved UI theme so both stores stay in sync on startup. */
 export async function applyFirstTheme(): Promise<void> {
-    const savedTheme = localStorage.getItem("forja:activeTheme");
-    // No preference saved = first run, don't activate anything
+    // Prefer the explicit editor-theme preference; fall back to the UI theme id
+    const savedTheme =
+        localStorage.getItem("forja:activeTheme") ??
+        localStorage.getItem("forja:ui-theme");
+
     if (!savedTheme) return;
-    // User explicitly deactivated
     if (savedTheme === "__none__") return;
 
     const themes = await pluginGetThemes();
@@ -203,6 +205,8 @@ export async function applyFirstTheme(): Promise<void> {
     if (target) {
         activeTheme.set(target);
         applyTheme(target);
+        // Keep both keys in sync
+        localStorage.setItem("forja:activeTheme", target.name);
     }
 }
 

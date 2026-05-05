@@ -9,6 +9,30 @@ vi.mock('$lib/utils/fileIcons', () => ({
   getFileIcon: mockGetFileIcon,
 }));
 
+const mockActiveUITheme = vi.hoisted(() => {
+  let _value = { vars: {} as Record<string, string> };
+  const _subs = new Set<(v: typeof _value) => void>();
+  return {
+    subscribe(fn: (v: typeof _value) => void) {
+      fn(_value);
+      _subs.add(fn);
+      return () => _subs.delete(fn);
+    },
+    set(next: typeof _value) {
+      _value = next;
+      _subs.forEach((fn) => fn(_value));
+    },
+    _reset() {
+      _value = { vars: {} };
+      _subs.forEach((fn) => fn({ vars: {} }));
+    },
+  };
+});
+
+vi.mock('$lib/stores/uiThemeStore', () => ({
+  activeUITheme: mockActiveUITheme,
+}));
+
 // ── Imports after mocks ────────────────────────────────────────────────────
 
 import EditorFileInfo from '$lib/components/editor/EditorFileInfo.svelte';
@@ -25,6 +49,7 @@ describe('EditorFileInfo', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetFileIcon.mockReturnValue(null);
+    mockActiveUITheme._reset();
   });
 
   describe('render', () => {
@@ -82,7 +107,6 @@ describe('EditorFileInfo', () => {
     it('does not render an icon when getFileIcon returns null', () => {
       mockGetFileIcon.mockReturnValue(null);
       renderFileInfo({ filePath: '/src/app.ts', isDirty: false, totalLines: 1 });
-      // No icon element — just verify no crash and content still present
       expect(screen.getByTestId('editor-file-info')).toHaveTextContent('app.ts');
     });
 
@@ -94,6 +118,24 @@ describe('EditorFileInfo', () => {
     it('calls getFileIcon with the bare filename when no directory is present', () => {
       renderFileInfo({ filePath: 'Cargo.toml', isDirty: false, totalLines: 1 });
       expect(mockGetFileIcon).toHaveBeenCalledWith('Cargo.toml');
+    });
+  });
+
+  describe('theme reactivity', () => {
+    it('applies theme vars as inline styles on the root element', () => {
+      mockActiveUITheme.set({ vars: { '--forja-editor-bg': '#1a1a2e', '--forja-ui-btn-border': '#2a2a3e' } });
+      renderFileInfo({ filePath: '/src/app.ts', isDirty: false, totalLines: 1 });
+      const style = screen.getByTestId('editor-file-info').getAttribute('style') ?? '';
+      expect(style).toContain('--forja-editor-bg');
+      expect(style).toContain('--forja-ui-btn-border');
+    });
+
+    it('updates inline theme vars when theme changes at runtime', async () => {
+      renderFileInfo({ filePath: '/src/app.ts', isDirty: false, totalLines: 1 });
+      expect(screen.getByTestId('editor-file-info').getAttribute('style') ?? '').not.toContain('--forja-editor-bg: #ffffff');
+      mockActiveUITheme.set({ vars: { '--forja-editor-bg': '#ffffff' } });
+      await Promise.resolve();
+      expect(screen.getByTestId('editor-file-info').getAttribute('style') ?? '').toContain('--forja-editor-bg: #ffffff');
     });
   });
 });

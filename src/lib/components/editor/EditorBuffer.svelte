@@ -33,6 +33,7 @@
     import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "$lib/utils/lspClient";
     import { pluginRunBracketProviders, pluginEmitEvent, type BracketRange } from "$lib/utils/pluginClient";
     import { activeTheme, bracketRanges, loadedPlugins, pluginsReady, pluginActivityVersion } from "$lib/stores/pluginStore";
+    import { activeUITheme } from "$lib/stores/uiThemeStore";
     import { bracketRangesToColors, resolveTokenColors } from "$lib/utils/themeEngine";
     import { buildDiagByLine } from "$lib/utils/diagnosticsUtils";
     import { BracketColorizer } from "$lib/utils/BracketColorizer";
@@ -101,14 +102,29 @@
     let bracketColors = $state<BracketColor[]>([]);
     const bracketColorizer = new BracketColorizer();
 
-    // ── Reactive theme colors (canvas uses these instead of hardcoded values) ─────
-    let editorBgColor = $derived($activeTheme?.colors?.bg ?? '#0d0d0d');
-    let currentTokenColors = $derived(resolveTokenColors($activeTheme?.syntax, TOKEN_COLORS));
+    // ── Reactive theme colors — read from UITheme vars (same pattern as TitleBar/StatusBar)
+    // This ensures instant reactivity when the user picks a theme in ThemePicker.
+    let editorBgColor               = $derived($activeUITheme.vars['--forja-editor-bg']           ?? '#0d0d0d');
+    let editorFgColor               = $derived($activeUITheme.vars['--forja-editor-fg']           ?? '#d4d4d4');
+    let editorCursorColor           = $derived($activeUITheme.vars['--forja-editor-cursor']       ?? '#34d399');
+    let editorActiveLineColor       = $derived($activeUITheme.vars['--forja-editor-active-line']  ?? 'rgba(52,211,153,0.07)');
+    let editorSelectionColor        = $derived($activeUITheme.vars['--forja-editor-selection']    ?? 'rgba(52,211,153,0.18)');
+    let editorLineNumberColor       = $derived($activeUITheme.vars['--forja-editor-line-number']  ?? '#3a3a3a');
+    let editorLineNumberActiveColor = $derived($activeUITheme.vars['--forja-editor-fg']           ?? '#c0c0c0');
+    let editorCursorBlinkMs         = $derived(Number($activeUITheme.vars['--forja-editor-cursor-blink'] ?? '500'));
+    let editorScrollbarThumb        = $derived($activeUITheme.vars['--forja-editor-line-number']  ?? '#1a1a1a');
+    let currentTokenColors          = $derived(resolveTokenColors($activeTheme?.syntax, TOKEN_COLORS));
 
     // Redraw canvas when theme changes — also invalidate chunk cache so syntax colors update
     $effect(() => {
         const _ = currentTokenColors;
         const __ = editorBgColor;
+        const _fg = editorFgColor;
+        const _cur = editorCursorColor;
+        const _al = editorActiveLineColor;
+        const _sel = editorSelectionColor;
+        const _ln = editorLineNumberColor;
+        const _lna = editorLineNumberActiveColor;
         chunkRenderer?.invalidateAll();
         queueRedraw();
         // Re-apply bracket colors with new theme palette (or fallback)
@@ -147,6 +163,22 @@
             bracketColors = [];
             queueRedraw();
         }
+    });
+
+    // ── Cursor blink: recreated whenever the theme changes the interval ──────────
+    $effect(() => {
+        const ms = editorCursorBlinkMs;
+        if (ms <= 0) {
+            // No blink — keep cursor always visible
+            cursorVisible = true;
+            queueRedraw();
+            return;
+        }
+        const id = setInterval(() => {
+            cursorVisible = !cursorVisible;
+            queueRedraw();
+        }, ms);
+        return () => clearInterval(id);
     });
 
     function scheduleBracketUpdate() {
@@ -864,6 +896,12 @@
             contentStartX,
             currentTokenColors,
             editorBgColor,
+            editorFgColor,
+            editorCursorColor,
+            editorActiveLineColor,
+            editorSelectionColor,
+            editorLineNumberColor,
+            editorLineNumberActiveColor,
             getLine,
             getVisualRange,
             untrack,
@@ -1706,10 +1744,6 @@
         }
 
         editorContainer?.focus();
-        const blinkInterval = setInterval(() => {
-            cursorVisible = !cursorVisible;
-            queueRedraw();
-        }, 500);
 
         // Diff: subscribe to incremental diff results
         const unsubDiff = diffScheduler.onDiffReady((result: LineDiffResult) => {
@@ -1739,7 +1773,6 @@
 
         return () => {
             cancelAnimationFrame(fetchLoopId);
-            clearInterval(blinkInterval);
             resizeObserver.disconnect();
             unsubDiff();
             diffScheduler.dispose();
@@ -1753,13 +1786,19 @@
 
 <div
     bind:this={editorContainer}
-    class="relative h-full w-full bg-[#0d0d0d] flex flex-col font-mono text-sm overflow-hidden"
+    class="relative h-full w-full flex flex-col font-mono text-sm overflow-hidden"
     data-buffer-ui
     data-vim-mode={vimMode}
     role="textbox"
     aria-label="Code editor"
     aria-multiline="true"
-    style="font-family: {editorFontFamily};"
+    style="
+        background: {editorBgColor};
+        font-family: {editorFontFamily};
+        --eb-bg: {editorBgColor};
+        --eb-scrollbar-thumb: {editorScrollbarThumb};
+        --eb-scrollbar-hover: {editorFgColor};
+    "
     onkeydown={(e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === "s") {
             e.preventDefault();
@@ -1860,12 +1899,13 @@
         background: transparent;
     }
     .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #1a1a1a;
+        background: var(--eb-scrollbar-thumb, #1a1a1a);
         border-radius: 6px;
-        border: 3px solid #0d0d0d;
+        border: 3px solid var(--eb-bg, #0d0d0d);
     }
     .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-        background: #252525;
+        background: var(--eb-scrollbar-hover, #3a3a3a);
+        opacity: 0.5;
     }
 
     /* ── Scrollbar diff markers overlay ─────────────────────────────────────── */
@@ -1883,7 +1923,7 @@
         height: 100%;
         pointer-events: none;
         z-index: 11;
-        background: #0d0d0d;
+        background: var(--eb-bg, #0d0d0d);
     }
     .scrollbar-diff-mark {
         position: absolute;
@@ -1906,7 +1946,7 @@
     .diff-hunk-preview {
         position: fixed;
         z-index: 9999;
-        background: #161616;
+        background: var(--eb-bg, #161616);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 8px;
         padding: 4px 0;

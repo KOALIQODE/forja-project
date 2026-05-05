@@ -54,6 +54,12 @@ export interface DrawState {
     contentStartX: number;
     currentTokenColors: typeof TOKEN_COLORS;
     editorBgColor: string;
+    editorFgColor: string;
+    editorCursorColor: string;
+    editorActiveLineColor: string;
+    editorSelectionColor: string;
+    editorLineNumberColor: string;
+    editorLineNumberActiveColor: string;
     getLine: (line: number) => string;
     getVisualRange: () => [CursorPosition, CursorPosition] | null;
     untrack: typeof untrack;
@@ -107,6 +113,12 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
         contentStartX,
         currentTokenColors,
         editorBgColor,
+        editorFgColor,
+        editorCursorColor,
+        editorActiveLineColor,
+        editorSelectionColor,
+        editorLineNumberColor,
+        editorLineNumberActiveColor,
         getLine,
         getVisualRange,
         untrack,
@@ -211,7 +223,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                     if (y + editorLineHeight / 2 < 0 || y - editorLineHeight / 2 > rect.height) continue;
 
                     if (highlightActiveLine && i === cursorLine) {
-                        ctx.fillStyle = "rgba(52, 211, 153, 0.08)";
+                        ctx.fillStyle = editorActiveLineColor;
                         ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
                     }
 
@@ -223,7 +235,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                     if (visualBounds) {
                         const [selectionStart, selectionEnd] = visualBounds;
                         if (i >= selectionStart.line && i <= selectionEnd.line) {
-                            ctx.fillStyle = "rgba(52, 211, 153, 0.18)";
+                            ctx.fillStyle = editorSelectionColor;
                             ctx.fillRect(contentStartX, y - editorLineHeight / 2 + 2, rect.width - contentStartX, editorLineHeight - 4);
                         }
                     }
@@ -244,7 +256,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                 const y = (i - startLine) * editorLineHeight + yOffset + editorLineHeight / 2;
 
                 if (highlightActiveLine && i === cursorLine) {
-                    ctx.fillStyle = "rgba(52, 211, 153, 0.08)";
+                    ctx.fillStyle = editorActiveLineColor;
                     ctx.fillRect(0, y - editorLineHeight / 2, rect.width, editorLineHeight);
                 }
 
@@ -262,7 +274,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                         // Phase 5: use metrics cache for selection bounds
                         const highlightStart = contentStartX + metricsCache.measure(ctx, line.slice(0, sc), editorFont);
                         const highlightEnd = contentStartX + metricsCache.measure(ctx, line.slice(0, Math.max(ec, sc)), editorFont);
-                        ctx.fillStyle = "rgba(52, 211, 153, 0.18)";
+                        ctx.fillStyle = editorSelectionColor;
                         ctx.fillRect(
                             highlightStart,
                             y - editorLineHeight / 2 + 2,
@@ -368,14 +380,14 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                             const isRelative = vimModeEnabled && vimMode !== "insert";
                             if (isRelative) {
                                 if (i === cursorLine) {
-                                    ctx.fillStyle = "#c0c0c0";
+                                    ctx.fillStyle = editorLineNumberActiveColor;
                                     ctx.fillText((i + 1).toString(), lineNumberX, rowY);
                                 } else {
-                                    ctx.fillStyle = "#3a3a3a";
+                                    ctx.fillStyle = editorLineNumberColor;
                                     ctx.fillText(Math.abs(i - cursorLine).toString(), lineNumberX, rowY);
                                 }
                             } else {
-                                ctx.fillStyle = i === cursorLine ? "#c0c0c0" : "#3a3a3a";
+                                ctx.fillStyle = i === cursorLine ? editorLineNumberActiveColor : editorLineNumberColor;
                                 ctx.fillText((i + 1).toString(), lineNumberX, rowY);
                             }
                         }
@@ -419,12 +431,14 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                             const cx = contentStartX + (cursorChar % charsPerRow) * charWidth;
                             if (vimModeEnabled && vimMode !== "insert") {
                                 const ch = line[cursorChar] || " ";
-                                ctx.fillStyle = "rgba(52, 211, 153, 0.6)";
+                                ctx.globalAlpha = 0.6;
+                                ctx.fillStyle = editorCursorColor;
                                 ctx.fillRect(cx, rowY - editorLineHeight / 2 + 2, charWidth, editorLineHeight - 4);
-                                ctx.fillStyle = "#ffffff";
+                                ctx.globalAlpha = 1.0;
+                                ctx.fillStyle = editorFgColor;
                                 ctx.fillText(ch, cx, rowY);
                             } else {
-                                ctx.fillStyle = "#34d399";
+                                ctx.fillStyle = editorCursorColor;
                                 ctx.fillRect(cx, rowY - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
                             }
                         }
@@ -508,19 +522,19 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                 }
 
                 if (showLineNumbers) {
-                    ctx.fillStyle = "#3a3a3a";
+                    ctx.fillStyle = editorLineNumberColor;
                     ctx.textAlign = "right";
                     const isRelative = vimModeEnabled && vimMode !== "insert";
                     if (isRelative) {
                         if (i === cursorLine) {
-                            ctx.fillStyle = "#c0c0c0";
+                            ctx.fillStyle = editorLineNumberActiveColor;
                             ctx.fillText((i + 1).toString(), lineNumberX, y);
                         } else {
-                            ctx.fillStyle = "#3a3a3a";
+                            ctx.fillStyle = editorLineNumberColor;
                             ctx.fillText(Math.abs(i - cursorLine).toString(), lineNumberX, y);
                         }
                     } else {
-                        ctx.fillStyle = i === cursorLine ? "#c0c0c0" : "#3a3a3a";
+                        ctx.fillStyle = i === cursorLine ? editorLineNumberActiveColor : editorLineNumberColor;
                         ctx.fillText((i + 1).toString(), lineNumberX, y);
                     }
                 }
@@ -536,12 +550,14 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                     if (vimModeEnabled && vimMode !== "insert") {
                         const char = line[cursorChar] || " ";
                         const charWidth = metricsCache.measure(ctx, char, editorFont);
-                        ctx.fillStyle = "rgba(52, 211, 153, 0.6)";
+                        ctx.globalAlpha = 0.6;
+                        ctx.fillStyle = editorCursorColor;
                         ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, charWidth, editorLineHeight - 4);
-                        ctx.fillStyle = "#ffffff";
+                        ctx.globalAlpha = 1.0;
+                        ctx.fillStyle = editorFgColor;
                         ctx.fillText(char, cursorX, y);
                     } else {
-                        ctx.fillStyle = "#34d399";
+                        ctx.fillStyle = editorCursorColor;
                         ctx.fillRect(cursorX, y - editorLineHeight / 2 + 2, 2, editorLineHeight - 4);
                     }
                 }
@@ -711,7 +727,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
 
             if (matchLine !== -1) {
                 // Use the bracket-colorizer color for this pair when available
-                let pairColor = "#34d399";
+                let pairColor = editorCursorColor;
                 if (bracketColors.length > 0) {
                     const lineOffsets2: number[] = [];
                     let off = 0;
