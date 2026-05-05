@@ -33,7 +33,9 @@
     import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "$lib/utils/lspClient";
     import { pluginRunBracketProviders, pluginEmitEvent, type BracketRange } from "$lib/utils/pluginClient";
     import { activeTheme, bracketRanges, loadedPlugins, pluginsReady, pluginActivityVersion } from "$lib/stores/pluginStore";
-    import { bracketRangesToColors } from "$lib/utils/themeEngine";
+    import { bracketRangesToColors, resolveTokenColors } from "$lib/utils/themeEngine";
+    import { buildDiagByLine } from "$lib/utils/diagnosticsUtils";
+    import { BracketColorizer } from "$lib/utils/BracketColorizer";
     import {
         handleCommandModeKeyDown,
         handleInsertModeKeyDown,
@@ -42,6 +44,28 @@
         type VimHandlerContext,
     } from "./VimHandlers";
     import EditorFileInfo from "./EditorFileInfo.svelte";
+    import type { CursorPosition, EditorSnapshot, VimRegister, Token, SyntaxHighlight } from './types';
+    import {
+        isWordChar, isWhitespace,
+        comparePositions, sortPositions, clonePosition,
+        advancePosition as _advancePosition,
+        retreatPosition as _retreatPosition,
+        charAt as _charAt,
+        getRangeText as _getRangeText,
+        lineLength as _lineLength,
+        clampLine as _clampLine,
+        clampChar as _clampChar,
+    } from './positionUtils';
+    import {
+        findNextWordStart as _findNextWordStart,
+        findPreviousWordStart as _findPreviousWordStart,
+        findWordEnd as _findWordEnd,
+        findCharForward as _findCharForward,
+        findCharBackward as _findCharBackward,
+        findMatchingBracket as _findMatchingBracket,
+    } from './textNavigation';
+    import { getTextObjectRange as _getTextObjectRange } from './textObjects';
+    import { HighlightManager } from '$lib/utils/HighlightManager';
 
     interface Props {
         filePath: string;
@@ -72,30 +96,14 @@
     let lastFindStop = $state(false);
     let lastSearchQuery = $state("");
 
-    // ── Bracket pair colorizer state ─────────────────────────────────────────────
-    let bracketColors = $state<Array<{ start: number; finish: number; color: string }>>([]);
-    let bracketUpdateHandle: ReturnType<typeof setTimeout> | null = null;
+    // ── Bracket pair colorizer ────────────────────────────────────────────────────
+    type BracketColor = { start: number; finish: number; color: string };
+    let bracketColors = $state<BracketColor[]>([]);
+    const bracketColorizer = new BracketColorizer();
 
     // ── Reactive theme colors (canvas uses these instead of hardcoded values) ─────
     let editorBgColor = $derived($activeTheme?.colors?.bg ?? '#0d0d0d');
-    let currentTokenColors = $derived.by(() => {
-        const s = $activeTheme?.syntax;
-        if (!s) return TOKEN_COLORS;
-        return {
-            ...TOKEN_COLORS,
-            Keyword:     s.keyword       ?? TOKEN_COLORS.Keyword,
-            Function:    s.function_name ?? TOKEN_COLORS.Function,
-            Type:        s.type          ?? TOKEN_COLORS.Type,
-            String:      s.string        ?? TOKEN_COLORS.String,
-            Comment:     s.comment       ?? TOKEN_COLORS.Comment,
-            Number:      s.number        ?? TOKEN_COLORS.Number,
-            Punctuation: s.punctuation   ?? TOKEN_COLORS.Punctuation,
-            Operator:    s.operator      ?? TOKEN_COLORS.Operator,
-            Variable:    s.variable      ?? TOKEN_COLORS.Variable,
-            Constant:    s.constant      ?? TOKEN_COLORS.Constant,
-            Attribute:   s.attribute     ?? TOKEN_COLORS.Attribute,
-        };
-    });
+    let currentTokenColors = $derived(resolveTokenColors($activeTheme?.syntax, TOKEN_COLORS));
 
     // Redraw canvas when theme changes — also invalidate chunk cache so syntax colors update
     $effect(() => {
@@ -141,56 +149,19 @@
         }
     });
 
-    /** Rebuild bracket color ranges from the current buffer (debounced 400ms).
-     *
-     * Text source priority:
-     *  1. All lines in lineCache → use cache directly (reflects unsaved edits).
-     *  2. File is clean (not dirty) but cache is incomplete (large file, not fully
-     *     scrolled) → read full content from disk for complete bracket analysis.
-     *  3. File is dirty and cache is incomplete → use cache as-is; brackets in
-     *     unloaded lines won't be colored (acceptable tradeoff for large dirty files).
-     */
     function scheduleBracketUpdate() {
-        if (bracketUpdateHandle !== null) clearTimeout(bracketUpdateHandle);
-        bracketUpdateHandle = setTimeout(async () => {
-            bracketUpdateHandle = null;
-            try {
-                let text: string;
-                const allCached = lineCache.size >= totalLines;
-
-                if (allCached) {
-                    const lines: string[] = [];
-                    for (let i = 0; i < totalLines; i++) lines.push(lineCache.get(i) ?? "");
-                    text = lines.join("\n");
-                } else if (!isDirty) {
-                    // Large clean file: read full content from disk for complete analysis.
-                    text = await invoke<string>("read_file", { path: filePath });
-                } else {
-                    // Large dirty file: use partial cache (only loaded lines are available).
-                    const lines: string[] = [];
-                    for (let i = 0; i < totalLines; i++) lines.push(lineCache.get(i) ?? "");
-                    text = lines.join("\n");
-                }
-
-                if (!text.trim()) return;
-                const ranges = await pluginRunBracketProviders(text, language);
-                console.log("[bracket] ranges:", ranges.length, "lang:", language, "textLen:", text.length);
-                bracketRanges.set(ranges);
-                // Use theme palette if available, otherwise fall back to built-in colors
-                const palette = get(activeTheme)?.brackets?.length
-                    ? get(activeTheme)!.brackets
-                    : ["#f7768e", "#e0af68", "#9ece6a", "#7aa2f7", "#bb9af7", "#2ac3de"];
-                bracketColors = bracketRangesToColors(ranges, palette);
-                queueRedraw();
-            } catch (e) {
-                console.warn("[bracket] update failed:", e);
-            }
-        }, 400);
+        bracketColorizer.schedule({
+            getLineCache: () => lineCache,
+            getTotalLines: () => totalLines,
+            getIsDirty: () => isDirty,
+            filePath,
+            language,
+            onColors: (colors) => { bracketColors = colors; },
+            onQueueRedraw: queueRedraw,
+        });
     }
 
     let lineCache = new Map<number, string>();
-    let tokenCache = new Map<number, Token[]>();
-    let highlightEnabled = $state(false);
 
     // ── Diff gutter state ────────────────────────────────────────────────────────
     let mouseX             = $state(0);
@@ -219,6 +190,20 @@
     const viewportDiffCache = new ViewportDiffCache();
     const hunkManager      = new GitHunkManager();
     const previewEngine    = new HunkPreviewEngine();
+    const highlightManager = new HighlightManager({
+        getLanguage: () => language,
+        getFilePath: () => filePath,
+        getLineCache: () => lineCache,
+        getTotalLines: () => totalLines,
+        getScrollContainer: () => scrollContainer,
+        getCurrentScrollTop: () => currentScrollTop,
+        getEditorLineHeight: () => editorLineHeight,
+        chunkRenderer,
+        docBridge,
+        diffScheduler,
+        onQueueRedraw: () => queueRedraw(),
+        onSetWrapLayoutDirty: (v) => { wrapLayoutDirty = v; },
+    });
 
     // ── Phase 7: Frame budget ────────────────────────────────────────────────────
     let lastFrameDuration = 0;
@@ -250,23 +235,6 @@
 
     let undoStack: EditorSnapshot[] = [];
     let redoStack: EditorSnapshot[] = [];
-
-    interface CursorPosition {
-        line: number;
-        char: number;
-    }
-
-    interface EditorSnapshot {
-        lineCache: Map<number, string>;
-        totalLines: number;
-        cursorLine: number;
-        cursorChar: number;
-    }
-
-    interface VimRegister {
-        text: string;
-        linewise: boolean;
-    }
 
     const DEFAULT_VIM_REGISTER: VimRegister = { text: "", linewise: false };
     const vimRegisters = new Map<string, VimRegister>([['"', { ...DEFAULT_VIM_REGISTER }]]);
@@ -336,16 +304,7 @@
 
     // ── Error Lens: rebuild line→diagnostic map when store updates ───────────────
     $effect(() => {
-        const next = new Map<number, Diagnostic>();
-        // severity priority: error > warning > info > hint
-        const order: Record<string, number> = { error: 0, warning: 1, info: 2, hint: 3 };
-        for (const d of fileDiagnostics) {
-            const existing = next.get(d.line);
-            if (!existing || order[d.severity] < order[existing.severity]) {
-                next.set(d.line, d);
-            }
-        }
-        diagByLine = next;
+        diagByLine = buildDiagByLine(fileDiagnostics);
         queueRedraw();
     });
 
@@ -404,17 +363,17 @@
         cursorChar = snapshot.cursorChar;
         normalizeCursor();
         chunkRenderer.invalidateAll();
-        tokenCache.clear();
-        pendingChunks.clear();
+        highlightManager.tokenCache.clear();
+        highlightManager.pendingChunks.clear();
 
         // Rebuild loadedChunks from the restored lineCache instead of clearing it
         // entirely. The snapshot contains the full in-memory content, so any chunk
         // whose lines are already present can be marked as loaded — this avoids a
         // re-fetch from disk that would produce stale content for highlighting.
-        loadedChunks.clear();
+        highlightManager.loadedChunks.clear();
         const totalChunks = Math.ceil(totalLines / CHUNK_SIZE);
         for (let chunkId = 0; chunkId < totalChunks; chunkId++) {
-            if (getCachedLinesForChunk(chunkId) !== null) loadedChunks.add(chunkId);
+            if (highlightManager.getCachedLinesForChunk(chunkId) !== null) highlightManager.loadedChunks.add(chunkId);
         }
 
         // Trigger a full diff recompute so mini.diff (and the gutter) immediately
@@ -436,9 +395,9 @@
                 await docBridge.open(currentFilePath ?? '', restoredLines.join('\n'), language);
             }
             // Prefer viewport-only highlighting (fast, uses the fresh AST).
-            const bridgeProduced = await highlightViewportViaDocBridge();
-            if (!bridgeProduced && highlightEnabled) {
-                void rehighlightLoadedChunks();
+            const bridgeProduced = await highlightManager.highlightViewportViaDocBridge();
+            if (!bridgeProduced && highlightManager.highlightEnabled) {
+                void highlightManager.rehighlightLoadedChunks();
             }
         })();
     }
@@ -468,34 +427,15 @@
         isDirty = savedContent !== '' && getCurrentContent() !== savedContent;
     }
 
-    function comparePositions(a: CursorPosition, b: CursorPosition) {
-        if (a.line !== b.line) return a.line - b.line;
-        return a.char - b.char;
-    }
-
-    function sortPositions(a: CursorPosition, b: CursorPosition): [CursorPosition, CursorPosition] {
-        return comparePositions(a, b) <= 0 ? [a, b] : [b, a];
-    }
-
-    function clonePosition(position: CursorPosition): CursorPosition {
-        return { line: position.line, char: position.char };
-    }
-
     function currentPosition(): CursorPosition {
         return { line: cursorLine, char: cursorChar };
     }
 
-    function lineLength(line: number) {
-        return getLine(line).length;
-    }
+    function lineLength(line: number) { return _lineLength(line, getLine); }
 
-    function clampLine(line: number) {
-        return Math.max(0, Math.min(line, Math.max(totalLines - 1, 0)));
-    }
+    function clampLine(line: number) { return _clampLine(line, totalLines); }
 
-    function clampChar(line: number, char: number) {
-        return Math.max(0, Math.min(char, lineLength(line)));
-    }
+    function clampChar(line: number, char: number) { return _clampChar(line, char, getLine); }
 
     function normalizeCursor() {
         cursorLine = clampLine(cursorLine);
@@ -591,154 +531,17 @@
         return pendingCount ? Math.max(parseInt(pendingCount, 10), 1) : defaultValue;
     }
 
-    function advancePosition(position: CursorPosition): CursorPosition | null {
-        const text = getLine(position.line);
-        if (position.char < text.length) {
-            return { line: position.line, char: position.char + 1 };
-        }
-        if (position.line < totalLines - 1) {
-            return { line: position.line + 1, char: 0 };
-        }
-        return null;
-    }
+    function advancePosition(pos: CursorPosition) { return _advancePosition(pos, getLine, totalLines); }
 
-    function retreatPosition(position: CursorPosition): CursorPosition | null {
-        if (position.char > 0) {
-            return { line: position.line, char: position.char - 1 };
-        }
-        if (position.line > 0) {
-            return { line: position.line - 1, char: lineLength(position.line - 1) };
-        }
-        return null;
-    }
+    function retreatPosition(pos: CursorPosition) { return _retreatPosition(pos, getLine); }
 
-    function charAt(position: CursorPosition) {
-        const text = getLine(position.line);
-        if (position.char < text.length) {
-            return text[position.char];
-        }
-        return position.line < totalLines - 1 ? "\n" : "";
-    }
+    function charAt(pos: CursorPosition) { return _charAt(pos, getLine, totalLines); }
 
-    function isWordChar(char: string) {
-        return /[A-Za-z0-9_]/.test(char);
-    }
+    function findNextWordStart(from: CursorPosition, count = 1) { return _findNextWordStart(from, getLine, totalLines, count); }
 
-    function isWhitespace(char: string) {
-        return /\s/.test(char);
-    }
+    function findPreviousWordStart(from: CursorPosition, count = 1) { return _findPreviousWordStart(from, getLine, totalLines, count); }
 
-    function findNextWordStart(from: CursorPosition, count = 1): CursorPosition {
-        let current = clonePosition(from);
-
-        for (let iteration = 0; iteration < count; iteration++) {
-            let walker = clonePosition(current);
-            const firstChar = charAt(walker);
-            const firstIsWord = isWordChar(firstChar);
-
-            while (true) {
-                const next = advancePosition(walker);
-                if (!next) {
-                    return current;
-                }
-                walker = next;
-                const char = charAt(walker);
-                if (!char) {
-                    return current;
-                }
-                if (firstIsWord) {
-                    if (!isWordChar(char)) break;
-                } else if (!isWhitespace(char)) {
-                    break;
-                }
-            }
-
-            while (isWhitespace(charAt(walker))) {
-                const next = advancePosition(walker);
-                if (!next) break;
-                walker = next;
-            }
-
-            current = walker;
-        }
-
-        return current;
-    }
-
-    function findPreviousWordStart(from: CursorPosition, count = 1): CursorPosition {
-        let current = clonePosition(from);
-
-        for (let iteration = 0; iteration < count; iteration++) {
-            let walker = retreatPosition(current);
-            if (!walker) {
-                return { line: 0, char: 0 };
-            }
-
-            while (walker && isWhitespace(charAt(walker))) {
-                walker = retreatPosition(walker);
-            }
-
-            if (!walker) {
-                return { line: 0, char: 0 };
-            }
-
-            const categoryIsWord = isWordChar(charAt(walker));
-            while (true) {
-                const previous = retreatPosition(walker);
-                if (!previous) break;
-                const char = charAt(previous);
-                if (categoryIsWord ? !isWordChar(char) : isWhitespace(char) || isWordChar(char)) {
-                    break;
-                }
-                walker = previous;
-            }
-
-            if (categoryIsWord) {
-                while (true) {
-                    const previous = retreatPosition(walker);
-                    if (!previous || !isWordChar(charAt(previous))) break;
-                    walker = previous;
-                }
-            }
-
-            current = walker;
-        }
-
-        return current;
-    }
-
-    function findWordEnd(from: CursorPosition, count = 1): CursorPosition {
-        let current = clonePosition(from);
-
-        for (let iteration = 0; iteration < count; iteration++) {
-            let walker = clonePosition(current);
-            while (isWhitespace(charAt(walker))) {
-                const next = advancePosition(walker);
-                if (!next) return walker;
-                walker = next;
-            }
-
-            const categoryIsWord = isWordChar(charAt(walker));
-            while (true) {
-                const next = advancePosition(walker);
-                if (!next) break;
-                const nextChar = charAt(next);
-                if (categoryIsWord ? !isWordChar(nextChar) : isWhitespace(nextChar) || isWordChar(nextChar)) {
-                    break;
-                }
-                walker = next;
-            }
-
-            current = walker;
-            if (iteration < count - 1) {
-                const next = advancePosition(current);
-                if (!next) break;
-                current = next;
-            }
-        }
-
-        return current;
-    }
+    function findWordEnd(from: CursorPosition, count = 1) { return _findWordEnd(from, getLine, totalLines, count); }
 
     function moveCursorToLineStart() {
         setCursor(cursorLine, 0);
@@ -760,168 +563,13 @@
         return [start, end];
     }
 
-    function findCharForward(ch: string, count: number, stop = false): number {
-        const line = getLine(cursorLine);
-        let found = 0;
-        for (let i = cursorChar + 1; i < line.length; i++) {
-            if (line[i] === ch) {
-                found++;
-                if (found === count) {
-                    return stop ? i - 1 : i;
-                }
-            }
-        }
-        return cursorChar;
-    }
+    function findCharForward(ch: string, count: number, stop = false) { return _findCharForward(ch, cursorChar, cursorLine, getLine, count, stop); }
 
-    function findCharBackward(ch: string, count: number, stop = false): number {
-        const line = getLine(cursorLine);
-        let found = 0;
-        for (let i = cursorChar - 1; i >= 0; i--) {
-            if (line[i] === ch) {
-                found++;
-                if (found === count) {
-                    return stop ? i + 1 : i;
-                }
-            }
-        }
-        return cursorChar;
-    }
+    function findCharBackward(ch: string, count: number, stop = false) { return _findCharBackward(ch, cursorChar, cursorLine, getLine, count, stop); }
 
-    function findMatchingBracket(line: number, char: number): CursorPosition | null {
-        const open = "({[";
-        const close = ")}]";
-        const lineText = getLine(line);
-        const startCh = lineText[char];
-        const isOpen = open.includes(startCh);
-        const matchCh = isOpen ? close[open.indexOf(startCh)] : open[close.indexOf(startCh)];
-        let depth = 0;
-        if (isOpen) {
-            for (let l = line; l < totalLines; l++) {
-                const text = getLine(l);
-                const startC = l === line ? char : 0;
-                for (let c = startC; c < text.length; c++) {
-                    if (text[c] === startCh) depth++;
-                    else if (text[c] === matchCh) {
-                        depth--;
-                        if (depth === 0) return { line: l, char: c };
-                    }
-                }
-            }
-        } else {
-            for (let l = line; l >= 0; l--) {
-                const text = getLine(l);
-                const startC = l === line ? char : text.length - 1;
-                for (let c = startC; c >= 0; c--) {
-                    if (text[c] === startCh) depth++;
-                    else if (text[c] === matchCh) {
-                        depth--;
-                        if (depth === 0) return { line: l, char: c };
-                    }
-                }
-            }
-        }
-        return null;
-    }
+    function findMatchingBracket(line: number, char: number) { return _findMatchingBracket(line, char, getLine, totalLines); }
 
-    function getTextObjectRange(
-        type: "i" | "a",
-        obj: string,
-    ): { start: CursorPosition; end: CursorPosition } | null {
-        if (obj === "w" || obj === "W") {
-            const line = getLine(cursorLine);
-            const testFn: (c: string) => boolean = obj === "W"
-                ? (c) => !/\s/.test(c)
-                : isWordChar;
-            let start = cursorChar;
-            while (start > 0 && testFn(line[start - 1])) start--;
-            let end = cursorChar;
-            while (end < line.length && testFn(line[end])) end++;
-            if (type === "a") {
-                while (end < line.length && /\s/.test(line[end])) end++;
-            }
-            return {
-                start: { line: cursorLine, char: start },
-                end: { line: cursorLine, char: end },
-            };
-        }
-
-        const pairs: Record<string, [string, string]> = {
-            "(": ["(", ")"], ")": ["(", ")"],
-            "[": ["[", "]"], "]": ["[", "]"],
-            "{": ["{", "}"], "}": ["{", "}"],
-            "<": ["<", ">"], ">": ["<", ">"],
-            '"': ['"', '"'],
-            "'": ["'", "'"],
-            "`": ["`", "`"],
-        };
-
-        const pair = pairs[obj];
-        if (!pair) return null;
-
-        const [openCh, closeCh] = pair;
-        const samePair = openCh === closeCh;
-
-        let openLine = cursorLine, openChar = -1;
-        let closeLinePos = cursorLine, closeChar = -1;
-
-        if (samePair) {
-            const line = getLine(cursorLine);
-            for (let i = 0; i < line.length; i++) {
-                if (line[i] === openCh && i < cursorChar) {
-                    openChar = i;
-                }
-            }
-            for (let i = cursorChar; i < line.length; i++) {
-                if (line[i] === openCh && i > openChar) {
-                    closeChar = i;
-                    break;
-                }
-            }
-            if (openChar < 0 || closeChar < 0) return null;
-            openLine = cursorLine; closeLinePos = cursorLine;
-        } else {
-            for (let l = cursorLine; l >= 0; l--) {
-                const line = getLine(l);
-                const startC = l === cursorLine ? cursorChar : line.length - 1;
-                for (let c = startC; c >= 0; c--) {
-                    if (line[c] === openCh) {
-                        openLine = l; openChar = c; break;
-                    }
-                }
-                if (openChar >= 0) break;
-            }
-            if (openChar < 0) return null;
-            let depth = 0;
-            for (let l = openLine; l < totalLines; l++) {
-                const line = getLine(l);
-                const startC = l === openLine ? openChar : 0;
-                for (let c = startC; c < line.length; c++) {
-                    if (line[c] === openCh) depth++;
-                    else if (line[c] === closeCh) {
-                        depth--;
-                        if (depth === 0) {
-                            closeLinePos = l; closeChar = c; break;
-                        }
-                    }
-                }
-                if (closeChar >= 0) break;
-            }
-            if (closeChar < 0) return null;
-        }
-
-        if (type === "i") {
-            return {
-                start: { line: openLine, char: openChar + 1 },
-                end: { line: closeLinePos, char: closeChar },
-            };
-        } else {
-            return {
-                start: { line: openLine, char: openChar },
-                end: { line: closeLinePos, char: closeChar + 1 },
-            };
-        }
-    }
+    function getTextObjectRange(type: 'i' | 'a', obj: string) { return _getTextObjectRange(type, obj, cursorLine, cursorChar, getLine, totalLines); }
 
     const INDENT_STR = "    "; // 4 spaces
 
@@ -940,57 +588,7 @@
         });
     }
 
-    // ── Debounced syntax highlight scheduler ─────────────────────────────────────
-    //
-    // Syntax highlighting requires 1-2 Tauri IPC round-trips (apply_text_edit +
-    // get_document_tokens). Firing these on every keystroke is wasteful — the text
-    // is already redrawn immediately via queueRedraw(), so the highlight can safely
-    // lag by a small amount without the user noticing.
-    //
-    // We debounce the refresh: the first edit after a pause fires immediately (via
-    // RAF), subsequent edits during a burst are coalesced and fire once the user
-    // stops typing for HIGHLIGHT_DEBOUNCE_MS.
-
-    const HIGHLIGHT_DEBOUNCE_MS = 120;
-    let highlightDebounceId: ReturnType<typeof setTimeout> | null = null;
-    let highlightPendingChunk = -1; // chunk that needs re-highlight in the fallback path
-
-    function scheduleHighlightRefresh(chunkId: number): void {
-        // Always track the latest affected chunk so the eventual refresh targets it.
-        highlightPendingChunk = chunkId;
-
-        if (highlightDebounceId !== null) {
-            clearTimeout(highlightDebounceId);
-        }
-        highlightDebounceId = setTimeout(() => {
-            highlightDebounceId = null;
-            void refreshHighlightsAfterEdit(highlightPendingChunk);
-            highlightPendingChunk = -1;
-        }, HIGHLIGHT_DEBOUNCE_MS);
-    }
-
-    async function refreshHighlightsAfterEdit(chunkId: number) {
-        // Phase 7: mark only the affected chunk dirty instead of rehighlighting everything
-        chunkRenderer.markDirty(chunkId);
-
-        if (docBridge.isOpen()) {
-            // Phase 6: use backend AST for visible-range tokens (fast, incremental).
-            // Falls back to highlight_syntax when the bridge returns no tokens
-            // (e.g. no WASM grammar installed for this language).
-            const bridgeProducedTokens = await highlightViewportViaDocBridge();
-            if (!bridgeProducedTokens && highlightEnabled) {
-                const lines = getCachedLinesForChunk(chunkId);
-                if (lines) await highlightChunk(lines, chunkId * CHUNK_SIZE);
-            }
-        } else if (highlightEnabled) {
-            // Fallback: rehighlight only the affected chunk
-            const lines = getCachedLinesForChunk(chunkId);
-            if (lines) await highlightChunk(lines, chunkId * CHUNK_SIZE);
-        }
-        queueRedraw();
-    }
-
-    function mutateDocument(mutation: () => void) {
+    async function mutateDocument(mutation: () => void) {
         pushUndoSnapshot();
         const preMutationLines = totalLines;
         mutation();
@@ -1013,7 +611,7 @@
         queueRedraw();
         scheduleBracketUpdate();
         // Debounced: coalesces rapid keystrokes into a single highlight IPC call.
-        scheduleHighlightRefresh(editChunk);
+        highlightManager.scheduleHighlightRefresh(editChunk);
         // Diff: notify incremental edit (±5 lines window around cursor)
         diffScheduler.notifyEdit(
             lineCache,
@@ -1038,18 +636,7 @@
         }
     }
 
-    function getRangeText(start: CursorPosition, end: CursorPosition) {
-        if (start.line === end.line) {
-            return getLine(start.line).slice(start.char, end.char);
-        }
-
-        const parts = [getLine(start.line).slice(start.char)];
-        for (let i = start.line + 1; i < end.line; i++) {
-            parts.push(getLine(i));
-        }
-        parts.push(getLine(end.line).slice(0, end.char));
-        return parts.join("\n");
-    }
+    function getRangeText(start: CursorPosition, end: CursorPosition) { return _getRangeText(start, end, getLine); }
 
     async function deleteRange(start: CursorPosition, end: CursorPosition) {
         await mutateDocument(() => {
@@ -1193,28 +780,6 @@
         });
     }
 
-    function getChunkBounds(chunkId: number) {
-        const start = chunkId * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE - 1, totalLines - 1);
-        return { start, end };
-    }
-
-    function getCachedLinesForChunk(chunkId: number): string[] | null {
-        const { start, end } = getChunkBounds(chunkId);
-        const lines: string[] = [];
-
-        for (let i = start; i <= end; i++) {
-            const line = lineCache.get(i);
-            if (line === undefined) {
-                return null;
-            }
-
-            lines.push(line);
-        }
-
-        return lines;
-    }
-
     // Helper functions to interact with backend
     async function fetchTotalLines(): Promise<number> {
         isLoading = true;
@@ -1235,212 +800,6 @@
             // ← queueRedraw() eliminado
         }
     }
-
-    let loadedChunks = new Set<number>();
-    
-    async function fetchChunk(lineIdx: number) {
-        const chunkId = Math.floor(lineIdx / CHUNK_SIZE);
-    
-        if (loadedChunks.has(chunkId) || pendingChunks.has(chunkId)) return;
-    
-        pendingChunks.add(chunkId);
-    
-        const { start, end } = getChunkBounds(chunkId);
-    
-        try {
-            const fetched = await invoke<string[]>("read_file_lines", {
-                path: filePath,
-                startLine: start,
-                endLine: end,
-            });
-
-            // Only populate lines that aren't already in lineCache.
-            // In-memory edits (set via mutateDocument) take priority over stale
-            // backend content that arrives asynchronously after the edit.
-            fetched.forEach((line, idx) => {
-                const lineNum = start + idx;
-                if (!lineCache.has(lineNum)) {
-                    lineCache.set(lineNum, line);
-                }
-            });
-            
-            console.log("chunk loaded", {
-                chunkId,
-                start,
-                end,
-                fetched: fetched.length
-            });
-    
-            if (highlightEnabled) {
-                const ok = await highlightChunk(fetched, start);
-    
-                if (!ok) {
-                    highlightEnabled = false;
-                    tokenCache.clear();
-                }
-            }
-    
-            loadedChunks.add(chunkId);
-            wrapLayoutDirty = true;
-            // Phase 4: new lines loaded → mark chunk canvas as needing re-render
-            chunkRenderer.markDirty(chunkId);
-            // Diff: update the line snapshot so the next real edit gets accurate data,
-            // but do NOT schedule a new diff here — chunk loading is not a user edit,
-            // and re-running diff on every scroll-triggered chunk load causes the
-            // overview-ruler markers to jump as unloaded lines shift from "baseline" to real.
-            diffScheduler.updateCurrentContent(lineCache, totalLines);
-            queueRedraw();
-    
-        } catch (e) {
-            console.error("Chunk Fetch Error:", e);
-        } finally {
-            pendingChunks.delete(chunkId);
-        }
-    }
-
-    async function highlightChunk(lines: string[], start: number): Promise<boolean> {
-        try {
-            const result = await invoke<SyntaxHighlight>("highlight_syntax", {
-                content: lines.join("\n"),
-                language,
-            });
-    
-            if (!result || !Array.isArray(result.tokens) || result.used_fallback) {
-                console.warn("Invalid syntax highlight response");
-                return false;
-            }
-    
-            let lineIdx = start;
-            let currentTokens: Token[] = [];
-    
-            for (const token of result.tokens) {
-                if (!token || typeof token.text !== "string") continue;
-    
-                const parts = token.text.split("\n");
-    
-                for (let i = 0; i < parts.length; i++) {
-                    currentTokens.push({
-                        text: parts[i],
-                        token_type: token.token_type || "Unknown",
-                    });
-    
-                    if (i < parts.length - 1) {
-                        tokenCache.set(lineIdx, currentTokens);
-                        currentTokens = [];
-                        lineIdx++;
-                    }
-                }
-            }
-    
-            if (currentTokens.length > 0) {
-                tokenCache.set(lineIdx, currentTokens);
-            }
-    
-            return true;
-        } catch (e) {
-            console.warn("Highlight failed, fallback to plain text:", e);
-            return false;
-        }
-    }
-
-    /**
-     * Phase 3 / Phase 6 — highlights only the visible viewport using the backend AST.
-     * Much cheaper than rehighlighting all loaded chunks: only N visible lines are queried.
-     *
-     * Returns true only if the bridge actually produced tokens. Lines inside the
-     * visible range that the bridge has no data for get their stale tokenCache
-     * entries removed so the canvas falls back to plain-text rendering from
-     * lineCache (instead of showing outdated highlighted text after an edit).
-     */
-    async function highlightViewportViaDocBridge(): Promise<boolean> {
-        if (!docBridge.isOpen() || !canvas || !scrollContainer) return false;
-        const startLine = Math.floor(currentScrollTop / editorLineHeight);
-        const endLine = Math.min(
-            startLine + Math.ceil(scrollContainer.clientHeight / editorLineHeight) + 2,
-            totalLines - 1
-        );
-        const lineTokens = await docBridge.getTokensForRange(startLine, endLine, lineCache);
-        if (!lineTokens) return false;
-
-        // Apply fresh tokens and evict stale tokens for lines the bridge has
-        // no data for (e.g. no WASM grammar installed, or no matching node).
-        // Without this, old tokenCache entries shadow lineCache edits.
-        for (let i = startLine; i <= endLine; i++) {
-            const tokens = lineTokens.get(i);
-            if (tokens !== undefined) {
-                tokenCache.set(i, tokens);
-                chunkRenderer.markDirty(Math.floor(i / CHUNK_SIZE));
-            } else {
-                tokenCache.delete(i);
-            }
-        }
-
-        return lineTokens.size > 0;
-    }
-
-    async function rehighlightLoadedChunks(): Promise<boolean> {
-        tokenCache.clear();
-
-        for (const chunkId of [...loadedChunks].sort((a, b) => a - b)) {
-            const lines = getCachedLinesForChunk(chunkId);
-            if (!lines) continue;
-
-            const ok = await highlightChunk(lines, chunkId * CHUNK_SIZE);
-            if (!ok) {
-                highlightEnabled = false;
-                tokenCache.clear();
-                queueRedraw();
-                return false;
-            }
-        }
-
-        queueRedraw();
-        return true;
-    }
-
-    async function refreshHighlightAvailability(): Promise<boolean> {
-        if (!language || language === "unknown") {
-            highlightEnabled = false;
-            tokenCache.clear();
-            queueRedraw();
-            return false;
-        }
-
-        try {
-            // Fast path: native languages are always compiled into the binary.
-            // No probe needed — just ask Rust if it knows this language.
-            const isNative = await invoke<boolean>("is_native_language", { language });
-
-            if (isNative) {
-                highlightEnabled = true;
-                return rehighlightLoadedChunks();
-            }
-
-            // Community WASM language: check if files are installed on disk
-            const probe = await invoke<SyntaxHighlight>("highlight_syntax", {
-                content: "x",
-                language,
-            });
-
-            if (!probe || !Array.isArray(probe.tokens) || probe.used_fallback) {
-                highlightEnabled = false;
-                tokenCache.clear();
-                queueRedraw();
-                return false;
-            }
-
-            highlightEnabled = true;
-            return rehighlightLoadedChunks();
-        } catch (e) {
-            console.warn("Highlight probe failed:", e);
-            highlightEnabled = false;
-            tokenCache.clear();
-            queueRedraw();
-            return false;
-        }
-    }
-
-    let pendingChunks = new Set<number>(); // Needs to be declared outside `requestChunk`
 
     interface BlameLine {
         author: string;
@@ -1486,7 +845,7 @@
             highlightActiveLine,
             showLineNumbers,
             cursorVisible,
-            highlightEnabled,
+            highlightEnabled: highlightManager.highlightEnabled,
             lastWrapCharWidth,
             lastWrapContentWidth,
             wrapLayoutDirty,
@@ -1508,7 +867,7 @@
             getLine,
             getVisualRange,
             untrack,
-            tokenCache,
+            tokenCache: highlightManager.tokenCache,
             bracketColors,
             blameCache,
             scheduleNextFrame: () => requestAnimationFrame(draw),
@@ -1976,17 +1335,11 @@
         insertLine,
         deleteLine,
         queueRedraw,
-        highlightViewportViaDocBridge,
+        highlightViewportViaDocBridge: () => highlightManager.highlightViewportViaDocBridge(),
         vimRegisters,
-        get lastFindChar() {
-            return lastFindChar;
-        },
-        get lastFindDir() {
-            return lastFindDir;
-        },
-        get lastFindStop() {
-            return lastFindStop;
-        },
+        getLastFindChar: () => lastFindChar,
+        getLastFindDir: () => lastFindDir,
+        getLastFindStop: () => lastFindStop,
         setLastFindChar: (value) => {
             lastFindChar = value;
         },
@@ -2065,7 +1418,7 @@
     
                 for (let i = currentStart; i < end; i++) {
                     if (!lineCache.has(i)) {
-                        fetchChunk(i);
+                        highlightManager.fetchChunk(i);
                         // break; // Original line. Commented out to ensure all visible lines are fetched as user scrolls.
                                // This prevents content from disappearing due to insufficient chunk loading.
                     }
@@ -2095,7 +1448,7 @@
             const startLine = chunkId * CHUNK_SIZE;
             if (startLine >= totalLines) continue;
             if (!lineCache.has(startLine)) {
-                fetchChunk(startLine);
+                highlightManager.fetchChunk(startLine);
             }
         }
     }
@@ -2156,47 +1509,48 @@
         }
     }
 
-    // --- Effect de Carga Inicial ---
-    // A Svelte effect to react to filePath changes
-    // $effect(() => {
-    //     // Only proceed if filePath is defined and has actually changed
-    //     if (filePath && filePath !== currentFilePath) {
-    //         console.log(
-    //             "EditorBuffer: filePath changed, resetting and loading new file:",
-    //             filePath,
-    //         );
+    // ── Event listener setup (Tauri + DOM) ──────────────────────────────────────
+    function handleGoToLine(e: Event) {
+        const { filePath: targetPath, line } = (e as CustomEvent).detail;
+        if (targetPath === filePath) {
+            setCursor(line - 1, 0);
+            if (vimModeEnabled) enterNormalMode();
+        }
+    }
 
-    //         // Reset all states related to the previous file
-    //         lineCache.clear();
-    //         tokenCache.clear();
-    //         pendingChunks.clear();
-    //         totalLines = 0;
-    //         currentScrollTop = 0;
-    //         // startLine is now derived, no need to reset it directly
-    //         highlightEnabled = false;
+    async function setupEventListeners(): Promise<() => void> {
+        const unlistenParserReady = await listen<string>("parser-ready", async (event) => {
+            if (event.payload !== language) return;
+            await highlightManager.refreshHighlightAvailability();
+        });
 
-    //         // Reset scroll position if container exists
-    //         if (scrollContainer) {
-    //             scrollContainer.scrollTop = 0;
-    //         }
+        const unlistenFileChanged = await listen("file-changed", async (event: any) => {
+            const changedPath = event.payload;
+            if (changedPath !== filePath || suppressExternalReload) return;
+            resetAndLoad(filePath);
+        });
 
-    //         // Load data sequentially
-    //         fetchTotalLines().then(() => {
-    //             // Cargar las primeras 3 pantallas al abrir
-    //             const visibleLines = Math.ceil(window.innerHeight / LINE_HEIGHT);
-    //             const chunksNeeded = Math.ceil((visibleLines * 3) / CHUNK_SIZE);
-                
-    //             for (let i = 0; i < chunksNeeded; i++) {
-    //                 const startLine = i * CHUNK_SIZE;
-    //                 if (startLine < totalLines) {
-    //                     fetchChunk(startLine);
-    //                 }
-    //             }
-    //             // queueRedraw();
-    //         });
-    //         currentFilePath = filePath; // Update current path after initiating load
-    //     }
-    // });
+        const unlistenFileSaved = await listen("file-saved", (event: any) => {
+            window.dispatchEvent(new CustomEvent('explorer-refresh', {
+                detail: { path: event.payload },
+            }));
+        });
+
+        window.addEventListener('go-to-line', handleGoToLine);
+
+        const unlistenFocus = await listen("tauri://focus", () => {
+            queueRedraw();
+        });
+
+        return () => {
+            unlistenParserReady();
+            unlistenFileChanged();
+            unlistenFileSaved();
+            unlistenFocus();
+            window.removeEventListener('go-to-line', handleGoToLine);
+        };
+    }
+
     $effect(() => {
         if (filePath && filePath !== currentFilePath) {
             resetAndLoad(filePath);
@@ -2206,15 +1560,12 @@
     function resetAndLoad(path: string) {
         console.trace("[EditorBuffer] resetAndLoad called for:", path);
         lineCache.clear();
-        tokenCache.clear();
-        pendingChunks.clear();
-        loadedChunks.clear();
+        highlightManager.reset();
         undoStack = [];
         redoStack = [];
     
         totalLines = 0;
         currentScrollTop = 0;
-        highlightEnabled = false;
         vimMode = vimModeEnabled ? "normal" : "insert";
         commandLine = "";
         visualAnchor = null;
@@ -2232,11 +1583,7 @@
         // Phase 3 bridge: close previous document (no-op if not open)
         void docBridge.close();
         // Cancel any pending debounced highlight from the previous file.
-        if (highlightDebounceId !== null) {
-            clearTimeout(highlightDebounceId);
-            highlightDebounceId = null;
-        }
-        highlightPendingChunk = -1;
+        highlightManager.cancelPendingDebounce();
         // Diff: reset all diff state for the new file (keeps onDiffReady callbacks)
         diffScheduler.reset();
         viewportDiffCache.clear();
@@ -2254,7 +1601,7 @@
         currentFilePath = path;
     
         fetchTotalLines().then(async () => {
-            await refreshHighlightAvailability();
+            await highlightManager.refreshHighlightAvailability();
             void fetchBlame();
 
             // Fetch git HEAD and full file content in parallel so that when
@@ -2302,7 +1649,7 @@
     
             for (let i = 0; i < chunksNeeded; i++) {
                 const lineIdx = i * CHUNK_SIZE;
-                if (lineIdx < totalLines) fetchChunk(lineIdx);
+                if (lineIdx < totalLines) highlightManager.fetchChunk(lineIdx);
             }
         });
     }
@@ -2358,8 +1705,6 @@
             resetAndLoad(filePath);
         }
 
-        // Give the editor keyboard focus so the user can type immediately
-        // without needing to click first.
         editorContainer?.focus();
         const blinkInterval = setInterval(() => {
             cursorVisible = !cursorVisible;
@@ -2383,111 +1728,27 @@
             wrapLayoutDirty = true;
             queueRedraw();
         });
-
-        if (canvas) {
-            resizeObserver.observe(canvas);
-        }
+        if (canvas) resizeObserver.observe(canvas);
 
         invoke("watch_directory", {
             path: filePath.substring(0, filePath.lastIndexOf("/")),
         }).catch((e) => console.error("Failed to start directory watcher:", e));
 
-        // 🔧 AQUÍ: Hacer async y await los listeners
-        let unlistenParserReady: (() => void) | null = null;
-        let unlistenFileChanged: (() => void) | null = null;
-        let unlistenFileSaved: (() => void) | null = null;
-        let unlistenFocus: (() => void) | null = null;
+        let cleanupListeners: (() => void) | null = null;
+        void setupEventListeners().then((cleanup) => { cleanupListeners = cleanup; });
 
-        (async () => {
-            unlistenParserReady = await listen<string>("parser-ready", async (event) => {
-                if (event.payload !== language) return;
-
-                console.log("Parser ready, refreshing highlighted chunks...");
-                await refreshHighlightAvailability();
-            });
-
-            unlistenFileChanged = await listen("file-changed", async (event: any) => {
-                const changedPath = event.payload;
-                console.log("[file-changed] path:", changedPath, "| filePath:", filePath, "| match:", changedPath === filePath, "| suppressed:", suppressExternalReload);
-
-                if (changedPath !== filePath) return;
-
-                // Ignore events caused by our own save (covers multiple watcher
-                // events per write that some filesystems emit).
-                if (suppressExternalReload) return;
-
-                console.log("[file-changed] External change detected, reloading file.");
-                resetAndLoad(filePath);
-            });
-            
-            // Nuevo: escuchar guardado propio — solo refrescar explorer, NO el buffer
-            unlistenFileSaved = await listen("file-saved", (event: any) => {
-                const savedPath = event.payload;
-                // Disparar evento para que el explorer refresque el tree
-                window.dispatchEvent(new CustomEvent('explorer-refresh', { 
-                    detail: { path: savedPath } 
-                }));
-                // NO tocar el buffer — ya tiene el contenido correcto en lineCache
-            });
-
-            // Escuchar evento para ir a una línea específica
-            const handleGoToLine = (e: any) => {
-                const { filePath: targetPath, line } = e.detail;
-                if (targetPath === filePath) {
-                    // line is 1-based from TODO store, setCursor is 0-based
-                    setCursor(line - 1, 0);
-                    if (vimModeEnabled) {
-                        enterNormalMode();
-                    }
-                }
-            };
-            window.addEventListener('go-to-line', handleGoToLine);
-
-            // Escuchar foco de ventana
-            unlistenFocus = await listen("tauri://focus", async () => {
-                // Only trigger a visual refresh on focus — do NOT reset totalLines
-                // from disk, as that would corrupt in-memory edits.
-                queueRedraw();
-            });
-        })(); // Ejecutar inmediatamente
-
-        // Cleanup en onDestroy
         return () => {
-          cancelAnimationFrame(fetchLoopId);
-            // cancelAnimationFrame(raf);
+            cancelAnimationFrame(fetchLoopId);
             clearInterval(blinkInterval);
             resizeObserver.disconnect();
             unsubDiff();
             diffScheduler.dispose();
-
-            // Ahora son funciones, no Promises
-            if (unlistenParserReady) unlistenParserReady();
-            if (unlistenFileChanged) unlistenFileChanged();
-            if (unlistenFileSaved) unlistenFileSaved();
-            if (unlistenFocus) unlistenFocus();
-            window.removeEventListener('go-to-line', handleGoToLine);
-            // Phase 3 bridge: release backend document state
+            cleanupListeners?.();
             void docBridge.close();
-            // LSP: close document
             void lspCloseDocument(language, filePath);
-            // Clear the save-debounce timer so it doesn't fire after teardown
             if (saveDebounceHandle !== null) clearTimeout(saveDebounceHandle);
         };
     });
-    
-    const handleGoToLine = () => {
-      
-    }
-    
-    // --- Types & Colors ---
-    interface Token {
-        text: string;
-        token_type: string;
-    }
-    interface SyntaxHighlight {
-        tokens: Token[];
-        used_fallback: boolean;
-    }
 </script>
 
 <div
@@ -2498,7 +1759,7 @@
     role="textbox"
     aria-label="Code editor"
     aria-multiline="true"
-    style={`font-family: ${editorFontFamily};`}
+    style="font-family: {editorFontFamily};"
     onkeydown={(e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === "s") {
             e.preventDefault();
@@ -2542,7 +1803,7 @@
                 added/modified hunk → deleted must be on top so it is visible.
             -->
             {#each [false, true] as renderDeleted}
-                {#each scrollbarHunks as hunk, i (renderDeleted ? `d${i}` : `a${i}`)}
+                {#each scrollbarHunks as hunk, i (renderDeleted ? 'd' + i : 'a' + i)}
                     {#if (hunk.status === 'deleted') === renderDeleted}
                         {@const anchorLine = hunk.status === 'deleted' ? hunk.afterLine + 1 : hunk.newStart}
                         {@const spanLines  = hunk.status === 'deleted' ? 1 : (hunk.newEnd - hunk.newStart)}

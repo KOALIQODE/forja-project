@@ -29,8 +29,8 @@
   </div>
 
   <!-- Line count -->
-  <div class="flex items-baseline gap-1 px-2.5 py-1.5">
-    <span class="text-[12px] font-normal tabular-nums" style="color:#d4d4d8">{totalLines.toLocaleString()}</span>
-    <span class="text-[9px] uppercase tracking-widest" style="color:#52525b">ln</span>
+  <div class="flex items-center gap-1.5 px-2.5 py-1.5">
+    <span class="text-[10px] font-medium uppercase tracking-wider" style="color:#71717a">LN</span>
+    <span class="text-[11px] font-normal tabular-nums" style="color:#d4d4d8">{totalLines.toLocaleString()}</span>
   </div>
 </div>

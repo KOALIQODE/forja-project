@@ -56,9 +56,9 @@ export interface VimHandlerContext {
     queueRedraw: () => void;
     highlightViewportViaDocBridge: () => Promise<boolean>;
     vimRegisters: Map<string, VimRegister>;
-    lastFindChar: string;
-    lastFindDir: 1 | -1;
-    lastFindStop: boolean;
+    getLastFindChar: () => string;
+    getLastFindDir: () => 1 | -1;
+    getLastFindStop: () => boolean;
     setLastFindChar: (c: string) => void;
     setLastFindDir: (d: 1 | -1) => void;
     setLastFindStop: (s: boolean) => void;
@@ -188,12 +188,12 @@ function setCurrentRegister(ctx: VimHandlerContext, value: VimRegister): void {
 }
 
 function repeatLastFind(ctx: VimHandlerContext, count: number, reverse = false): void {
-    if (!ctx.lastFindChar) return;
+    if (!ctx.getLastFindChar()) return;
 
-    const dir = reverse ? (ctx.lastFindDir === 1 ? -1 : 1) : ctx.lastFindDir;
+    const dir = reverse ? (ctx.getLastFindDir() === 1 ? -1 : 1) : ctx.getLastFindDir();
     const target = dir === 1
-        ? ctx.findCharForward(ctx.lastFindChar, count, ctx.lastFindStop)
-        : ctx.findCharBackward(ctx.lastFindChar, count, ctx.lastFindStop);
+        ? ctx.findCharForward(ctx.getLastFindChar(), count, ctx.getLastFindStop())
+        : ctx.findCharBackward(ctx.getLastFindChar(), count, ctx.getLastFindStop());
 
     ctx.setNormalCursor(ctx.getCursorLine(), target);
     ctx.queueRedraw();

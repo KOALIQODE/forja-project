@@ -1,4 +1,4 @@
-import type { ThemeDefinition } from "$lib/utils/pluginClient";
+import type { ThemeDefinition, ThemeSyntax } from "$lib/utils/pluginClient";
 
 /**
  * Apply a ThemeDefinition to the document root as CSS custom properties.
@@ -57,6 +57,31 @@ export function clearTheme(): void {
     for (let i = 1; i <= 20; i++) {
         root.style.removeProperty(`--bracket-depth-${i}`);
     }
+}
+
+/**
+ * Merge a theme's syntax overrides onto the editor's base TOKEN_COLORS.
+ * Returns base unchanged when syntax is absent (theme not loaded / no overrides).
+ */
+export function resolveTokenColors(
+    syntax: ThemeSyntax | undefined | null,
+    base: Record<string, string>,
+): Record<string, string> {
+    if (!syntax) return base;
+    return {
+        ...base,
+        Keyword:     syntax.keyword       ?? base.Keyword,
+        Function:    syntax.function_name ?? base.Function,
+        Type:        syntax.type          ?? base.Type,
+        String:      syntax.string        ?? base.String,
+        Comment:     syntax.comment       ?? base.Comment,
+        Number:      syntax.number        ?? base.Number,
+        Punctuation: syntax.punctuation   ?? base.Punctuation,
+        Operator:    syntax.operator      ?? base.Operator,
+        Variable:    syntax.variable      ?? base.Variable,
+        Constant:    syntax.constant      ?? base.Constant,
+        Attribute:   syntax.attribute     ?? base.Attribute,
+    };
 }
 
 /**

@@ -65,11 +65,18 @@
         transition:fly={{ x: 320, duration: 300 }}
     >
         <!-- Resize handle -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
         <div
             role="separator"
             aria-label="Resize sidebar"
-            class="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-emerald-500/30 transition-colors"
+            aria-orientation="vertical"
+            tabindex="0"
+            class="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-emerald-500/30 focus:bg-emerald-500/40 focus:outline-none transition-colors"
             onmousedown={startResizing}
+            onkeydown={(e) => {
+                if (e.key === 'ArrowLeft') sidebarWidth = Math.min(sidebarWidth + 10, MAX_WIDTH);
+                if (e.key === 'ArrowRight') sidebarWidth = Math.max(sidebarWidth - 10, MIN_WIDTH);
+            }}
         ></div>
 
         <header class="shrink-0 border-b border-zinc-800/40 bg-[#0a0a0a]/80 backdrop-blur-sm p-4">

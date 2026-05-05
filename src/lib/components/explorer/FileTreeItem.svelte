@@ -253,6 +253,6 @@
   {/if}
 </div>
 
-<style>
-  .text-blue-400-git { color: #60a5fa; }
-</style>
+
+
+<style></style>
