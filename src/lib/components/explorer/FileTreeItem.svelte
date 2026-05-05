@@ -7,6 +7,7 @@
   import { GIT_STATUS_COLORS, GIT_STATUS_LABELS } from '$lib/utils/explorerHelpers';
   import { getFileIcon } from '$lib/utils/fileIcons';
   import { tick } from 'svelte';
+  import FileTreeItem from './FileTreeItem.svelte';
   import { activeUITheme } from '$lib/stores/uiThemeStore';
 
   let { entry, depth = 0, handleEntryClick, isVirtual = false, onContextMenu }: { 
@@ -35,9 +36,11 @@
   let isCreatingFile = $derived($inlineAction?.type === 'create_file' && $inlineAction?.path === entry.path);
   let isCreatingDir = $derived($inlineAction?.type === 'create_dir' && $inlineAction?.path === entry.path);
   
-  let newName = $state(entry.name);
+  let newName = $state('');
   let creationName = $state('');
   let inputElement: HTMLInputElement | null = $state(null);
+
+  $effect(() => { if (isRenaming) newName = entry.name; });
 
   $effect(() => {
     if ((isRenaming || isCreatingFile || isCreatingDir) && inputElement) {
@@ -226,7 +229,7 @@
         </div>
       {:else}
         {#each children as child}
-          <svelte:self entry={child} depth={depth + 1} {handleEntryClick} {onContextMenu} />
+          <FileTreeItem entry={child} depth={depth + 1} {handleEntryClick} {onContextMenu} />
         {/each}
       {/if}
     </div>

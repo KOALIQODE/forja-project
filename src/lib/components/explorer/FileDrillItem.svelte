@@ -33,9 +33,11 @@
   let isCreatingFile = $derived($inlineAction?.type === 'create_file' && $inlineAction?.path === entry.path);
   let isCreatingDir = $derived($inlineAction?.type === 'create_dir' && $inlineAction?.path === entry.path);
   
-  let newName = $state(entry.name);
+  let newName = $state('');
   let creationName = $state('');
   let inputElement: HTMLInputElement | null = $state(null);
+
+  $effect(() => { if (isRenaming) newName = entry.name; });
 
   $effect(() => {
     if ((isRenaming || isCreatingFile || isCreatingDir) && inputElement) {

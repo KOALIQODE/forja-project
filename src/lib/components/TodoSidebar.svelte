@@ -66,6 +66,8 @@
     >
         <!-- Resize handle -->
         <div
+            role="separator"
+            aria-label="Resize sidebar"
             class="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-emerald-500/30 transition-colors"
             onmousedown={startResizing}
         ></div>
