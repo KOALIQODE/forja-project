@@ -1,9 +1,5 @@
 import { writable } from 'svelte/store';
-
-const STORAGE_KEYS = {
-  PROGRAM: 'forja-preferences-program',
-  BUFFER: 'forja-preferences-buffer',
-} as const;
+import { STORAGE_KEYS } from '$lib/utils/constants';
 
 export const PROGRAM_FONT_OPTIONS = [
   {
@@ -177,13 +173,13 @@ function applyBufferPreferences(preferences: BufferPreferences) {
 }
 
 const initialProgramPreferences = loadStoredPreferences(
-  STORAGE_KEYS.PROGRAM,
+  STORAGE_KEYS.PREFERENCES_PROGRAM,
   DEFAULT_PROGRAM_PREFERENCES,
   sanitizeProgramPreferences,
 );
 
 const initialBufferPreferences = loadStoredPreferences(
-  STORAGE_KEYS.BUFFER,
+  STORAGE_KEYS.PREFERENCES_BUFFER,
   DEFAULT_BUFFER_PREFERENCES,
   sanitizeBufferPreferences,
 );
@@ -194,13 +190,13 @@ export const bufferPreferences = writable<BufferPreferences>(initialBufferPrefer
 if (typeof localStorage !== 'undefined') {
   programPreferences.subscribe((value) => {
     const sanitized = sanitizeProgramPreferences(value);
-    localStorage.setItem(STORAGE_KEYS.PROGRAM, JSON.stringify(sanitized));
+    localStorage.setItem(STORAGE_KEYS.PREFERENCES_PROGRAM, JSON.stringify(sanitized));
     applyProgramPreferences(sanitized);
   });
 
   bufferPreferences.subscribe((value) => {
     const sanitized = sanitizeBufferPreferences(value);
-    localStorage.setItem(STORAGE_KEYS.BUFFER, JSON.stringify(sanitized));
+    localStorage.setItem(STORAGE_KEYS.PREFERENCES_BUFFER, JSON.stringify(sanitized));
     applyBufferPreferences(sanitized);
   });
 } else {

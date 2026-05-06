@@ -13,6 +13,7 @@ import {
 } from "$lib/utils/pluginClient";
 import { loadUIThemesFromBackend } from '$lib/stores/uiThemeStore';
 import { applyTheme } from "$lib/utils/themeEngine";
+import { STORAGE_KEYS } from "$lib/utils/constants";
 
 // ── Core writable stores ──────────────────────────────────────────────────────
 
@@ -30,15 +31,14 @@ export const pluginActivityVersion = writable(0);
 
 // ── Disabled plugin names (persisted in localStorage) ────────────────────────
 
-const DISABLED_KEY = "forja:disabledPlugins";
 const DEFAULT_DISABLED = ["bracket-pair-colorizer"];
 
 function loadDisabledSet(): Set<string> {
     try {
-        const saved = localStorage.getItem(DISABLED_KEY);
+        const saved = localStorage.getItem(STORAGE_KEYS.DISABLED_PLUGINS);
         if (saved === null) {
             // First run — disable bracket-pair-colorizer by default
-            localStorage.setItem(DISABLED_KEY, JSON.stringify(DEFAULT_DISABLED));
+            localStorage.setItem(STORAGE_KEYS.DISABLED_PLUGINS, JSON.stringify(DEFAULT_DISABLED));
             return new Set(DEFAULT_DISABLED);
         }
         return new Set(JSON.parse(saved) as string[]);
@@ -48,7 +48,7 @@ function loadDisabledSet(): Set<string> {
 }
 
 function saveDisabledSet(set: Set<string>): void {
-    localStorage.setItem(DISABLED_KEY, JSON.stringify([...set]));
+    localStorage.setItem(STORAGE_KEYS.DISABLED_PLUGINS, JSON.stringify([...set]));
 }
 
 export const disabledPluginNames = writable<Set<string>>(new Set());

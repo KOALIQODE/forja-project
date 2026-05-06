@@ -137,3 +137,92 @@ impl LanguageRegistry {
 lazy_static! {
     pub static ref LANGUAGE_REGISTRY: Arc<Mutex<LanguageRegistry>> = Arc::new(Mutex::new(LanguageRegistry::new()));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_definition(id: &str, file_types: Vec<&str>) -> LanguageDefinition {
+        LanguageDefinition {
+            id: id.to_string(),
+            name: id.to_string(),
+            file_types: file_types.into_iter().map(String::from).collect(),
+            scope: format!("source.{}", id),
+            parser_name: format!("tree-sitter-{}", id),
+            parser_path: PathBuf::from(format!("/fake/{}.so", id)),
+            query_paths: LanguageQueryPaths {
+                highlights: PathBuf::from(format!("/fake/{}/highlights.scm", id)),
+                injections: None,
+                folds: None,
+            },
+        }
+    }
+
+    #[test]
+    fn new_registry_is_empty() {
+        let registry = LanguageRegistry::new();
+        assert!(registry.resolve_language("file.rs").is_none());
+    }
+
+    #[test]
+    fn register_and_resolve_by_extension() {
+        let mut registry = LanguageRegistry::new();
+        registry.register_language(make_definition("rust", vec![".rs"])).unwrap();
+        let def = registry.resolve_language("/project/main.rs");
+        assert!(def.is_some());
+        assert_eq!(def.unwrap().id, "rust");
+    }
+
+    #[test]
+    fn resolve_unknown_extension_returns_none() {
+        let mut registry = LanguageRegistry::new();
+        registry.register_language(make_definition("rust", vec![".rs"])).unwrap();
+        assert!(registry.resolve_language("file.py").is_none());
+    }
+
+    #[test]
+    fn duplicate_language_id_returns_error() {
+        let mut registry = LanguageRegistry::new();
+        registry.register_language(make_definition("rust", vec![".rs"])).unwrap();
+        let result = registry.register_language(make_definition("rust", vec![".rsx"]));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("already registered"));
+    }
+
+    #[test]
+    fn duplicate_file_type_returns_error() {
+        let mut registry = LanguageRegistry::new();
+        registry.register_language(make_definition("rust", vec![".rs"])).unwrap();
+        let result = registry.register_language(make_definition("rust2", vec![".rs"]));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("already mapped"));
+    }
+
+    #[test]
+    fn get_language_runtime_for_unregistered_id_returns_err() {
+        let registry = LanguageRegistry::new();
+        let result = registry.get_language_runtime(&"unknown".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn get_language_runtime_for_registered_returns_not_implemented_err() {
+        let mut registry = LanguageRegistry::new();
+        registry.register_language(make_definition("rust", vec![".rs"])).unwrap();
+        let result = registry.get_language_runtime(&"rust".to_string());
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        assert!(err.contains("not yet implemented"), "expected 'not yet implemented' in: {}", err);
+    }
+
+    #[test]
+    fn register_multiple_languages() {
+        let mut registry = LanguageRegistry::new();
+        registry.register_language(make_definition("rust", vec![".rs"])).unwrap();
+        registry.register_language(make_definition("python", vec![".py"])).unwrap();
+        registry.register_language(make_definition("typescript", vec![".ts", ".tsx"])).unwrap();
+        assert!(registry.resolve_language("main.rs").is_some());
+        assert!(registry.resolve_language("app.py").is_some());
+        assert!(registry.resolve_language("component.tsx").is_some());
+    }
+}

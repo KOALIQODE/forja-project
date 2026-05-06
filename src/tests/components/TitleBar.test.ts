@@ -151,7 +151,7 @@ describe('TitleBar', () => {
       render(TitleBar);
       const style = getHeader().getAttribute('style') ?? '';
       expect(style).toContain('--forja-ui-text-primary: #f4f4f5');
-      expect(style).toContain('--forja-ui-btn-icon: #9ca3af');
+      expect(style).toContain('--forja-ui-btn-icon: #c4c4cc');
       // dark theme: hover overlay is white-translucent
       expect(style).toContain('--forja-ui-picker-item-hover: rgba(255,255,255,0.05)');
     });

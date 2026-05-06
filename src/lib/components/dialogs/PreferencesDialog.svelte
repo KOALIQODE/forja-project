@@ -54,7 +54,7 @@
   style={themeStyle}
   data-program-ui
 >
-  <div class="pref-shell flex h-full max-h-[680px] w-full max-w-4xl overflow-hidden">
+  <div class="pref-shell flex h-full max-h-[680px] w-full max-w-4xl overflow-hidden" data-dialog-shell>
 
     <!-- Sidebar -->
     <aside class="sidebar flex w-[200px] shrink-0 flex-col">
@@ -378,6 +378,7 @@
   .pref-shell {
     background: var(--forja-ui-picker-bg, #0e0e11);
     border: 1px solid var(--forja-ui-btn-border, #27272a);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.90), 0 8px 24px rgba(0,0,0,0.70);
   }
 
   /* Sidebar */

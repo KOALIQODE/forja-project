@@ -75,6 +75,7 @@
     class="w-[380px] outline-none overflow-hidden
            bg-(--forja-ui-picker-bg,#0e0e11)
            border border-(--forja-ui-picker-border,#2a2a2e)
+           [box-shadow:0_24px_64px_rgba(0,0,0,0.90),0_8px_24px_rgba(0,0,0,0.70)]
            animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
     data-dialog-shell
   >

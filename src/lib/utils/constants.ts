@@ -11,8 +11,21 @@ export const DIALOG_STATE_KEYS = {
 
 // === Local Storage Keys ===
 export const STORAGE_KEYS = {
+  // Project
   RECENT_PROJECTS: "forja-recent-projects",
   CURRENT_PROJECT: "forja-current-project",
+  // Preferences
+  PREFERENCES_PROGRAM: "forja-preferences-program",
+  PREFERENCES_BUFFER: "forja-preferences-buffer",
+  // UI Theme
+  UI_THEME: "forja:ui-theme",
+  // Buffer session (keyed by project — append btoa(projectPath))
+  BUFFERS_PREFIX: "forja-buffers-",
+  ACTIVE_BUFFER_PREFIX: "forja-active-",
+  // Plugins
+  DISABLED_PLUGINS: "forja:disabledPlugins",
+  // Explorer
+  EXPLORER_PINNED_PATH: "forja-explorer-pinned-path",
 } as const;
 
 // === UI Text Constants ===
@@ -124,6 +137,46 @@ export const ERROR_MESSAGES = {
   RECENT_PROJECTS_LOAD_FAILED: "Error loading recent projects",
   FOLDER_DIALOG_FAILED: "Error opening folder dialog",
 } as const;
+
+// === Language Extension Map ===
+// Maps file extensions (with leading dot) to language identifiers.
+// Mirrors the backend detect_language command — keep in sync.
+export const LANG_MAP: Readonly<Record<string, string>> = {
+  '.rs':       'rust',
+  '.js':       'javascript',
+  '.mjs':      'javascript',
+  '.cjs':      'javascript',
+  '.jsx':      'jsx',
+  '.ts':       'typescript',
+  '.tsx':      'tsx',
+  '.svelte':   'svelte',
+  '.py':       'python',
+  '.pyw':      'python',
+  '.json':     'json',
+  '.jsonc':    'json',
+  '.md':       'markdown',
+  '.mdx':      'markdown',
+  '.markdown': 'markdown',
+  '.css':      'css',
+  '.html':     'html',
+  '.htm':      'html',
+  '.go':       'go',
+  '.cpp':      'cpp',
+  '.cc':       'cpp',
+  '.cxx':      'cpp',
+  '.c':        'c',
+  '.h':        'cpp',
+  '.hpp':      'cpp',
+  '.java':     'java',
+  '.rb':       'ruby',
+  '.php':      'php',
+  '.toml':     'toml',
+  '.yaml':     'yaml',
+  '.yml':      'yaml',
+  '.sh':       'bash',
+  '.bash':     'bash',
+  '.lua':      'lua',
+};
 
 // Type helpers for better TypeScript support
 export type StorageKeys = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

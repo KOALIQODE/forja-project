@@ -8,6 +8,11 @@ export default defineConfig({
     include: ['src/tests/**/*.{test,spec}.{js,ts}'],
     globals: true,
     environment: 'jsdom',
+    environmentOptions: {
+      jsdom: {
+        url: 'http://localhost:5173',
+      },
+    },
     setupFiles: ['src/test-setup.ts'],
   },
   resolve: {

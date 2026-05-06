@@ -410,6 +410,7 @@
   .telescope-shell {
     background: var(--forja-ui-picker-bg, #0e0e11);
     border: 1px solid var(--forja-ui-btn-border, #27272a);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.90), 0 8px 24px rgba(0,0,0,0.70);
   }
 
   .header-row {
