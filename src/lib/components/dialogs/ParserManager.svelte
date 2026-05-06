@@ -5,15 +5,14 @@
   import {
     Download,
     CheckCircle2,
-    Cpu,
     Package,
     Wrench,
     X,
     Search,
-    Loader2,
     Globe,
   } from "@lucide/svelte";
   import { closeDialog } from "../../stores/dialogStore";
+  import { activeUITheme } from "../../stores/uiThemeStore";
 
   interface ParserInfo {
     name: string;
@@ -38,6 +37,10 @@
   let progress   = $state<Record<string, number>>({});
   let statusMsg  = $state<Record<string, string>>({});
   let searchQuery = $state('');
+
+  let themeStyle = $derived(
+    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+  );
 
   let filteredParsers = $derived(
     parsers.filter(p =>
@@ -115,142 +118,255 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="fixed inset-0 z-[100] flex items-center justify-center p-12 transition-all duration-300"
-  role="button"
-  tabindex="0"
+  class="fixed inset-0 z-[100] flex items-center justify-center p-8"
   onclick={(e) => e.target === e.currentTarget && closeDialog()}
-  onkeydown={(e) => {
-    if (e.target !== e.currentTarget) return;
-    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      closeDialog();
-    }
-  }}
+  style={themeStyle}
+  data-program-ui
 >
-  <div class="flex h-full w-full max-w-4xl flex-col overflow-hidden border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.9)]">
-
+  <div
+    class="grammar-shell flex h-full w-full max-w-4xl flex-col overflow-hidden"
+    onkeydown={(e) => e.key === 'Escape' && closeDialog()}
+  >
     <!-- Header -->
-    <div class="flex items-center justify-between border-b border-white/5 bg-white/[0.03] px-8 py-6">
-      <div class="flex items-center gap-4">
-        <div class="bg-emerald-500/10 p-2.5 text-emerald-400">
-          <Cpu size={24} />
-        </div>
-        <div>
-          <h2 class="text-xl font-medium tracking-tight text-white">Grammar Hub</h2>
-          <p class="text-xs tracking-wide text-white/30 uppercase">Tree-sitter Parser Manager — compile from source</p>
-        </div>
+    <div class="header-row flex items-center gap-3 px-4 py-2.5">
+      <span class="mode-label">GRAMMAR HUB</span>
+      <div class="sep-v"></div>
+      <div class="relative flex flex-1 items-center">
+        <Search size={13} style="color: var(--forja-ui-text-secondary, #dedee2); position: absolute; left: 0;" />
+        <input
+          type="text"
+          bind:value={searchQuery}
+          placeholder="Search languages…"
+          class="search-input w-full bg-transparent pl-5 text-[13px] outline-none"
+        />
       </div>
-
-      <div class="flex items-center gap-4">
-        <div class="relative w-64">
-          <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
-          <input
-            type="text"
-            bind:value={searchQuery}
-            placeholder="Search languages…"
-            class="w-full border border-white/5 bg-white/5 py-2 pl-9 pr-4 text-xs text-white outline-none focus:border-emerald-500/30"
-          />
-        </div>
-        <button
-          onclick={closeDialog}
-          class="p-2 text-white/20 transition-all hover:bg-white/5 hover:text-white"
-        >
-          <X size={20} />
+      <div class="flex items-center gap-2">
+        {#if isLoading}
+          <div class="loader"></div>
+        {/if}
+        <button onclick={closeDialog} class="close-btn flex h-6 w-6 items-center justify-center">
+          <X size={14} />
         </button>
       </div>
     </div>
 
     <!-- Content -->
-    <div class="flex-1 overflow-y-auto p-8 custom-scrollbar">
+    <div class="custom-scrollbar flex-1 overflow-y-auto">
       {#if isLoading}
-        <div class="flex h-full items-center justify-center">
-          <Loader2 size={32} class="animate-spin text-emerald-500/20" />
+        <div class="empty-state flex h-full items-center justify-center">
+          <div class="loader"></div>
+        </div>
+      {:else if filteredParsers.length === 0}
+        <div class="empty-state flex h-full flex-col items-center justify-center gap-2">
+          <Package size={24} strokeWidth={1} />
+          <p class="text-[10px] uppercase tracking-widest">No parsers match</p>
         </div>
       {:else}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {#each filteredParsers as parser}
-            <div class="group relative flex items-center justify-between border border-white/5 bg-white/[0.02] p-5 transition-all hover:border-white/10 hover:bg-white/[0.04]">
-              <!-- Left: icon + name -->
-              <div class="flex items-center gap-4">
-                <div class="flex h-10 w-10 items-center justify-center bg-black/40 text-white/40 group-hover:text-emerald-400 transition-colors">
-                  <Package size={20} />
-                </div>
-                <div>
-                  <h3 class="text-sm font-medium text-white">{parser.language}</h3>
-                  <p class="text-[10px] tracking-widest text-white/20 uppercase">{parser.name}</p>
-                </div>
+        <div class="section-label flex items-center gap-2 px-4 py-2 text-[9px] uppercase tracking-[0.2em]">
+          <span class="divider-line flex-1"></span>
+          Tree-sitter parsers — compile from source
+          <span class="divider-line flex-1"></span>
+        </div>
+        {#each filteredParsers as parser}
+          <div class="item-row flex items-center justify-between gap-4 px-4 py-2.5">
+            <!-- Left -->
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="item-icon flex h-7 w-7 shrink-0 items-center justify-center">
+                <Package size={14} />
               </div>
+              <div class="min-w-0">
+                <span class="item-name text-[12px]">{parser.language}</span>
+                <span class="item-meta ml-2 font-mono text-[10px] uppercase tracking-widest">{parser.name}</span>
+              </div>
+            </div>
 
-              <!-- Right: action -->
-              <div class="flex flex-col items-end gap-1.5">
-                {#if parser.installed}
-                  <div class="flex items-center gap-2 text-emerald-400/60">
-                    <CheckCircle2 size={16} />
-                    <span class="text-[10px] font-bold uppercase tracking-wider">Installed</span>
+            <!-- Right: action -->
+            <div class="flex shrink-0 flex-col items-end gap-1">
+              {#if parser.installed}
+                <div class="flex items-center gap-2">
+                  <div class="installed-badge flex items-center gap-1.5">
+                    <CheckCircle2 size={13} />
+                    <span class="text-[9px] font-bold uppercase tracking-wider">Installed</span>
                   </div>
                   {#if repairing === parser.language}
-                    <Loader2 size={12} class="animate-spin text-amber-400" />
+                    <div class="loader"></div>
                   {:else}
                     <button
                       onclick={() => repairQueries(parser.language)}
-                      class="flex items-center gap-1 bg-white/5 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-white/30 transition-all hover:bg-amber-500/20 hover:text-amber-400"
+                      class="action-btn action-btn--repair flex items-center gap-1 px-2 py-1 text-[9px] font-bold uppercase tracking-widest"
                       title="Re-download highlight queries"
                     >
                       <Wrench size={10} />
                       Fix queries
                     </button>
                   {/if}
-                {:else if installing === parser.language}
-                  <div class="flex flex-col items-end gap-1 w-32">
-                    <div class="flex items-center gap-2">
-                      <Loader2 size={14} class="animate-spin text-emerald-500" />
-                      <span class="text-[9px] text-emerald-400">{progress[parser.language]?.toFixed(0) ?? 0}%</span>
-                    </div>
-                    <div class="w-full h-0.5 bg-white/5 overflow-hidden">
-                      <div class="h-full bg-emerald-500 transition-all duration-300" style:width="{progress[parser.language] ?? 0}%"></div>
-                    </div>
+                </div>
+              {:else if installing === parser.language}
+                <div class="flex w-32 flex-col items-end gap-1">
+                  <div class="flex items-center gap-2">
+                    <div class="loader"></div>
+                    <span class="item-meta text-[9px]">{progress[parser.language]?.toFixed(0) ?? 0}%</span>
                   </div>
-                {:else}
-                  <button
-                    onclick={() => install(parser.language)}
-                    class="flex items-center gap-2 bg-white/5 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-emerald-500 hover:text-black"
-                  >
-                    <Download size={14} />
-                    Install
-                  </button>
-                {/if}
+                  <div class="progress-track w-full">
+                    <div class="progress-fill" style:width="{progress[parser.language] ?? 0}%"></div>
+                  </div>
+                </div>
+              {:else}
+                <button
+                  onclick={() => install(parser.language)}
+                  class="action-btn action-btn--install flex items-center gap-1.5 px-3 py-1 text-[9px] font-bold uppercase tracking-widest"
+                >
+                  <Download size={11} />
+                  Install
+                </button>
+              {/if}
 
-                {#if statusMsg[parser.language]}
-                  <span class={`max-w-40 text-right text-[9px] ${
-                    statusMsg[parser.language].startsWith('Error:')
-                      ? 'text-rose-400/80'
-                      : 'text-white/35'
-                  }`}>
-                    {statusMsg[parser.language]}
-                  </span>
-                {/if}
-              </div>
+              {#if statusMsg[parser.language]}
+                <span class="max-w-40 text-right text-[9px] {statusMsg[parser.language].startsWith('Error:') ? 'text-rose-400/80' : 'item-meta'}">
+                  {statusMsg[parser.language]}
+                </span>
+              {/if}
             </div>
-          {/each}
-        </div>
+          </div>
+        {/each}
       {/if}
     </div>
 
     <!-- Footer -->
-    <div class="flex items-center justify-between border-t border-white/5 bg-white/[0.01] px-8 py-4 text-[9px] uppercase tracking-[0.2em] text-white/20">
-      <div class="flex items-center gap-2">
-        <Globe size={10} class="text-emerald-500/40" />
-        <span>Downloads prebuilt binaries automatically — no compiler required</span>
+    <div class="footer-row flex items-center justify-between px-4 py-1.5 text-[9px] uppercase tracking-[0.12em]">
+      <div class="flex items-center gap-1.5">
+        <Globe size={9} />
+        <span>Downloads prebuilt binaries — no compiler required</span>
       </div>
-      <span>{parsers.filter(p => p.installed).length} / {parsers.length} installed</span>
+      <span class="match-count">{parsers.filter(p => p.installed).length} / {parsers.length} installed</span>
     </div>
+
   </div>
 </div>
 
 <style>
-  .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+  .grammar-shell {
+    background: var(--forja-ui-picker-bg, #0e0e11);
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+
+  .header-row {
+    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+
+  .mode-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--forja-ui-gradient-from, #34d399);
+    white-space: nowrap;
+  }
+
+  .sep-v {
+    width: 1px;
+    height: 12px;
+    flex-shrink: 0;
+    background: var(--forja-ui-btn-border, #27272a);
+  }
+
+  .search-input {
+    color: var(--forja-ui-text-primary, #f4f4f5);
+  }
+  .search-input::placeholder { color: var(--forja-ui-text-secondary, #dedee2); }
+
+  .loader {
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    border-top-color: var(--forja-ui-text-muted, #b4b4c0);
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .close-btn { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .close-btn:hover { color: var(--forja-ui-text-primary, #f4f4f5); }
+
+  .section-label {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+  .divider-line {
+    height: 1px;
+    background: var(--forja-ui-btn-border, #27272a);
+    display: block;
+  }
+
+  .item-row {
+    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+  .item-row:hover { background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)); }
+
+  .item-icon {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+
+  .item-name { color: var(--forja-ui-text-primary, #f4f4f5); }
+  .item-meta { color: var(--forja-ui-text-muted, #b4b4c0); }
+
+  .installed-badge { color: var(--forja-ui-gradient-from, #34d399); opacity: 0.7; }
+
+  .action-btn {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    transition: color 0.1s, background 0.1s, border-color 0.1s;
+  }
+  .action-btn--install:hover {
+    color: var(--forja-ui-gradient-from, #34d399);
+    border-color: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 30%, transparent);
+    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 8%, transparent);
+  }
+  .action-btn--repair:hover {
+    color: #fbbf24;
+    border-color: rgba(251,191,36,0.25);
+    background: rgba(251,191,36,0.06);
+  }
+
+  .progress-track {
+    height: 2px;
+    background: var(--forja-ui-btn-border, #27272a);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--forja-ui-gradient-from, #34d399);
+    transition: width 0.3s;
+  }
+
+  .empty-state {
+    color: var(--forja-ui-text-secondary, #dedee2);
+    opacity: 0.5;
+    min-height: 200px;
+  }
+
+  .footer-row {
+    border-top: 1px solid var(--forja-ui-btn-border, #27272a);
+    color: var(--forja-ui-text-muted, #b4b4c0);
+  }
+  .match-count { color: var(--forja-ui-text-muted, #b4b4c0); }
+
+  .custom-scrollbar::-webkit-scrollbar { width: 3px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
-  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--forja-ui-explorer-scrollbar, #1e1e1e);
+  }
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: var(--forja-ui-explorer-scrollbar-hover, #2e2e2e);
+  }
 </style>

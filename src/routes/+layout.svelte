@@ -7,7 +7,7 @@
   import StatusBar from "$lib/components/StatusBar.svelte";
   import { currentProject } from "$lib/stores/projectStore";
   import "../lib/stores/preferencesStore";
-  import { openTelescope, openGrammarHub, openPreferencesDialog, openBufferDeleteDialog, openThemePicker, closeDialog, dialogState } from "../lib/stores/dialogStore";
+  import { openTelescope, openGrammarHub, openPreferencesDialog, openBufferDeleteDialog, openThemePicker, openRecentProjectsDialog, closeDialog, dialogState } from "../lib/stores/dialogStore";
   import { activeUITheme } from "../lib/stores/uiThemeStore";
   import { get } from 'svelte/store';
   import "../app.css";
@@ -52,6 +52,14 @@
 
       // Any other key resets the chord
       if (ctrlKTime > 0) ctrlKTime = 0;
+
+      // Ctrl+R -> Recent projects (always, before any other guards)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openRecentProjectsDialog();
+        return;
+      }
 
       // ── Guard: dialog handles its own keys ─────────────────────────────
       const currentState = get(dialogState);

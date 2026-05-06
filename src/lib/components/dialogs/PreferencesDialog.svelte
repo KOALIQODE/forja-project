@@ -12,6 +12,7 @@
     X,
   } from "@lucide/svelte";
   import { closeDialog } from "../../stores/dialogStore";
+  import { activeUITheme } from "../../stores/uiThemeStore";
   import {
     BUFFER_FONT_OPTIONS,
     PROGRAM_FONT_OPTIONS,
@@ -31,460 +32,528 @@
 
   let activeSection = $state<"program" | "buffer">("program");
 
+  let themeStyle = $derived(
+    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+  );
+
   $effect(() => {
     activeSection = initialSection;
   });
-
-  function handleBackdropClose(event: MouseEvent) {
-    if (event.target === event.currentTarget) {
-      closeDialog();
-    }
-  }
 
   function programFontLabel(value: string) {
     return PROGRAM_FONT_OPTIONS.find((option) => option.value === value)?.label ?? "Custom";
   }
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="fixed inset-0 z-[120] flex items-center justify-center p-6"
-  role="button"
-  tabindex="0"
-  onclick={handleBackdropClose}
-  onkeydown={(event) => {
-    if (event.target !== event.currentTarget) return;
-    if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      closeDialog();
-    }
-  }}
+  class="fixed inset-0 z-[120] flex items-center justify-center p-8"
+  onclick={(e) => e.target === e.currentTarget && closeDialog()}
+  onkeydown={(e) => e.key === 'Escape' && closeDialog()}
+  style={themeStyle}
+  data-program-ui
 >
-  <div class="flex h-[min(760px,88vh)] w-full max-w-6xl overflow-hidden border border-white/10 bg-[#090909] shadow-[0_40px_120px_rgba(0,0,0,0.9)]">
-    <aside class="flex w-[280px] shrink-0 flex-col border-r border-white/8 bg-[radial-gradient(circle_at_top,#1d352c,transparent_45%),linear-gradient(180deg,#111111_0%,#0a0a0a_100%)] p-5">
-      <div class="mb-6 flex items-start justify-between gap-3">
-        <div>
-          <p class="mb-2 text-[10px] font-black uppercase tracking-[0.32em] text-emerald-400/70">Preferences</p>
-          <h2 class="m-0 text-2xl font-semibold tracking-tight text-white">Studio Settings</h2>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Separadas entre la interfaz del programa y el comportamiento del buffer.
-          </p>
-        </div>
+  <div class="pref-shell flex h-full max-h-[680px] w-full max-w-4xl overflow-hidden">
 
-        <button
-          type="button"
-          class="border border-white/8 bg-white/5 p-2 text-zinc-400 transition-all hover:bg-white/10 hover:text-white"
-          title="Close"
-          onclick={closeDialog}
-        >
-          <X size={18} />
+    <!-- Sidebar -->
+    <aside class="sidebar flex w-[200px] shrink-0 flex-col">
+
+      <!-- Sidebar header -->
+      <div class="header-row flex items-center gap-3 px-4 py-2.5">
+        <span class="mode-label">PREFERENCES</span>
+        <div class="sep-v ml-auto"></div>
+        <button onclick={closeDialog} class="close-btn flex h-6 w-6 items-center justify-center">
+          <X size={14} />
         </button>
       </div>
 
-      <div class="space-y-2">
+      <!-- Nav -->
+      <nav class="flex flex-col py-1">
         <button
           type="button"
-          class={`group flex w-full items-start gap-3 border px-4 py-3 text-left transition-all ${
-            activeSection === "program"
-              ? "border-emerald-500/40 bg-emerald-500/10 text-white shadow-[0_18px_35px_rgba(16,185,129,0.12)]"
-              : "border-white/5 bg-white/[0.03] text-zinc-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-zinc-200"
-          }`}
+          class="nav-item flex items-center gap-2.5 px-4 py-2.5 text-left"
+          class:nav-item--active={activeSection === "program"}
           onclick={() => (activeSection = "program")}
         >
-          <div class={`mt-0.5 p-2 ${activeSection === "program" ? "bg-emerald-500/15 text-emerald-300" : "bg-black/30 text-zinc-500"}`}>
-            <MonitorCog size={18} />
-          </div>
-          <div>
-            <div class="text-sm font-semibold tracking-tight">Programa</div>
-            <div class="mt-1 text-[11px] leading-relaxed opacity-70">
-              Tipografía de interfaz, ancho del explorer y movimiento.
-            </div>
+          <MonitorCog size={13} class="shrink-0" />
+          <div class="min-w-0">
+            <div class="nav-item-label text-[11px] font-bold uppercase tracking-[0.14em]">Programa</div>
+            <div class="nav-item-desc mt-0.5 text-[9px] leading-tight">UI, fuentes, explorer</div>
           </div>
         </button>
 
         <button
           type="button"
-          class={`group flex w-full items-start gap-3 border px-4 py-3 text-left transition-all ${
-            activeSection === "buffer"
-              ? "border-emerald-500/40 bg-emerald-500/10 text-white shadow-[0_18px_35px_rgba(16,185,129,0.12)]"
-              : "border-white/5 bg-white/[0.03] text-zinc-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-zinc-200"
-          }`}
+          class="nav-item flex items-center gap-2.5 px-4 py-2.5 text-left"
+          class:nav-item--active={activeSection === "buffer"}
           onclick={() => (activeSection = "buffer")}
         >
-          <div class={`mt-0.5 p-2 ${activeSection === "buffer" ? "bg-emerald-500/15 text-emerald-300" : "bg-black/30 text-zinc-500"}`}>
-            <FileCode2 size={18} />
-          </div>
-          <div>
-            <div class="text-sm font-semibold tracking-tight">Buffer</div>
-            <div class="mt-1 text-[11px] leading-relaxed opacity-70">
-              Fuente del editor, línea, números y Vim mode.
-            </div>
+          <FileCode2 size={13} class="shrink-0" />
+          <div class="min-w-0">
+            <div class="nav-item-label text-[11px] font-bold uppercase tracking-[0.14em]">Buffer</div>
+            <div class="nav-item-desc mt-0.5 text-[9px] leading-tight">Editor, vim, lectura</div>
           </div>
         </button>
-      </div>
+      </nav>
 
-      <div class="mt-auto border border-white/6 bg-black/25 p-4">
-        <p class="mb-2 text-[10px] font-bold uppercase tracking-[0.26em] text-zinc-500">Live Preview</p>
+      <!-- Live preview -->
+      <div class="preview-box mx-3 mt-auto mb-3 p-3">
+        <p class="preview-title mb-2 text-[9px] font-bold uppercase tracking-[0.2em]">Preview</p>
         {#if activeSection === "program"}
-          <div class="space-y-2 text-sm text-zinc-300">
-            <div class="flex items-center justify-between bg-white/[0.03] px-3 py-2">
+          <div class="space-y-1.5">
+            <div class="preview-row flex items-center justify-between text-[10px]">
               <span>Fuente UI</span>
-              <span class="text-zinc-500">{programFontLabel($programPreferences.fontFamily)}</span>
+              <span class="preview-val">{programFontLabel($programPreferences.fontFamily)}</span>
             </div>
-            <div class="flex items-center justify-between bg-white/[0.03] px-3 py-2">
-              <span>Tamaño UI</span>
-              <span class="text-zinc-500">{$programPreferences.fontSize}px</span>
+            <div class="preview-row flex items-center justify-between text-[10px]">
+              <span>Tamaño</span>
+              <span class="preview-val">{$programPreferences.fontSize}px</span>
+            </div>
+            <div class="preview-row flex items-center justify-between text-[10px]">
+              <span>Explorer</span>
+              <span class="preview-val">{$programPreferences.explorerWidth}px</span>
             </div>
           </div>
         {:else}
           <div
-            class="border border-emerald-500/15 bg-[#0d0d0d] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+            class="preview-code-block p-2 font-mono"
             style={`font-family: ${$bufferPreferences.fontFamily};`}
           >
-            <p class="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-zinc-500">Buffer Sample</p>
-            <p class="mt-3 text-zinc-200" style={`font-size: ${$bufferPreferences.fontSize}px; line-height: ${$bufferPreferences.lineHeight}px;`}>
-              const forge = workflow.select("precision");
+            <p class="preview-title mb-1.5 text-[8px]">Buffer Sample</p>
+            <p class="preview-code" style={`font-size: ${$bufferPreferences.fontSize}px; line-height: ${$bufferPreferences.lineHeight}px;`}>
+              const x = fn();
             </p>
           </div>
         {/if}
       </div>
+
     </aside>
 
-    <section class="flex min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,#0c0c0c_0%,#070707_100%)]">
-      <div class="border-b border-white/6 px-8 py-6">
+    <!-- Main panel -->
+    <section class="main-panel flex min-w-0 flex-1 flex-col">
+
+      <!-- Section header -->
+      <div class="header-row flex items-center gap-3 px-5 py-2.5">
         {#if activeSection === "program"}
-          <p class="mb-2 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-500">App Layer</p>
-          <h3 class="m-0 text-[28px] font-semibold tracking-tight text-white">Preferencias del programa</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Ajustes globales para la interfaz y el comportamiento visual del shell.
-          </p>
+          <MonitorCog size={13} class="section-icon shrink-0" />
+          <span class="section-title text-[11px] font-bold uppercase tracking-[0.14em]">Preferencias del programa</span>
         {:else}
-          <p class="mb-2 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-500">Editor Layer</p>
-          <h3 class="m-0 text-[28px] font-semibold tracking-tight text-white">Preferencias del buffer</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Tipografía del editor, densidad de lectura y controles de edición modal.
-          </p>
+          <FileCode2 size={13} class="section-icon shrink-0" />
+          <span class="section-title text-[11px] font-bold uppercase tracking-[0.14em]">Preferencias del buffer</span>
         {/if}
       </div>
 
-      <div class="flex-1 overflow-y-auto px-8 py-7 custom-scrollbar">
+      <!-- Settings content -->
+      <div class="custom-scrollbar flex-1 overflow-y-auto">
+
         {#if activeSection === "program"}
-          <div class="grid gap-5 lg:grid-cols-2">
-            <div class="border border-white/6 bg-white/[0.03] p-5">
-              <div class="mb-5 flex items-center gap-3">
-                <div class="bg-emerald-500/10 p-2 text-emerald-300">
-                  <Type size={18} />
-                </div>
-                <div>
-                  <h4 class="m-0 text-sm font-semibold tracking-tight text-white">Tipografía de interfaz</h4>
-                  <p class="mt-1 text-xs leading-relaxed text-zinc-500">
-                    Define la voz visual del shell: titlebar, explorer, pantallas y modales.
-                  </p>
-                </div>
-              </div>
 
-              <label for="program-font-family" class="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">Fuente</label>
-              <select
-                id="program-font-family"
-                class="w-full border border-white/8 bg-black/30 px-4 py-3 text-sm text-zinc-100 outline-none transition-all focus:border-emerald-500/40"
-                value={$programPreferences.fontFamily}
-                onchange={(event) =>
-                  setProgramPreference("fontFamily", (event.currentTarget as HTMLSelectElement).value)}
-              >
-                {#each PROGRAM_FONT_OPTIONS as option}
-                  <option value={option.value}>{option.label}</option>
-                {/each}
-              </select>
-
-              <div class="mt-5 flex items-center justify-between">
-                <label for="program-font-size" class="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">Tamaño</label>
-                <span class="border border-white/8 bg-white/[0.03] px-2.5 py-1 text-xs text-zinc-300">
-                  {$programPreferences.fontSize}px
-                </span>
-              </div>
-              <input
-                id="program-font-size"
-                class="mt-3 h-2 w-full cursor-pointer appearance-none bg-white/8 accent-emerald-500"
-                type="range"
-                min="10"
-                max="18"
-                step="1"
-                value={$programPreferences.fontSize}
-                oninput={(event) =>
-                  setProgramPreference("fontSize", Number((event.currentTarget as HTMLInputElement).value))}
-              />
-            </div>
-
-            <div class="border border-white/6 bg-white/[0.03] p-5">
-              <div class="mb-5 flex items-center gap-3">
-                <div class="bg-emerald-500/10 p-2 text-emerald-300">
-                  <PanelLeftClose size={18} />
-                </div>
-                <div>
-                  <h4 class="m-0 text-sm font-semibold tracking-tight text-white">Explorer</h4>
-                  <p class="mt-1 text-xs leading-relaxed text-zinc-500">
-                    Controla el ancho base del panel lateral para proyectos grandes o compactos.
-                  </p>
-                </div>
-              </div>
-
-              <div class="flex items-center justify-between">
-                <label for="program-explorer-width" class="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">Ancho inicial</label>
-                <span class="border border-white/8 bg-white/[0.03] px-2.5 py-1 text-xs text-zinc-300">
-                  {$programPreferences.explorerWidth}px
-                </span>
-              </div>
-              <input
-                id="program-explorer-width"
-                class="mt-3 h-2 w-full cursor-pointer appearance-none bg-white/8 accent-emerald-500"
-                type="range"
-                min="220"
-                max="420"
-                step="10"
-                value={$programPreferences.explorerWidth}
-                oninput={(event) =>
-                  setProgramPreference("explorerWidth", Number((event.currentTarget as HTMLInputElement).value))}
-              />
-            </div>
-
-            <div class="border border-white/6 bg-white/[0.03] p-5 lg:col-span-2">
-              <div class="flex items-start justify-between gap-4">
-                <div class="flex items-start gap-3">
-                  <div class="bg-emerald-500/10 p-2 text-emerald-300">
-                    <Sparkles size={18} />
-                  </div>
-                  <div>
-                    <h4 class="m-0 text-sm font-semibold tracking-tight text-white">Reduce motion</h4>
-                    <p class="mt-1 max-w-2xl text-xs leading-relaxed text-zinc-500">
-                      Desactiva animaciones largas y transiciones cuando prefieras una interfaz más seca y rápida.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  class={`inline-flex h-8 w-14 items-center border px-1 transition-all ${
-                    $programPreferences.reduceMotion
-                      ? "border-emerald-500/50 bg-emerald-500/20 justify-end"
-                      : "border-white/8 bg-white/[0.03] justify-start"
-                  }`}
-                  aria-label="Toggle reduce motion"
-                  aria-pressed={$programPreferences.reduceMotion}
-                  onclick={() => setProgramPreference("reduceMotion", !$programPreferences.reduceMotion)}
-                >
-                  <span class={`h-6 w-6 transition-all ${$programPreferences.reduceMotion ? "bg-emerald-400" : "bg-zinc-500"}`}></span>
-                </button>
-              </div>
-            </div>
+          <div class="section-label flex items-center gap-2 px-5 py-2 text-[9px] uppercase tracking-[0.18em]">
+            <Type size={9} /><span>Tipografía de interfaz</span>
           </div>
+
+          <!-- Program font family -->
+          <div class="setting-row flex items-center gap-4 px-5 py-3">
+            <div class="min-w-0 flex-1">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Fuente</div>
+              <div class="setting-desc mt-0.5 text-[10px]">Define la voz visual del shell.</div>
+            </div>
+            <select
+              id="program-font-family"
+              class="pref-select text-[11px] px-3 py-1.5 outline-none"
+              value={$programPreferences.fontFamily}
+              onchange={(e) => setProgramPreference("fontFamily", (e.currentTarget as HTMLSelectElement).value)}
+            >
+              {#each PROGRAM_FONT_OPTIONS as option}
+                <option value={option.value}>{option.label}</option>
+              {/each}
+            </select>
+          </div>
+
+          <!-- Program font size -->
+          <div class="setting-row px-5 py-3">
+            <div class="flex items-center justify-between">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Tamaño UI</div>
+              <span class="value-badge text-[10px] px-2 py-0.5">{$programPreferences.fontSize}px</span>
+            </div>
+            <input
+              id="program-font-size"
+              class="pref-range mt-2 h-1 w-full cursor-pointer appearance-none"
+              type="range" min="10" max="18" step="1"
+              value={$programPreferences.fontSize}
+              oninput={(e) => setProgramPreference("fontSize", Number((e.currentTarget as HTMLInputElement).value))}
+            />
+          </div>
+
+          <div class="section-label flex items-center gap-2 px-5 py-2 text-[9px] uppercase tracking-[0.18em]">
+            <PanelLeftClose size={9} /><span>Explorer</span>
+          </div>
+
+          <!-- Explorer width -->
+          <div class="setting-row px-5 py-3">
+            <div class="flex items-center justify-between">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Ancho inicial</div>
+              <span class="value-badge text-[10px] px-2 py-0.5">{$programPreferences.explorerWidth}px</span>
+            </div>
+            <input
+              id="program-explorer-width"
+              class="pref-range mt-2 h-1 w-full cursor-pointer appearance-none"
+              type="range" min="220" max="420" step="10"
+              value={$programPreferences.explorerWidth}
+              oninput={(e) => setProgramPreference("explorerWidth", Number((e.currentTarget as HTMLInputElement).value))}
+            />
+          </div>
+
+          <div class="section-label flex items-center gap-2 px-5 py-2 text-[9px] uppercase tracking-[0.18em]">
+            <Sparkles size={9} /><span>Animaciones</span>
+          </div>
+
+          <!-- Reduce motion -->
+          <div class="setting-row flex items-center justify-between gap-4 px-5 py-3">
+            <div class="min-w-0">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Reduce motion</div>
+              <div class="setting-desc mt-0.5 text-[10px]">Desactiva transiciones y animaciones largas.</div>
+            </div>
+            <button
+              type="button"
+              class="pref-toggle shrink-0 inline-flex items-center px-1"
+              class:pref-toggle--on={$programPreferences.reduceMotion}
+              aria-label="Toggle reduce motion"
+              aria-pressed={$programPreferences.reduceMotion}
+              onclick={() => setProgramPreference("reduceMotion", !$programPreferences.reduceMotion)}
+            >
+              <span class="toggle-thumb"></span>
+            </button>
+          </div>
+
         {:else}
-          <div class="grid gap-5 lg:grid-cols-2">
-            <div class="border border-white/6 bg-white/[0.03] p-5">
-              <div class="mb-5 flex items-center gap-3">
-                <div class="bg-emerald-500/10 p-2 text-emerald-300">
-                  <Type size={18} />
-                </div>
-                <div>
-                  <h4 class="m-0 text-sm font-semibold tracking-tight text-white">Fuente del editor</h4>
-                  <p class="mt-1 text-xs leading-relaxed text-zinc-500">
-                    Aplica sobre el buffer real y la lectura del código.
-                  </p>
-                </div>
-              </div>
 
-              <label for="buffer-font-family" class="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">Fuente</label>
-              <select
-                id="buffer-font-family"
-                class="w-full border border-white/8 bg-black/30 px-4 py-3 text-sm text-zinc-100 outline-none transition-all focus:border-emerald-500/40"
-                value={$bufferPreferences.fontFamily}
-                onchange={(event) =>
-                  setBufferPreference("fontFamily", (event.currentTarget as HTMLSelectElement).value)}
-              >
-                {#each BUFFER_FONT_OPTIONS as option}
-                  <option value={option.value}>{option.label}</option>
-                {/each}
-              </select>
-
-              <div class="mt-5 flex items-center justify-between">
-                <label for="buffer-font-size" class="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">Tamaño</label>
-                <span class="border border-white/8 bg-white/[0.03] px-2.5 py-1 text-xs text-zinc-300">
-                  {$bufferPreferences.fontSize}px
-                </span>
-              </div>
-              <input
-                id="buffer-font-size"
-                class="mt-3 h-2 w-full cursor-pointer appearance-none bg-white/8 accent-emerald-500"
-                type="range"
-                min="11"
-                max="24"
-                step="1"
-                value={$bufferPreferences.fontSize}
-                oninput={(event) =>
-                  setBufferPreference("fontSize", Number((event.currentTarget as HTMLInputElement).value))}
-              />
-            </div>
-
-            <div class="border border-white/6 bg-white/[0.03] p-5">
-              <div class="mb-5 flex items-center gap-3">
-                <div class="bg-emerald-500/10 p-2 text-emerald-300">
-                  <Rows3 size={18} />
-                </div>
-                <div>
-                  <h4 class="m-0 text-sm font-semibold tracking-tight text-white">Ritmo de lectura</h4>
-                  <p class="mt-1 text-xs leading-relaxed text-zinc-500">
-                    Separa más o menos cada línea según el tipo de archivo y densidad que quieras.
-                  </p>
-                </div>
-              </div>
-
-              <div class="flex items-center justify-between">
-                <label for="buffer-line-height" class="text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-500">Line height</label>
-                <span class="border border-white/8 bg-white/[0.03] px-2.5 py-1 text-xs text-zinc-300">
-                  {$bufferPreferences.lineHeight}px
-                </span>
-              </div>
-              <input
-                id="buffer-line-height"
-                class="mt-3 h-2 w-full cursor-pointer appearance-none bg-white/8 accent-emerald-500"
-                type="range"
-                min="18"
-                max="34"
-                step="1"
-                value={$bufferPreferences.lineHeight}
-                oninput={(event) =>
-                  setBufferPreference("lineHeight", Number((event.currentTarget as HTMLInputElement).value))}
-              />
-            </div>
-
-            <div class="border border-white/6 bg-white/[0.03] p-5">
-              <div class="mb-5 flex items-center gap-3">
-                <div class="bg-emerald-500/10 p-2 text-emerald-300">
-                  <Keyboard size={18} />
-                </div>
-                <div>
-                  <h4 class="m-0 text-sm font-semibold tracking-tight text-white">Vim mode</h4>
-                  <p class="mt-1 text-xs leading-relaxed text-zinc-500">
-                    Activa navegación modal y comandos básicos desde el buffer.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                class={`inline-flex h-9 w-16 items-center border px-1 transition-all ${
-                  $bufferPreferences.vimModeEnabled
-                    ? "border-emerald-500/50 bg-emerald-500/20 justify-end"
-                    : "border-white/8 bg-white/[0.03] justify-start"
-                  }`}
-                aria-label="Toggle vim mode"
-                aria-pressed={$bufferPreferences.vimModeEnabled}
-                onclick={() => setBufferPreference("vimModeEnabled", !$bufferPreferences.vimModeEnabled)}
-              >
-                <span class={`h-7 w-7 transition-all ${$bufferPreferences.vimModeEnabled ? "bg-emerald-400" : "bg-zinc-500"}`}></span>
-              </button>
-            </div>
-
-            <div class="border border-white/6 bg-white/[0.03] p-5">
-              <div class="mb-5 flex items-center gap-3">
-                <div class="bg-emerald-500/10 p-2 text-emerald-300">
-                  <Hash size={18} />
-                </div>
-                <div>
-                  <h4 class="m-0 text-sm font-semibold tracking-tight text-white">Lectura visual</h4>
-                  <p class="mt-1 text-xs leading-relaxed text-zinc-500">
-                    Ajusta el gutter y la pista visual de la línea activa.
-                  </p>
-                </div>
-              </div>
-
-              <div class="space-y-3">
-                <button
-                  type="button"
-                  class="flex w-full items-center justify-between border border-white/8 bg-black/20 px-4 py-3 text-left transition-all hover:border-white/12 hover:bg-black/30"
-                  onclick={() => setBufferPreference("showLineNumbers", !$bufferPreferences.showLineNumbers)}
-                >
-                  <div>
-                    <div class="text-sm font-medium text-zinc-100">Mostrar números de línea</div>
-                    <div class="mt-1 text-xs text-zinc-500">Mantén o limpia el gutter del buffer.</div>
-                  </div>
-                  <span class={`px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${$bufferPreferences.showLineNumbers ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-zinc-500"}`}>
-                    {$bufferPreferences.showLineNumbers ? "ON" : "OFF"}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  class="flex w-full items-center justify-between border border-white/8 bg-black/20 px-4 py-3 text-left transition-all hover:border-white/12 hover:bg-black/30"
-                  onclick={() =>
-                    setBufferPreference("highlightActiveLine", !$bufferPreferences.highlightActiveLine)}
-                >
-                  <div>
-                    <div class="text-sm font-medium text-zinc-100">Resaltar línea activa</div>
-                    <div class="mt-1 text-xs text-zinc-500">Mejora el seguimiento del cursor en archivos extensos.</div>
-                  </div>
-                  <span class={`px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${$bufferPreferences.highlightActiveLine ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-zinc-500"}`}>
-                    {$bufferPreferences.highlightActiveLine ? "ON" : "OFF"}
-                  </span>
-                </button>
-              </div>
-            </div>
+          <div class="section-label flex items-center gap-2 px-5 py-2 text-[9px] uppercase tracking-[0.18em]">
+            <Type size={9} /><span>Fuente del editor</span>
           </div>
+
+          <!-- Buffer font family -->
+          <div class="setting-row flex items-center gap-4 px-5 py-3">
+            <div class="min-w-0 flex-1">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Fuente</div>
+              <div class="setting-desc mt-0.5 text-[10px]">Aplica sobre el buffer y la lectura del código.</div>
+            </div>
+            <select
+              id="buffer-font-family"
+              class="pref-select text-[11px] px-3 py-1.5 outline-none"
+              value={$bufferPreferences.fontFamily}
+              onchange={(e) => setBufferPreference("fontFamily", (e.currentTarget as HTMLSelectElement).value)}
+            >
+              {#each BUFFER_FONT_OPTIONS as option}
+                <option value={option.value}>{option.label}</option>
+              {/each}
+            </select>
+          </div>
+
+          <!-- Buffer font size -->
+          <div class="setting-row px-5 py-3">
+            <div class="flex items-center justify-between">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Tamaño</div>
+              <span class="value-badge text-[10px] px-2 py-0.5">{$bufferPreferences.fontSize}px</span>
+            </div>
+            <input
+              id="buffer-font-size"
+              class="pref-range mt-2 h-1 w-full cursor-pointer appearance-none"
+              type="range" min="11" max="24" step="1"
+              value={$bufferPreferences.fontSize}
+              oninput={(e) => setBufferPreference("fontSize", Number((e.currentTarget as HTMLInputElement).value))}
+            />
+          </div>
+
+          <div class="section-label flex items-center gap-2 px-5 py-2 text-[9px] uppercase tracking-[0.18em]">
+            <Rows3 size={9} /><span>Ritmo de lectura</span>
+          </div>
+
+          <!-- Buffer line height -->
+          <div class="setting-row px-5 py-3">
+            <div class="flex items-center justify-between">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Line height</div>
+              <span class="value-badge text-[10px] px-2 py-0.5">{$bufferPreferences.lineHeight}px</span>
+            </div>
+            <input
+              id="buffer-line-height"
+              class="pref-range mt-2 h-1 w-full cursor-pointer appearance-none"
+              type="range" min="18" max="34" step="1"
+              value={$bufferPreferences.lineHeight}
+              oninput={(e) => setBufferPreference("lineHeight", Number((e.currentTarget as HTMLInputElement).value))}
+            />
+          </div>
+
+          <div class="section-label flex items-center gap-2 px-5 py-2 text-[9px] uppercase tracking-[0.18em]">
+            <Keyboard size={9} /><span>Modal editing</span>
+          </div>
+
+          <!-- Vim mode -->
+          <div class="setting-row flex items-center justify-between gap-4 px-5 py-3">
+            <div class="min-w-0">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Vim mode</div>
+              <div class="setting-desc mt-0.5 text-[10px]">Navegación modal y comandos desde el buffer.</div>
+            </div>
+            <button
+              type="button"
+              class="pref-toggle shrink-0 inline-flex items-center px-1"
+              class:pref-toggle--on={$bufferPreferences.vimModeEnabled}
+              aria-label="Toggle vim mode"
+              aria-pressed={$bufferPreferences.vimModeEnabled}
+              onclick={() => setBufferPreference("vimModeEnabled", !$bufferPreferences.vimModeEnabled)}
+            >
+              <span class="toggle-thumb"></span>
+            </button>
+          </div>
+
+          <div class="section-label flex items-center gap-2 px-5 py-2 text-[9px] uppercase tracking-[0.18em]">
+            <Hash size={9} /><span>Lectura visual</span>
+          </div>
+
+          <!-- Show line numbers -->
+          <div class="setting-row flex items-center justify-between gap-4 px-5 py-3">
+            <div class="min-w-0">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Números de línea</div>
+              <div class="setting-desc mt-0.5 text-[10px]">Mantén o limpia el gutter del buffer.</div>
+            </div>
+            <button
+              type="button"
+              onclick={() => setBufferPreference("showLineNumbers", !$bufferPreferences.showLineNumbers)}
+              class="badge-toggle text-[9px] font-bold uppercase tracking-wider px-2 py-0.5"
+              class:badge-toggle--on={$bufferPreferences.showLineNumbers}
+            >
+              {$bufferPreferences.showLineNumbers ? "ON" : "OFF"}
+            </button>
+          </div>
+
+          <!-- Highlight active line -->
+          <div class="setting-row flex items-center justify-between gap-4 px-5 py-3">
+            <div class="min-w-0">
+              <div class="setting-label text-[11px] font-bold uppercase tracking-[0.14em]">Línea activa</div>
+              <div class="setting-desc mt-0.5 text-[10px]">Resalta el cursor en archivos extensos.</div>
+            </div>
+            <button
+              type="button"
+              onclick={() => setBufferPreference("highlightActiveLine", !$bufferPreferences.highlightActiveLine)}
+              class="badge-toggle text-[9px] font-bold uppercase tracking-wider px-2 py-0.5"
+              class:badge-toggle--on={$bufferPreferences.highlightActiveLine}
+            >
+              {$bufferPreferences.highlightActiveLine ? "ON" : "OFF"}
+            </button>
+          </div>
+
         {/if}
       </div>
 
-      <div class="flex items-center justify-between border-t border-white/6 bg-white/[0.02] px-8 py-4">
-        <p class="m-0 text-[11px] text-zinc-500">
-          Los cambios se aplican inmediatamente y quedan persistidos localmente.
-        </p>
-
-        <div class="flex items-center gap-3">
-          {#if activeSection === "program"}
-            <button
-              type="button"
-              class="inline-flex items-center gap-2 border border-white/8 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300 transition-all hover:border-white/12 hover:bg-white/[0.06] hover:text-white"
-              onclick={resetProgramPreferences}
-            >
-              <RotateCcw size={14} />
-              Reset programa
-            </button>
-          {:else}
-            <button
-              type="button"
-              class="inline-flex items-center gap-2 border border-white/8 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300 transition-all hover:border-white/12 hover:bg-white/[0.06] hover:text-white"
-              onclick={resetBufferPreferences}
-            >
-              <RotateCcw size={14} />
-              Reset buffer
-            </button>
-          {/if}
-
+      <!-- Footer -->
+      <div class="footer-row flex items-center justify-between px-5 py-1.5">
+        <span class="footer-hint text-[9px] uppercase tracking-[0.12em]">
+          Los cambios se aplican inmediatamente.
+        </span>
+        <div class="flex items-center gap-2">
           <button
             type="button"
-            class="bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition-all hover:bg-emerald-400"
+            class="action-btn flex items-center gap-1.5 px-3 py-1 text-[9px] font-bold uppercase tracking-widest"
+            onclick={activeSection === "program" ? resetProgramPreferences : resetBufferPreferences}
+          >
+            <RotateCcw size={11} />
+            Reset
+          </button>
+          <button
+            type="button"
+            class="action-btn-primary px-3 py-1 text-[9px] font-bold uppercase tracking-widest"
             onclick={closeDialog}
           >
             Cerrar
           </button>
         </div>
       </div>
+
     </section>
   </div>
 </div>
 
 <style>
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 8px;
+  .pref-shell {
+    background: var(--forja-ui-picker-bg, #0e0e11);
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
   }
 
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+  /* Sidebar */
+  .sidebar {
+    border-right: 1px solid var(--forja-ui-btn-border, #27272a);
+    background: var(--forja-ui-explorer-bg, #0a0a0a);
   }
 
+  /* Shared header row */
+  .header-row {
+    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+
+  .mode-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--forja-ui-gradient-from, #34d399);
+    white-space: nowrap;
+  }
+
+  .sep-v {
+    width: 1px;
+    height: 12px;
+    flex-shrink: 0;
+    background: var(--forja-ui-btn-border, #27272a);
+  }
+
+  .close-btn { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .close-btn:hover { color: var(--forja-ui-text-primary, #f4f4f5); }
+
+  /* Nav */
+  .nav-item {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    border-left: 2px solid transparent;
+  }
+  .nav-item:hover { background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)); }
+  .nav-item--active {
+    color: var(--forja-ui-text-primary, #f4f4f5);
+    border-left-color: var(--forja-ui-gradient-from, #34d399);
+    background: var(--forja-ui-picker-active, rgba(52,211,153,0.08));
+  }
+  .nav-item-label { color: inherit; }
+  .nav-item-desc { color: var(--forja-ui-text-muted, #b4b4c0); opacity: 0.8; }
+
+  /* Preview box */
+  .preview-box {
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    background: var(--forja-ui-picker-bg, #0e0e11);
+  }
+  .preview-title { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .preview-row { color: var(--forja-ui-text-secondary, #dedee2); }
+  .preview-val { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .preview-code-block {
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+  .preview-code { color: var(--forja-ui-text-primary, #f4f4f5); }
+
+  /* Main panel */
+  .main-panel { }
+
+  .section-icon { color: var(--forja-ui-gradient-from, #34d399); }
+  .section-title { color: var(--forja-ui-text-primary, #f4f4f5); }
+
+  /* Section label (divider) */
+  .section-label {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    background: var(--forja-ui-explorer-bg, #0a0a0a);
+    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+
+  /* Setting rows */
+  .setting-row {
+    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+  .setting-row:hover { background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)); }
+  .setting-label { color: var(--forja-ui-text-primary, #f4f4f5); }
+  .setting-desc { color: var(--forja-ui-text-muted, #b4b4c0); }
+
+  /* Value badge */
+  .value-badge {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+
+  /* Select */
+  .pref-select {
+    color: var(--forja-ui-text-primary, #f4f4f5);
+    background: var(--forja-ui-picker-bg, #0e0e11);
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    min-width: 160px;
+  }
+  .pref-select:focus {
+    border-color: var(--forja-ui-gradient-from, #34d399);
+    outline: none;
+  }
+  .pref-select option {
+    background: var(--forja-ui-picker-bg, #0e0e11);
+  }
+
+  /* Range */
+  .pref-range {
+    background: var(--forja-ui-btn-border, #27272a);
+    accent-color: var(--forja-ui-gradient-from, #34d399);
+  }
+
+  /* Toggle */
+  .pref-toggle {
+    width: 44px;
+    height: 20px;
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+    justify-content: flex-start;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  .pref-toggle--on {
+    border-color: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 40%, transparent);
+    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 12%, transparent);
+    justify-content: flex-end;
+  }
+  .toggle-thumb {
+    display: block;
+    width: 14px;
+    height: 14px;
+    background: var(--forja-ui-text-muted, #b4b4c0);
+    transition: background 0.1s;
+  }
+  .pref-toggle--on .toggle-thumb {
+    background: var(--forja-ui-gradient-from, #34d399);
+  }
+
+  /* Badge toggle (ON/OFF) */
+  .badge-toggle {
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+    min-width: 36px;
+    text-align: center;
+  }
+  .badge-toggle--on {
+    color: var(--forja-ui-gradient-from, #34d399);
+    border-color: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 25%, transparent);
+    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 8%, transparent);
+  }
+
+  /* Footer */
+  .footer-row {
+    border-top: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+  .footer-hint { color: var(--forja-ui-text-muted, #b4b4c0); }
+
+  .action-btn {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+  }
+  .action-btn:hover { color: var(--forja-ui-text-primary, #f4f4f5); }
+
+  .action-btn-primary {
+    color: var(--forja-ui-picker-bg, #0e0e11);
+    background: var(--forja-ui-gradient-from, #34d399);
+    font-weight: 700;
+  }
+  .action-btn-primary:hover {
+    opacity: 0.9;
+  }
+
+  /* Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--forja-ui-explorer-scrollbar, #1e1e1e);
   }
-
   .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--forja-ui-explorer-scrollbar-hover, #2e2e2e);
   }
 </style>
