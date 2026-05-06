@@ -329,8 +329,8 @@
   }
   .action-btn--install:hover {
     color: var(--forja-ui-gradient-from, #34d399);
-    border-color: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 30%, transparent);
-    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 8%, transparent);
+    border-color: rgba(52,211,153,0.30);
+    background: rgba(52,211,153,0.08);
   }
   .action-btn--repair:hover {
     color: #fbbf24;

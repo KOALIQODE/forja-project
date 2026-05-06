@@ -672,8 +672,8 @@
   }
   .badge-active {
     color: var(--forja-ui-gradient-from, #34d399);
-    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 20%, transparent);
+    background: rgba(52,211,153,0.10);
+    border: 1px solid rgba(52,211,153,0.20);
   }
   .perm-badge { }
   .method-badge { }
@@ -693,8 +693,8 @@
   }
   .action-btn--enable:hover {
     color: var(--forja-ui-gradient-from, #34d399);
-    border-color: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 30%, transparent);
-    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 8%, transparent);
+    border-color: rgba(52,211,153,0.30);
+    background: rgba(52,211,153,0.08);
   }
   .action-btn--disable:hover {
     color: #f87171;
@@ -703,8 +703,8 @@
   }
   .action-btn--install:hover {
     color: var(--forja-ui-gradient-from, #34d399);
-    border-color: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 30%, transparent);
-    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 8%, transparent);
+    border-color: rgba(52,211,153,0.30);
+    background: rgba(52,211,153,0.08);
   }
 
   /* Empty state */

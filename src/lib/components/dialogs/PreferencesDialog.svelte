@@ -136,10 +136,10 @@
       <!-- Section header -->
       <div class="header-row flex items-center gap-3 px-5 py-2.5">
         {#if activeSection === "program"}
-          <MonitorCog size={13} class="section-icon shrink-0" />
+          <MonitorCog size={13} style="color: var(--forja-ui-gradient-from, #34d399); flex-shrink: 0;" />
           <span class="section-title text-[11px] font-bold uppercase tracking-[0.14em]">Preferencias del programa</span>
         {:else}
-          <FileCode2 size={13} class="section-icon shrink-0" />
+          <FileCode2 size={13} style="color: var(--forja-ui-gradient-from, #34d399); flex-shrink: 0;" />
           <span class="section-title text-[11px] font-bold uppercase tracking-[0.14em]">Preferencias del buffer</span>
         {/if}
       </div>
@@ -440,7 +440,6 @@
   /* Main panel */
   .main-panel { }
 
-  .section-icon { color: var(--forja-ui-gradient-from, #34d399); }
   .section-title { color: var(--forja-ui-text-primary, #f4f4f5); }
 
   /* Section label (divider) */
@@ -496,8 +495,8 @@
     transition: background 0.1s, border-color 0.1s;
   }
   .pref-toggle--on {
-    border-color: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 40%, transparent);
-    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 12%, transparent);
+    border-color: rgba(52,211,153,0.40);
+    background: rgba(52,211,153,0.12);
     justify-content: flex-end;
   }
   .toggle-thumb {
@@ -521,8 +520,8 @@
   }
   .badge-toggle--on {
     color: var(--forja-ui-gradient-from, #34d399);
-    border-color: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 25%, transparent);
-    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 8%, transparent);
+    border-color: rgba(52,211,153,0.25);
+    background: rgba(52,211,153,0.08);
   }
 
   /* Footer */

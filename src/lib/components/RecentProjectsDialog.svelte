@@ -217,8 +217,8 @@
   .git-behind { color: #fb923c; }
   .git-publish {
     color: var(--forja-ui-gradient-from, #34d399);
-    border: 1px solid color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 20%, transparent);
-    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 6%, transparent);
+    border: 1px solid rgba(52,211,153,0.20);
+    background: rgba(52,211,153,0.06);
   }
   .git-none { color: var(--forja-ui-text-muted, #b4b4c0); opacity: 0.4; }
 
