@@ -225,6 +225,9 @@ pub fn run() {
             commands::parser_manager::pm_download_or_compile_parser,
             commands::parser_manager::pm_repair_queries,
             commands::parser_manager::pm_repair_all_queries,
+            // Security
+            commands::security::audit_dependencies,
+            commands::security::watch_lockfile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

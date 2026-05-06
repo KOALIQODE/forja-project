@@ -49,16 +49,36 @@
       name: b.filePath.split(/[/\\]/).pop(),
       path: b.filePath,
       is_dir: false,
+      git_status: null as string | null,
     }));
   }
 
   async function updateResults() {
     if (mode === 'buffers') {
       const all = getBuffers();
-      results = all.filter(b => 
+      const filtered = all.filter(b => 
         b.name?.toLowerCase().includes(query.toLowerCase()) || 
         b.path.toLowerCase().includes(query.toLowerCase())
       );
+
+      if (filtered.length > 0 && $currentProject) {
+        try {
+          const paths = filtered.map(b => b.path);
+          const gitMap = await invoke<Record<string, string>>('get_files_git_status', {
+            projectPath: $currentProject,
+            filePaths: paths,
+          });
+          results = filtered.map(b => ({
+            ...b,
+            git_status: gitMap[b.path] ?? null,
+          }));
+        } catch {
+          results = filtered;
+        }
+      } else {
+        results = filtered;
+      }
+
       selectedIdx = 0;
       updatePreview();
       return;
@@ -328,44 +348,48 @@
               <p class="text-[10px] uppercase tracking-widest">No results</p>
             </div>
           {:else}
-            {#each results as item, i}
-              {@const fileIcon = getIcon(item.path)}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                class="result-item flex cursor-default flex-col px-3 py-2"
-                class:result-item--selected={selectedIdx === i}
-                onclick={() => { selectedIdx = i; confirmSelection(); }}
-                onmouseenter={() => { selectedIdx = i; updatePreview(); }}
-              >
-                <div class="flex items-center gap-2">
-                  {#if fileIcon}
-                    <fileIcon.icon size={13} style="color: {fileIcon.color}; flex-shrink: 0;" />
-                  {:else}
-                    <File size={13} style="color: var(--forja-ui-text-muted, #b4b4c0); flex-shrink: 0;" />
-                  {/if}
-                  <span class="result-name truncate text-[12px]" class:result-name--active={selectedIdx === i}>
-                    {item.name}
-                  </span>
-                  {#if item.git_status && !item.is_grep}
-                    <span
-                      class="ml-auto shrink-0 font-mono text-[9px] font-bold"
-                      style="color: {gitStatusStyle(item.git_status)}"
-                    >{GIT_STATUS_LABELS[item.git_status] ?? '?'}</span>
-                  {/if}
-                </div>
-                <div class="flex flex-col gap-0.5 overflow-hidden pl-[21px]">
-                  <span class="result-path truncate text-[10px]">
-                    {item.path.replace($currentProject || '', '').replace(/^[/\\]/, '')}
-                  </span>
-                  {#if item.is_grep}
-                    <div class="grep-line truncate pl-2 text-[11px] leading-relaxed">
-                      {@html highlightText(item.line_content.trim(), query)}
+            <div class="flex flex-col gap-0.5 p-2">
+              {#each results as item, i}
+                {@const fileIcon = getIcon(item.path)}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  class="result-item group flex cursor-default items-center gap-3 px-3 py-2"
+                  class:result-item--selected={selectedIdx === i}
+                  onclick={() => { selectedIdx = i; confirmSelection(); }}
+                  onmouseenter={() => { selectedIdx = i; updatePreview(); }}
+                >
+                  <div class="file-icon-wrap flex h-7 w-7 shrink-0 items-center justify-center">
+                    {#if fileIcon}
+                      <fileIcon.icon size={14} style="color: {fileIcon.color};" />
+                    {:else}
+                      <File size={14} style="color: var(--forja-ui-text-muted, #b4b4c0);" />
+                    {/if}
+                  </div>
+                  <div class="flex flex-1 flex-col min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="result-name min-w-0 truncate text-[12px] font-medium" class:result-name--active={selectedIdx === i}>
+                        {item.name}
+                      </span>
+                      {#if item.git_status && !item.is_grep}
+                        <span
+                          class="ml-auto shrink-0 font-mono text-[9px] font-bold"
+                          style="color: {gitStatusStyle(item.git_status)}"
+                        >{GIT_STATUS_LABELS[item.git_status] ?? '?'}</span>
+                      {/if}
                     </div>
-                  {/if}
+                    <span class="result-path truncate text-[10px]">
+                      {item.path.replace($currentProject || '', '').replace(/^[/\\]/, '')}
+                    </span>
+                    {#if item.is_grep}
+                      <div class="grep-line truncate text-[11px] leading-relaxed">
+                        {@html highlightText(item.line_content.trim(), query)}
+                      </div>
+                    {/if}
+                  </div>
                 </div>
-              </div>
-            {/each}
+              {/each}
+            </div>
           {/if}
         </div>
 
@@ -409,7 +433,7 @@
 <style>
   .telescope-shell {
     background: var(--forja-ui-picker-bg, #0e0e11);
-    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    /* border removed for cleaner look */
     box-shadow: 0 24px 64px rgba(0,0,0,0.90), 0 8px 24px rgba(0,0,0,0.70);
   }
 
@@ -461,17 +485,21 @@
     opacity: 0.6;
   }
 
-  .result-item { color: var(--forja-ui-text-secondary, #dedee2); }
-  .result-item:hover { background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)); }
-  .result-item--selected { background: var(--forja-ui-picker-active, rgba(52,211,153,0.08)); }
+  .result-item { color: var(--forja-ui-text-secondary, #dedee2); border-radius: 8px; transition: background 0.12s, transform 0.06s; }
+  .result-item + .result-item { margin-top: 6px; }
+  .result-item:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)) 60%, transparent); transform: translateY(-1px); }
+  .result-item--selected { background: color-mix(in srgb, var(--forja-ui-picker-active, rgba(52,211,153,0.08)) 60%, transparent); }
+
+  .file-icon-wrap { color: var(--forja-ui-text-muted, #b4b4c0); }
 
   .result-name { color: var(--forja-ui-text-secondary, #dedee2); }
   .result-name--active { color: var(--forja-ui-text-primary, #f4f4f5); }
 
-  .result-path { color: var(--forja-ui-text-secondary, #dedee2); }
+  .result-path { color: var(--forja-ui-text-secondary, #dedee2); opacity: 0.7; }
 
   .grep-line {
     border-left: 1px solid var(--forja-ui-btn-border, #27272a);
+    padding-left: 0.5rem;
     color: var(--forja-ui-text-secondary, #dedee2);
   }
 

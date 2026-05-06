@@ -43,7 +43,7 @@
   aria-label="Plugin permission consent"
 >
   <!-- Panel -->
-  <div class="flex w-full max-w-md flex-col overflow-hidden border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.95)]">
+  <div class="flex w-full max-w-md flex-col overflow-hidden bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.95)]">
 
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-white/5 px-6 py-5">
@@ -101,8 +101,10 @@
         <ul class="flex flex-col gap-2">
           {#each info.permissions as perm}
             {@const RiskIcon = riskIcon(perm.risk)}
-            <li class="flex items-start gap-3 border p-3.5 {riskClass(perm.risk)}">
-              <RiskIcon size={15} class="mt-0.5 shrink-0" />
+            <li class="perm-item group relative flex w-full items-start gap-3 px-3 py-2.5 {riskClass(perm.risk)}">
+              <div class="perm-icon mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center">
+                <RiskIcon size={15} />
+              </div>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-2">
                   <code class="font-mono text-[10px] font-bold">{perm.id}</code>
@@ -149,3 +151,9 @@
 
   </div>
 </div>
+
+<style>
+  .perm-item { border-radius: 8px; transition: background 0.12s, transform 0.06s; }
+  .perm-item + .perm-item { margin-top: 6px; }
+  .perm-item:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); transform: translateY(-1px); }
+</style>

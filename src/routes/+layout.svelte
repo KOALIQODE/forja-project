@@ -13,6 +13,9 @@
   import "../app.css";
   import '@fontsource-variable/montserrat/wght.css';
   import { initPlugins } from "$lib/stores/pluginStore";
+  import { watchLockfile } from "$lib/utils/securityClient";
+  import { clearAuditReport } from "$lib/stores/securityStore";
+  import SecurityAlert from "$lib/components/SecurityAlert.svelte";
 
   let { children }: { children: Snippet } = $props();
 
@@ -31,6 +34,15 @@
 
   onMount(() => {
     initPlugins();
+
+    // Watch the lockfile of the current project and re-audit on changes
+    const unsubscribe = currentProject.subscribe((project) => {
+      if (project) {
+        watchLockfile(project);
+      } else {
+        clearAuditReport();
+      }
+    });
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // ── Ctrl+K chord — must be highest priority ────────────────────────
@@ -124,6 +136,7 @@
     window.addEventListener('keydown', handleKeyDown, true);
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
+      unsubscribe();
     };
   });
 </script>
@@ -145,6 +158,7 @@
   <ParserPrompt />
 </div>
 <DialogManager />
+<SecurityAlert />
 
 <style>
   :global(html, body) {

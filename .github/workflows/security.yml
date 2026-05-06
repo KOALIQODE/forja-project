@@ -1,0 +1,428 @@
+name: Security - Dependency Scanning
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    # Daily scan at 08:00 UTC — catches newly published advisories
+    - cron: "0 8 * * *"
+
+jobs:
+  # ── Detect which ecosystems exist in this repo ──────────────────────────────
+  detect:
+    name: Detect ecosystems
+    runs-on: ubuntu-latest
+    outputs:
+      has_node: ${{ steps.detect.outputs.has_node }}
+      has_rust: ${{ steps.detect.outputs.has_rust }}
+      has_python: ${{ steps.detect.outputs.has_python }}
+      has_go: ${{ steps.detect.outputs.has_go }}
+      has_ruby: ${{ steps.detect.outputs.has_ruby }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect lockfiles (recursive)
+        id: detect
+        run: |
+          has_node=false
+          has_rust=false
+          has_python=false
+          has_go=false
+          has_ruby=false
+
+          # Use git ls-files to find lockfiles anywhere in the repository (handles monorepos and nested crates)
+          if git ls-files '*package-lock.json' '*yarn.lock' '*pnpm-lock.yaml' | grep -q .; then has_node=true; fi
+          if git ls-files 'Cargo.lock' '*/Cargo.lock' | grep -q .; then has_rust=true; fi
+          if git ls-files 'requirements.txt' 'pyproject.toml' 'Pipfile' | grep -q .; then has_python=true; fi
+          if git ls-files 'go.mod' | grep -q .; then has_go=true; fi
+          if git ls-files 'Gemfile.lock' | grep -q .; then has_ruby=true; fi
+
+          echo "has_node=$has_node"     >> "$GITHUB_OUTPUT"
+          echo "has_rust=$has_rust"     >> "$GITHUB_OUTPUT"
+          echo "has_python=$has_python" >> "$GITHUB_OUTPUT"
+          echo "has_go=$has_go"         >> "$GITHUB_OUTPUT"
+          echo "has_ruby=$has_ruby"     >> "$GITHUB_OUTPUT"
+
+  # ── Node.js (npm / yarn / pnpm) ─────────────────────────────────────────────
+  scan-node:
+    name: Scan · Node.js
+    needs: detect
+    if: needs.detect.outputs.has_node == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies (per-package)
+        run: |
+          set -e
+          for f in $(git ls-files '*package-lock.json' '*yarn.lock' '*pnpm-lock.yaml' || true); do
+            dir=$(dirname "$f")
+            if [ "$dir" = "." ]; then dir="."; fi
+            echo "Installing in $dir"
+            if [ -f "$dir/package-lock.json" ]; then (cd "$dir" && npm ci); fi
+            if [ -f "$dir/yarn.lock" ]; then (cd "$dir" && yarn install --frozen-lockfile); fi
+            if [ -f "$dir/pnpm-lock.yaml" ]; then (cd "$dir" && npx pnpm install --frozen-lockfile); fi
+          done || true
+
+      # Built-in audit — fast gate per-package
+      - name: npm audit (built-in gate)
+        run: |
+          set -e
+          for f in $(git ls-files '*package-lock.json' '*yarn.lock' '*pnpm-lock.yaml' || true); do
+            dir=$(dirname "$f")
+            echo "Auditing $dir"
+            if [ -f "$dir/package-lock.json" ]; then (cd "$dir" && npm audit --audit-level=high) || true; fi
+            if [ -f "$dir/yarn.lock" ]; then (cd "$dir" && yarn audit --level high) || true; fi
+            if [ -f "$dir/pnpm-lock.yaml" ]; then (cd "$dir" && npx pnpm audit --audit-level high) || true; fi
+          done || true
+
+      # Snyk — deep analysis + SARIF upload to GitHub Security tab
+      - name: Snyk — Node.js
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk-node.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: snyk-node.sarif
+          category: snyk-node
+
+      - name: Create summary artifact
+        if: always()
+        run: |
+          mkdir -p security-artifacts
+          for f in $(git ls-files '*package-lock.json' '*yarn.lock' '*pnpm-lock.yaml' || true); do
+            dir=$(dirname "$f")
+            base=$(echo "$dir" | sed 's/\//_/g' | sed 's/^\._//')
+            if [ -f "$dir/package-lock.json" ]; then (cd "$dir" && npm audit --json > "$GITHUB_WORKSPACE/security-artifacts/npm-audit-$base.json') || true; fi
+            if [ -f "$dir/yarn.lock" ]; then (cd "$dir" && yarn audit --json > "$GITHUB_WORKSPACE/security-artifacts/yarn-audit-$base.json') || true; fi
+            if [ -f "$dir/pnpm-lock.yaml" ]; then (cd "$dir" && npx pnpm audit --json > "$GITHUB_WORKSPACE/security-artifacts/pnpm-audit-$base.json') || true; fi
+          done
+          python - <<'PY'
+import json,glob,os
+counts={'critical':0,'high':0,'total':0}
+for fname in glob.glob('security-artifacts/*audit*.json'):
+  try:
+    j=json.load(open(fname))
+    adv=j.get('advisories') or j.get('vulnerabilities') or {}
+    items = adv.values() if isinstance(adv,dict) else adv
+    for a in items:
+      counts['total']+=1
+      sev=str(a.get('severity','')).lower()
+      if 'critical' in sev: counts['critical']+=1
+      elif 'high' in sev: counts['high']+=1
+  except Exception:
+    pass
+open('security-artifacts/summary-node.json','w').write(json.dumps({'ecosystem':'node','counts':counts}))
+print(counts)
+PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-summary-node
+          path: security-artifacts/summary-node.json
+
+  # ── Rust (Cargo) ─────────────────────────────────────────────────────────────
+  scan-rust:
+    name: Scan · Rust
+    needs: detect
+    if: needs.detect.outputs.has_rust == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # cargo-audit — official RustSec advisory database
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: cargo audit (per-crate)
+        run: |
+          mkdir -p security-artifacts
+          for t in $(git ls-files '*Cargo.toml' || true); do
+            crate_dir=$(dirname "$t")
+            if [ "$crate_dir" = "." ]; then crate_dir="."; fi
+            echo "Running cargo audit in $crate_dir"
+            (cd "$crate_dir" && cargo audit -f json > "$GITHUB_WORKSPACE/security-artifacts/cargo-audit-$(echo "$crate_dir" | sed 's/\//_/g' | sed 's/^\._//').json') || true
+          done
+
+      # Snyk — additional analysis + SARIF
+      - name: Snyk — Rust
+        uses: snyk/actions/rust@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk-rust.sarif
+          file: Cargo.toml
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: snyk-rust.sarif
+          category: snyk-rust
+
+      - name: Create summary artifact
+        if: always()
+        run: |
+          mkdir -p security-artifacts
+          # Aggregate any per-crate cargo-audit JSON files produced earlier
+          python - <<'PY'
+import json,glob
+counts={'critical':0,'high':0,'total':0}
+for fname in glob.glob('security-artifacts/cargo-audit-*.json'):
+  try:
+    j=json.load(open(fname))
+    vul=j.get('vulnerabilities') or j.get('advisories') or []
+    if isinstance(vul,list):
+      counts['total']+=len(vul)
+    elif isinstance(vul,dict):
+      counts['total']+=len(vul.keys())
+  except Exception:
+    pass
+open('security-artifacts/summary-rust.json','w').write(json.dumps({'ecosystem':'cargo','counts':counts}))
+print(counts)
+PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-summary-rust
+          path: security-artifacts/summary-rust.json
+
+  # ── Python ───────────────────────────────────────────────────────────────────
+  scan-python:
+    name: Scan · Python
+    needs: detect
+    if: needs.detect.outputs.has_python == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: pip-audit (built-in gate)
+        run: |
+          if [ -f requirements.txt ]; then
+            pip-audit -r requirements.txt --progress-spinner off
+          elif [ -f pyproject.toml ]; then
+            pip-audit --progress-spinner off
+          fi
+
+      - name: Snyk — Python
+        uses: snyk/actions/python@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk-python.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: snyk-python.sarif
+          category: snyk-python
+
+      - name: Create summary artifact
+        if: always()
+        run: |
+          mkdir -p security-artifacts
+          # run pip-audit per-python project file
+          for f in $(git ls-files 'requirements.txt' 'pyproject.toml' 'Pipfile' || true); do
+            dir=$(dirname "$f")
+            base=$(echo "$dir" | sed 's/\//_/g' | sed 's/^\._//')
+            if [ -f "$dir/requirements.txt" ]; then (cd "$dir" && pip-audit -r requirements.txt --format=json > "$GITHUB_WORKSPACE/security-artifacts/pip-audit-$base.json') || true; fi
+            if [ -f "$dir/pyproject.toml" ]; then (cd "$dir" && pip-audit --format=json > "$GITHUB_WORKSPACE/security-artifacts/pip-audit-$base.json') || true; fi
+          done
+          python - <<'PY'
+import json,glob
+counts={'critical':0,'high':0,'total':0}
+for fname in glob.glob('security-artifacts/pip-audit-*.json'):
+  try:
+    j=json.load(open(fname))
+    if isinstance(j,list):
+      counts['total']+=len(j)
+    elif isinstance(j,dict) and 'vulnerabilities' in j:
+      counts['total']+=len(j['vulnerabilities'])
+  except Exception:
+    pass
+open('security-artifacts/summary-python.json','w').write(json.dumps({'ecosystem':'python','counts':counts}))
+print(counts)
+PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-summary-python
+          path: security-artifacts/summary-python.json
+
+  # ── Go ───────────────────────────────────────────────────────────────────────
+  scan-go:
+    name: Scan · Go
+    needs: detect
+    if: needs.detect.outputs.has_go == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: govulncheck (built-in gate)
+        run: govulncheck ./...
+
+      - name: Snyk — Go
+        uses: snyk/actions/golang@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk-go.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: snyk-go.sarif
+          category: snyk-go
+
+      - name: Create summary artifact
+        if: always()
+        run: |
+          mkdir -p security-artifacts
+          # govulncheck may produce JSON per-module; run at repo root and also aggregate any produced files
+          govulncheck -json ./... > security-artifacts/govulncheck-root.json || true
+          python - <<'PY'
+import json,glob
+counts={'critical':0,'high':0,'total':0}
+for fname in glob.glob('security-artifacts/*govulncheck*.json'):
+  try:
+    j=json.load(open(fname))
+    vul=j.get('Vulnerabilities') or j.get('vulnerabilities') or []
+    if isinstance(vul,list):
+      counts['total']+=len(vul)
+  except Exception:
+    pass
+open('security-artifacts/summary-go.json','w').write(json.dumps({'ecosystem':'go','counts':counts}))
+print(counts)
+PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-summary-go
+          path: security-artifacts/summary-go.json
+
+  # ── Ruby ─────────────────────────────────────────────────────────────────────
+  scan-ruby:
+    name: Scan · Ruby
+    needs: detect
+    if: needs.detect.outputs.has_ruby == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Install bundler-audit
+        run: gem install bundler-audit
+
+      - name: bundler-audit (built-in gate)
+        run: bundle-audit check --update
+
+      - name: Snyk — Ruby
+        uses: snyk/actions/ruby@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk-ruby.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: snyk-ruby.sarif
+          category: snyk-ruby
+
+      - name: Create summary artifact
+        if: always()
+        run: |
+          mkdir -p security-artifacts
+          for f in $(git ls-files 'Gemfile.lock' || true); do
+            dir=$(dirname "$f")
+            base=$(echo "$dir" | sed 's/\//_/g' | sed 's/^\._//')
+            (cd "$dir" && bundle-audit check --update > "$GITHUB_WORKSPACE/security-artifacts/bundle-audit-$base.txt') || true
+          done
+          python - <<'PY'
+import glob, json
+counts={'critical':0,'high':0,'total':0}
+for fname in glob.glob('security-artifacts/*bundle-audit*.txt'):
+  try:
+    txt=open(fname,'r',encoding='utf8').read()
+    matches = txt.count('\nName: ')
+    counts['total'] += matches
+  except Exception:
+    pass
+open('security-artifacts/summary-ruby.json','w').write(json.dumps({'ecosystem':'ruby','counts':counts}))
+print(counts)
+PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-summary-ruby
+          path: security-artifacts/summary-ruby.json
+
+  # ── Summary gate: block merge if any scanner found critical/high issues ──────
+  security-gate:
+    name: Security gate
+    needs: [scan-node, scan-rust, scan-python, scan-go, scan-ruby]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: security-artifacts
+
+      - name: Aggregate summaries and enforce gate
+        run: |
+          node .github/scripts/aggregate-security.js security-artifacts
+

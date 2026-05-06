@@ -316,7 +316,7 @@
     </div>
 
     <!-- Content -->
-    <div class="content-area flex-1 overflow-y-auto custom-scrollbar">
+    <div class="content-area flex-1 overflow-y-auto custom-scrollbar p-3">
 
       <!-- ── Plugins Tab ──────────────────────────────────────────────────── -->
       {#if activeTab === "plugins"}
@@ -338,14 +338,14 @@
           <div class="flex flex-col">
             {#each filteredPlugins as plugin (plugin.name)}
               {@const isDisabled = disabled.has(plugin.name)}
-              <div class="item-row flex items-start justify-between gap-4 px-4 py-3" class:item-row--disabled={isDisabled}>
+              <div class="item-row group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3" class:item-row--disabled={isDisabled}>
                 <div class="flex min-w-0 items-start gap-3">
                   <div class="item-icon mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center">
                     <Puzzle size={14} />
                   </div>
-                  <div class="min-w-0">
+                  <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="item-name text-[12px]">{plugin.name}</span>
+                      <span class="item-name min-w-0 truncate text-[12px]">{plugin.name}</span>
                       <span class="item-meta text-[9px]">v{plugin.version}</span>
                       {#if isDisabled}
                         <span class="badge-disabled text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5">Disabled</span>
@@ -403,14 +403,14 @@
           <div class="flex flex-col">
             {#each filteredThemes as theme (theme.name)}
               {@const isActive = currentTheme?.name === theme.name}
-              <div class="item-row flex items-start justify-between gap-4 px-4 py-3" class:item-row--active={isActive}>
+              <div class="item-row group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3" class:item-row--active={isActive}>
                 <div class="flex min-w-0 items-start gap-3">
                   <div class="item-icon mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center" class:item-icon--active={isActive}>
                     <Palette size={14} />
                   </div>
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="item-name text-[12px]">{theme.name}</span>
+                      <span class="item-name min-w-0 truncate text-[12px]">{theme.name}</span>
                       <span class="item-meta text-[9px]">v{theme.version}</span>
                       {#if isActive}
                         <span class="badge-active flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
@@ -477,14 +477,14 @@
           <div class="flex flex-col">
             {#each filteredServers as server (server.id)}
               {@const badge = methodBadge(server.method)}
-              <div class="item-row flex items-start justify-between gap-4 px-4 py-3">
+              <div class="item-row group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3">
                 <div class="flex min-w-0 items-start gap-3">
                   <div class="item-icon mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center">
                     <Server size={14} />
                   </div>
-                  <div class="min-w-0">
+                  <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
-                      <span class="item-name truncate text-[12px]">{server.name}</span>
+                      <span class="item-name min-w-0 truncate text-[12px]">{server.name}</span>
                       <span class={`method-badge shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badge.cls}`}>
                         {badge.label}
                       </span>
@@ -574,7 +574,7 @@
 <style>
   .ext-shell {
     background: var(--forja-ui-picker-bg, #0e0e11);
-    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    /* border removed for cleaner look */
     box-shadow: 0 24px 64px rgba(0,0,0,0.90), 0 8px 24px rgba(0,0,0,0.70);
   }
 
@@ -646,10 +646,14 @@
 
   /* Items */
   .item-row {
-    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+    /* remove full-width separators to allow inset hover */
+    border-bottom: none;
+    border-radius: 8px;
+    transition: background 0.12s, transform 0.06s;
   }
-  .item-row:hover { background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)); }
-  .item-row--active { background: var(--forja-ui-picker-active, rgba(52,211,153,0.08)); }
+  .item-row + .item-row { margin-top: 6px; }
+  .item-row:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); transform: translateY(-1px); }
+  .item-row--active { background: color-mix(in srgb, var(--forja-ui-picker-active, rgba(52,211,153,0.08)) 60%, transparent); }
   .item-row--disabled { opacity: 0.5; }
 
   .item-icon {

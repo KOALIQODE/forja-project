@@ -154,7 +154,7 @@
     </div>
 
     <!-- Content -->
-    <div class="custom-scrollbar flex-1 overflow-y-auto">
+    <div class="custom-scrollbar flex-1 overflow-y-auto p-3">
       {#if isLoading}
         <div class="empty-state flex h-full items-center justify-center">
           <div class="loader"></div>
@@ -171,14 +171,14 @@
           <span class="divider-line flex-1"></span>
         </div>
         {#each filteredParsers as parser}
-          <div class="item-row flex items-center justify-between gap-4 px-4 py-2.5">
+          <div class="item-row group relative cursor-pointer flex items-center justify-between gap-4 px-4 py-2.5">
             <!-- Left -->
             <div class="flex items-center gap-3 min-w-0">
               <div class="item-icon flex h-7 w-7 shrink-0 items-center justify-center">
                 <Package size={14} />
               </div>
-              <div class="min-w-0">
-                <span class="item-name text-[12px]">{parser.language}</span>
+              <div class="min-w-0 flex-1">
+                <span class="item-name min-w-0 truncate text-[12px]">{parser.language}</span>
                 <span class="item-meta ml-2 font-mono text-[10px] uppercase tracking-widest">{parser.name}</span>
               </div>
             </div>
@@ -250,7 +250,7 @@
 <style>
   .grammar-shell {
     background: var(--forja-ui-picker-bg, #0e0e11);
-    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    /* border removed for cleaner look */
     box-shadow: 0 24px 64px rgba(0,0,0,0.90), 0 8px 24px rgba(0,0,0,0.70);
   }
 
@@ -303,9 +303,12 @@
   }
 
   .item-row {
-    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+    border-bottom: none;
+    border-radius: 8px;
+    transition: background 0.12s, transform 0.06s;
   }
-  .item-row:hover { background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)); }
+  .item-row + .item-row { margin-top: 6px; }
+  .item-row:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); transform: translateY(-1px); }
 
   .item-icon {
     color: var(--forja-ui-text-muted, #b4b4c0);

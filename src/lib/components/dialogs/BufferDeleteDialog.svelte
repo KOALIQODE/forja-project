@@ -180,7 +180,7 @@
 
               <div class="flex flex-1 flex-col min-w-0">
                 <div class="flex items-center gap-2">
-                  <span class="item-name truncate text-[13px] font-medium" class:item-name--highlight={isSelected || isActive}>
+                  <span class="item-name min-w-0 truncate text-[13px] font-medium" class:item-name--highlight={isSelected || isActive}>
                     {getFileName(buffer.filePath)}
                   </span>
                   {#if isActive}
@@ -235,7 +235,7 @@
 <style>
   .dialog-shell {
     background: var(--forja-ui-picker-bg, #0e0e11);
-    border: 1px solid var(--forja-ui-picker-border, #2a2a2e);
+    /* border removed for cleaner look */
     box-shadow: 0 24px 64px rgba(0,0,0,0.90), 0 8px 24px rgba(0,0,0,0.70);
   }
 
