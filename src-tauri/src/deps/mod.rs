@@ -1,19 +1,12 @@
+pub mod clone;
 pub mod detector;
 pub mod ecosystems;
-pub mod clone;
+mod validate_repo;
 
 use ecosystems::{
-    npm::NpmHandler,
-    cargo::CargoHandler,
-    python::PythonHandler,
-    golang::GoHandler,
-    maven::MavenHandler,
-    gradle::GradleHandler,
-    ruby::RubyHandler,
-    dotnet::DotNetHandler,
-    composer::ComposerHandler,
-    cpp::CppHandler,
-    EcosystemHandler,
+    cargo::CargoHandler, composer::ComposerHandler, cpp::CppHandler, dotnet::DotNetHandler,
+    golang::GoHandler, gradle::GradleHandler, maven::MavenHandler, npm::NpmHandler,
+    python::PythonHandler, ruby::RubyHandler, EcosystemHandler,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -69,7 +62,8 @@ pub async fn scan_all(root: String) -> Result<Vec<ecosystems::ScanResult>, Strin
 pub async fn scan_manifest(manifest_path: String) -> Result<ecosystems::ScanResult, String> {
     let path = PathBuf::from(&manifest_path);
     let handlers = get_handlers();
-    let handler = handlers.iter()
+    let handler = handlers
+        .iter()
         .find(|h| h.is_manifest(&path))
         .ok_or_else(|| format!("Ecosistema no soportado para: {}", manifest_path))?;
     scan_with_handler(&path, handler)
@@ -98,8 +92,7 @@ pub(crate) fn scan_with_handler(
         handler.run_audit(path).into_iter().collect();
 
     // Enriquecer con outdated
-    let outdated_map: HashMap<String, String> =
-        handler.check_outdated(path).into_iter().collect();
+    let outdated_map: HashMap<String, String> = handler.check_outdated(path).into_iter().collect();
 
     for dep in &mut deps {
         if let Some(vulns) = vulns_map.get(&dep.name) {
@@ -113,8 +106,18 @@ pub(crate) fn scan_with_handler(
 
     // Ordenar: críticos primero
     deps.sort_by(|a, b| {
-        let a_sev = a.vulnerabilities.iter().map(|v| v.severity.score()).max().unwrap_or(0);
-        let b_sev = b.vulnerabilities.iter().map(|v| v.severity.score()).max().unwrap_or(0);
+        let a_sev = a
+            .vulnerabilities
+            .iter()
+            .map(|v| v.severity.score())
+            .max()
+            .unwrap_or(0);
+        let b_sev = b
+            .vulnerabilities
+            .iter()
+            .map(|v| v.severity.score())
+            .max()
+            .unwrap_or(0);
         b_sev.cmp(&a_sev)
     });
 
@@ -149,7 +152,8 @@ pub async fn install_dep(
 ) -> Result<String, String> {
     let path = PathBuf::from(&manifest_path);
     let handlers = get_handlers();
-    let handler = handlers.iter()
+    let handler = handlers
+        .iter()
         .find(|h| h.is_manifest(&path))
         .ok_or("Ecosistema no soportado")?;
     handler.install(&path, &package, version.as_deref(), dev)
@@ -163,7 +167,8 @@ pub async fn validate_dependency(
     version: Option<String>,
 ) -> Result<Vec<ecosystems::Vulnerability>, String> {
     let handlers = get_handlers();
-    let handler = handlers.iter()
+    let handler = handlers
+        .iter()
         .find(|h| h.name() == ecosystem)
         .ok_or_else(|| format!("Ecosistema no soportado: {}", ecosystem))?;
     handler.validate_dependency(&package, version.as_deref())
@@ -175,7 +180,8 @@ pub async fn start_watcher(app: AppHandle, root: String) -> Result<(), String> {
     use notify::{RecursiveMode, Watcher};
 
     let handlers = get_handlers();
-    let known_names: Vec<String> = handlers.iter()
+    let known_names: Vec<String> = handlers
+        .iter()
         .flat_map(|h| h.manifest_filenames().iter().map(|s| s.to_string()))
         .collect();
 
@@ -190,7 +196,9 @@ pub async fn start_watcher(app: AppHandle, root: String) -> Result<(), String> {
 
     let app_handle = app.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        let Ok(event) = res else { return; };
+        let Ok(event) = res else {
+            return;
+        };
 
         for path in event.paths {
             let file_name = path
@@ -205,7 +213,8 @@ pub async fn start_watcher(app: AppHandle, root: String) -> Result<(), String> {
                 let _ = app_handle.emit("deps:changed", path.to_string_lossy().to_string());
             }
         }
-    }).map_err(|error| error.to_string())?;
+    })
+    .map_err(|error| error.to_string())?;
 
     watcher
         .watch(Path::new(&root), RecursiveMode::Recursive)
@@ -230,8 +239,8 @@ pub async fn stop_watcher() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::sync::{
-        Arc,
         atomic::{AtomicUsize, Ordering},
+        Arc,
     };
 
     struct MockHandler {
@@ -241,17 +250,29 @@ mod tests {
     }
 
     impl EcosystemHandler for MockHandler {
-        fn name(&self) -> &'static str { "mock" }
+        fn name(&self) -> &'static str {
+            "mock"
+        }
 
-        fn language(&self) -> &'static str { "Mock" }
+        fn language(&self) -> &'static str {
+            "Mock"
+        }
 
-        fn manifest_filenames(&self) -> &'static [&'static str] { &["mock.json"] }
+        fn manifest_filenames(&self) -> &'static [&'static str] {
+            &["mock.json"]
+        }
 
-        fn parse_dependencies(&self, _manifest_path: &Path) -> Result<Vec<ecosystems::Dependency>, String> {
+        fn parse_dependencies(
+            &self,
+            _manifest_path: &Path,
+        ) -> Result<Vec<ecosystems::Dependency>, String> {
             Ok(self.deps.clone())
         }
 
-        fn run_audit(&self, _manifest_path: &Path) -> Vec<(String, Vec<ecosystems::Vulnerability>)> {
+        fn run_audit(
+            &self,
+            _manifest_path: &Path,
+        ) -> Vec<(String, Vec<ecosystems::Vulnerability>)> {
             self.audit_calls.fetch_add(1, Ordering::SeqCst);
             vec![]
         }

@@ -1,6 +1,7 @@
 use super::detector;
 use super::ecosystems::{Dependency, EcosystemHandler, ScanResult, Severity, Vulnerability};
 use super::get_handlers;
+use super::validate_repo;
 use chrono::Utc;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use tauri::{AppHandle, Emitter};
 
 const CLONE_SESSION_ROOT: &str = "forja-clone-validation";
 const CLONE_PROGRESS_EVENT: &str = "clone:progress";
+const CLONE_SCAN_EVENT: &str = "clone:scan_results";
 const INSTALL_PROGRESS_EVENT: &str = "install:progress";
 
 static ACTIVE_CLONE_SESSION: Mutex<Option<CloneSession>> = Mutex::new(None);
@@ -126,7 +128,11 @@ pub async fn clone_and_validate(
         return Err("Repository URL must not contain whitespace.".to_string());
     }
     let lower = git_url.to_ascii_lowercase();
-    if lower.starts_with("file://") || git_url.starts_with('/') || git_url.starts_with("./") || git_url.starts_with("../") {
+    if lower.starts_with("file://")
+        || git_url.starts_with('/')
+        || git_url.starts_with("./")
+        || git_url.starts_with("../")
+    {
         return Err("Local file paths are not allowed for repository URL.".to_string());
     }
     // Accept http(s)://, ssh://, git://, or scp-like 'user@host:repo' formats
@@ -137,14 +143,28 @@ pub async fn clone_and_validate(
         || git_url.starts_with("git://")
         || scp_re.is_match(git_url))
     {
-        return Err("Repository URL format not recognized. Use https://, ssh://, git:// or user@host:repo".to_string());
+        return Err(
+            "Repository URL format not recognized. Use https://, ssh://, git:// or user@host:repo"
+                .to_string(),
+        );
     }
     // Whitelist hosts to avoid cloning arbitrary internal hosts
     let allowed_hosts = ["github.com", "gitlab.com", "bitbucket.org"];
-    let host_opt = if git_url.starts_with("http://") || git_url.starts_with("https://") || git_url.starts_with("ssh://") || git_url.starts_with("git://") {
+    let host_opt = if git_url.starts_with("http://")
+        || git_url.starts_with("https://")
+        || git_url.starts_with("ssh://")
+        || git_url.starts_with("git://")
+    {
         let after_scheme = git_url.splitn(2, "://").nth(1).unwrap_or("");
-        let no_user = if after_scheme.contains('@') { after_scheme.splitn(2, '@').nth(1).unwrap_or(after_scheme) } else { after_scheme };
-        no_user.split(|c: char| c == '/' || c == ':' || c == '?').next().map(|s| s.to_string())
+        let no_user = if after_scheme.contains('@') {
+            after_scheme.splitn(2, '@').nth(1).unwrap_or(after_scheme)
+        } else {
+            after_scheme
+        };
+        no_user
+            .split(|c: char| c == '/' || c == ':' || c == '?')
+            .next()
+            .map(|s| s.to_string())
     } else {
         if let Some(at_pos) = git_url.find('@') {
             let after_at = &git_url[at_pos + 1..];
@@ -158,11 +178,16 @@ pub async fn clone_and_validate(
         }
     };
     if let Some(host) = host_opt {
-        let host_allowed = allowed_hosts.iter().any(|allowed| host.eq(allowed) || host.ends_with(&format!(".{}", allowed)));
+        let host_allowed = allowed_hosts
+            .iter()
+            .any(|allowed| host.eq(allowed) || host.ends_with(&format!(".{}", allowed)));
         // Trust Hub usage disabled: rely only on built-in whitelist by default
         // let host_trusted = crate::trust::host_trusted(&host);
         if !host_allowed {
-            return Err(format!("Repository host '{}' is not in the allowed list.", host));
+            return Err(format!(
+                "Repository host '{}' is not in the allowed list.",
+                host
+            ));
         }
     } else {
         return Err("Unable to determine repository host for whitelist check.".to_string());
@@ -242,8 +267,10 @@ pub async fn clone_and_validate(
 
     let handlers = get_handlers();
     let manifests = detector::detect_all_manifests(&temp_project, &handlers);
-    let handler_map: HashMap<&str, &Box<dyn EcosystemHandler>> =
-        handlers.iter().map(|handler| (handler.name(), handler)).collect();
+    let handler_map: HashMap<&str, &Box<dyn EcosystemHandler>> = handlers
+        .iter()
+        .map(|handler| (handler.name(), handler))
+        .collect();
 
     // If requested, apply autofix to supported manifests (remove '^'/'~' and pin versions)
     let autofix_requested = autofix;
@@ -253,7 +280,8 @@ pub async fn clone_and_validate(
             CloneProgress {
                 session_id: session_id.clone(),
                 status: "autofixing".to_string(),
-                message: "Applying autofix to dependency manifests (pinning versions)...".to_string(),
+                message: "Applying autofix to dependency manifests (pinning versions)..."
+                    .to_string(),
                 progress: 35,
                 temp_path: Some(temp_project.to_string_lossy().to_string()),
                 project_name: Some(project_name.clone()),
@@ -265,50 +293,76 @@ pub async fn clone_and_validate(
                 match apply_autofix_npm(manifest_path) {
                     Ok(changed) => {
                         if changed {
-                            emit_clone_progress(&app, CloneProgress {
-                                session_id: session_id.clone(),
-                                status: "autofix-applied".to_string(),
-                                message: format!("Autofix applied to {}", manifest_path.display()),
-                                progress: 38,
-                                temp_path: Some(temp_project.to_string_lossy().to_string()),
-                                project_name: Some(project_name.clone()),
-                            });
+                            emit_clone_progress(
+                                &app,
+                                CloneProgress {
+                                    session_id: session_id.clone(),
+                                    status: "autofix-applied".to_string(),
+                                    message: format!(
+                                        "Autofix applied to {}",
+                                        manifest_path.display()
+                                    ),
+                                    progress: 38,
+                                    temp_path: Some(temp_project.to_string_lossy().to_string()),
+                                    project_name: Some(project_name.clone()),
+                                },
+                            );
                         }
                     }
                     Err(e) => {
-                        let _ = emit_clone_progress(&app, CloneProgress {
-                            session_id: session_id.clone(),
-                            status: "autofix-error".to_string(),
-                            message: format!("Autofix failed for {}: {}", manifest_path.display(), e),
-                            progress: 36,
-                            temp_path: Some(temp_project.to_string_lossy().to_string()),
-                            project_name: Some(project_name.clone()),
-                        });
+                        let _ = emit_clone_progress(
+                            &app,
+                            CloneProgress {
+                                session_id: session_id.clone(),
+                                status: "autofix-error".to_string(),
+                                message: format!(
+                                    "Autofix failed for {}: {}",
+                                    manifest_path.display(),
+                                    e
+                                ),
+                                progress: 36,
+                                temp_path: Some(temp_project.to_string_lossy().to_string()),
+                                project_name: Some(project_name.clone()),
+                            },
+                        );
                     }
                 }
             } else if ecosystem_name == "cargo" {
                 match apply_autofix_cargo(manifest_path) {
                     Ok(changed) => {
                         if changed {
-                            emit_clone_progress(&app, CloneProgress {
-                                session_id: session_id.clone(),
-                                status: "autofix-applied".to_string(),
-                                message: format!("Autofix applied to {}", manifest_path.display()),
-                                progress: 38,
-                                temp_path: Some(temp_project.to_string_lossy().to_string()),
-                                project_name: Some(project_name.clone()),
-                            });
+                            emit_clone_progress(
+                                &app,
+                                CloneProgress {
+                                    session_id: session_id.clone(),
+                                    status: "autofix-applied".to_string(),
+                                    message: format!(
+                                        "Autofix applied to {}",
+                                        manifest_path.display()
+                                    ),
+                                    progress: 38,
+                                    temp_path: Some(temp_project.to_string_lossy().to_string()),
+                                    project_name: Some(project_name.clone()),
+                                },
+                            );
                         }
                     }
                     Err(e) => {
-                        let _ = emit_clone_progress(&app, CloneProgress {
-                            session_id: session_id.clone(),
-                            status: "autofix-error".to_string(),
-                            message: format!("Autofix failed for {}: {}", manifest_path.display(), e),
-                            progress: 36,
-                            temp_path: Some(temp_project.to_string_lossy().to_string()),
-                            project_name: Some(project_name.clone()),
-                        });
+                        let _ = emit_clone_progress(
+                            &app,
+                            CloneProgress {
+                                session_id: session_id.clone(),
+                                status: "autofix-error".to_string(),
+                                message: format!(
+                                    "Autofix failed for {}: {}",
+                                    manifest_path.display(),
+                                    e
+                                ),
+                                progress: 36,
+                                temp_path: Some(temp_project.to_string_lossy().to_string()),
+                                project_name: Some(project_name.clone()),
+                            },
+                        );
                     }
                 }
             }
@@ -369,12 +423,10 @@ pub async fn clone_and_validate(
 
             total_critical += scan.summary.critical as usize;
             total_high += scan.summary.high as usize;
-            total_vulnerabilities += (
-                scan.summary.critical
-                    + scan.summary.high
-                    + scan.summary.moderate
-                    + scan.summary.low
-            ) as usize;
+            total_vulnerabilities += (scan.summary.critical
+                + scan.summary.high
+                + scan.summary.moderate
+                + scan.summary.low) as usize;
 
             if scan
                 .errors
@@ -408,30 +460,8 @@ pub async fn clone_and_validate(
 
     // Repository-level checks (plaintext .env secrets, lockfile injection, etc.)
     let mut final_scans = scans.clone();
-    let mut repo_warnings: Vec<String> = Vec::new();
-
-    if let Ok(mut env_warnings) = find_repo_env_plaintext_secrets(&temp_project) {
-        if !env_warnings.is_empty() {
-            repo_warnings.append(&mut env_warnings);
-        }
-    }
-
-    if let Ok(mut lock_warnings) = check_npm_lockfile_injection(&temp_project) {
-        if !lock_warnings.is_empty() {
-            repo_warnings.append(&mut lock_warnings);
-        }
-    }
-
-    if !repo_warnings.is_empty() {
-        final_scans.push(ScanResult {
-            manifest_path: temp_project.to_string_lossy().to_string(),
-            ecosystem: "repository".to_string(),
-            language: "Repository".to_string(),
-            dependencies: vec![],
-            summary: Default::default(),
-            scanned_at: Utc::now().to_rfc3339(),
-            errors: repo_warnings.clone(),
-        });
+    if let Ok(Some(repo_scan)) = validate_repo::build_repository_warning_scan(&temp_project) {
+        final_scans.push(repo_scan);
     }
 
     let result = CloneValidationResult {
@@ -458,6 +488,9 @@ pub async fn clone_and_validate(
             final_path: None,
         });
     }
+
+    // Emit scan results immediately so the UI can show the report in real-time
+    let _ = emit_clone_scan(&app, result.clone());
 
     emit_clone_progress(
         &app,
@@ -723,10 +756,8 @@ async fn scan_manifest_for_clone(
 
     let local_vulnerabilities: HashMap<String, Vec<Vulnerability>> =
         handler.run_audit(manifest_path).into_iter().collect();
-    let local_outdated: HashMap<String, String> = handler
-        .check_outdated(manifest_path)
-        .into_iter()
-        .collect();
+    let local_outdated: HashMap<String, String> =
+        handler.check_outdated(manifest_path).into_iter().collect();
 
     for dependency in &mut dependencies {
         if let Some(vulnerabilities) = local_vulnerabilities.get(&dependency.name) {
@@ -739,7 +770,8 @@ async fn scan_manifest_for_clone(
     }
 
     let lockfile_present = has_lockfile_for_manifest(manifest_path, handler.name());
-    let should_use_remote = local_vulnerabilities.is_empty() && supports_remote_lookup(handler.name());
+    let should_use_remote =
+        local_vulnerabilities.is_empty() && supports_remote_lookup(handler.name());
 
     if should_use_remote {
         enrich_with_remote_metadata(&mut dependencies, handler.name(), client).await?;
@@ -749,12 +781,14 @@ async fn scan_manifest_for_clone(
                     .to_string(),
             );
         } else {
-            errors.push(
-                "Lockfile not found; manifest-only remote advisory lookup used.".to_string(),
-            );
+            errors
+                .push("Lockfile not found; manifest-only remote advisory lookup used.".to_string());
         }
     } else if !lockfile_present {
-        errors.push("Lockfile not found; advisory results may be broader than the final install.".to_string());
+        errors.push(
+            "Lockfile not found; advisory results may be broader than the final install."
+                .to_string(),
+        );
     }
 
     dependencies.sort_by(|left, right| {
@@ -777,7 +811,12 @@ async fn scan_manifest_for_clone(
     if handler.name() == "npm" {
         if let Ok(text) = std::fs::read_to_string(manifest_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                for section in ["dependencies","devDependencies","peerDependencies","optionalDependencies"] {
+                for section in [
+                    "dependencies",
+                    "devDependencies",
+                    "peerDependencies",
+                    "optionalDependencies",
+                ] {
                     if let Some(obj) = json.get(section).and_then(|v| v.as_object()) {
                         for (name, ver_val) in obj {
                             if let Some(ver_str) = ver_val.as_str() {
@@ -795,7 +834,8 @@ async fn scan_manifest_for_clone(
                                         ver_str
                                     ));
                                 }
-                                if ver_trim.eq_ignore_ascii_case("latest") || ver_trim.contains('*') {
+                                if ver_trim.eq_ignore_ascii_case("latest") || ver_trim.contains('*')
+                                {
                                     errors.push(format!(
                                         "Manifest uses '{}' for {} which is not pinned. Avoid 'latest' or wildcards.",
                                         ver_str,
@@ -809,7 +849,15 @@ async fn scan_manifest_for_clone(
 
                 // lifecycle script checks and suspicious remote commands
                 if let Some(scripts) = json.get("scripts").and_then(|v| v.as_object()) {
-                    let lifecycle_keys = ["install","preinstall","postinstall","prepare","prepublish","prepublishOnly","prepack"];
+                    let lifecycle_keys = [
+                        "install",
+                        "preinstall",
+                        "postinstall",
+                        "prepare",
+                        "prepublish",
+                        "prepublishOnly",
+                        "prepack",
+                    ];
                     for (k, cmd_val) in scripts {
                         let key = k.as_str();
                         let cmd_str = cmd_val.as_str().unwrap_or("").trim();
@@ -827,7 +875,13 @@ async fn scan_manifest_for_clone(
                             }
                         } else if !cmd_str.is_empty() {
                             let lower = cmd_str.to_ascii_lowercase();
-                            if lower.contains("curl ") || lower.contains("wget ") || lower.contains("| sh") || lower.contains("`curl") || lower.contains("python -c") || lower.contains("node -e") {
+                            if lower.contains("curl ")
+                                || lower.contains("wget ")
+                                || lower.contains("| sh")
+                                || lower.contains("`curl")
+                                || lower.contains("python -c")
+                                || lower.contains("node -e")
+                            {
                                 errors.push(format!(
                                     "package.json script '{}' contains potentially unsafe remote execution: '{}'. Review before running.",
                                     key, cmd_str
@@ -851,8 +905,7 @@ async fn scan_manifest_for_clone(
             if ver.eq_ignore_ascii_case("latest") || ver.contains('*') {
                 errors.push(format!(
                     "Dependency '{}' uses '{}' which is not pinned. Avoid 'latest' or wildcards.",
-                    dep.name,
-                    dep.version
+                    dep.name, dep.version
                 ));
             }
         }
@@ -886,8 +939,13 @@ async fn enrich_with_remote_metadata(
                     }
                 }
                 if dependency.vulnerabilities.is_empty() {
-                    dependency.vulnerabilities =
-                        query_osv_for_package(client, &dependency.name, "npm", Some(&dependency.version)).await?;
+                    dependency.vulnerabilities = query_osv_for_package(
+                        client,
+                        &dependency.name,
+                        "npm",
+                        Some(&dependency.version),
+                    )
+                    .await?;
                 }
             }
         }
@@ -900,8 +958,13 @@ async fn enrich_with_remote_metadata(
                     }
                 }
                 if dependency.vulnerabilities.is_empty() {
-                    dependency.vulnerabilities =
-                        query_osv_for_package(client, &dependency.name, "crates.io", Some(&dependency.version)).await?;
+                    dependency.vulnerabilities = query_osv_for_package(
+                        client,
+                        &dependency.name,
+                        "crates.io",
+                        Some(&dependency.version),
+                    )
+                    .await?;
                 }
             }
         }
@@ -914,8 +977,13 @@ async fn enrich_with_remote_metadata(
                     }
                 }
                 if dependency.vulnerabilities.is_empty() {
-                    dependency.vulnerabilities =
-                        query_osv_for_package(client, &dependency.name, "PyPI", Some(&dependency.version)).await?;
+                    dependency.vulnerabilities = query_osv_for_package(
+                        client,
+                        &dependency.name,
+                        "PyPI",
+                        Some(&dependency.version),
+                    )
+                    .await?;
                 }
             }
         }
@@ -928,8 +996,13 @@ async fn enrich_with_remote_metadata(
                     }
                 }
                 if dependency.vulnerabilities.is_empty() {
-                    dependency.vulnerabilities =
-                        query_osv_for_package(client, &dependency.name, "Packagist", Some(&dependency.version)).await?;
+                    dependency.vulnerabilities = query_osv_for_package(
+                        client,
+                        &dependency.name,
+                        "Packagist",
+                        Some(&dependency.version),
+                    )
+                    .await?;
                 }
             }
         }
@@ -949,9 +1022,19 @@ fn has_lockfile_for_manifest(manifest_path: &Path, ecosystem: &str) -> bool {
     };
 
     let lockfiles: &[&str] = match ecosystem {
-        "npm" => &["package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml"],
+        "npm" => &[
+            "package-lock.json",
+            "npm-shrinkwrap.json",
+            "yarn.lock",
+            "pnpm-lock.yaml",
+        ],
         "cargo" => &["Cargo.lock"],
-        "pip" => &["poetry.lock", "Pipfile.lock", "requirements.lock", "uv.lock"],
+        "pip" => &[
+            "poetry.lock",
+            "Pipfile.lock",
+            "requirements.lock",
+            "uv.lock",
+        ],
         "composer" => &["composer.lock"],
         "go" => &["go.sum"],
         _ => &[],
@@ -1024,7 +1107,10 @@ async fn fetch_pypi_latest(client: &Client, package_name: &str) -> Result<Option
         .map(str::to_string))
 }
 
-async fn fetch_packagist_latest(client: &Client, package_name: &str) -> Result<Option<String>, String> {
+async fn fetch_packagist_latest(
+    client: &Client,
+    package_name: &str,
+) -> Result<Option<String>, String> {
     let response = client
         .get(format!("https://repo.packagist.org/p2/{package_name}.json"))
         .send()
@@ -1096,7 +1182,10 @@ async fn query_osv_for_package(
                     .or_else(|| entry.get("details").and_then(Value::as_str))
                     .unwrap_or("Vulnerability")
                     .to_string(),
-                description: entry.get("details").and_then(Value::as_str).map(str::to_string),
+                description: entry
+                    .get("details")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 url: entry
                     .get("references")
                     .and_then(Value::as_array)
@@ -1183,7 +1272,12 @@ fn apply_autofix_npm(manifest_path: &Path) -> Result<bool, String> {
     let mut json: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     let mut changed = false;
 
-    for section in ["dependencies","devDependencies","peerDependencies","optionalDependencies"] {
+    for section in [
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies",
+    ] {
         if let Some(map) = json.get_mut(section).and_then(|v| v.as_object_mut()) {
             for (_name, ver_val) in map.iter_mut() {
                 if let Some(s) = ver_val.as_str() {
@@ -1199,7 +1293,10 @@ fn apply_autofix_npm(manifest_path: &Path) -> Result<bool, String> {
     }
 
     if changed {
-        let backup = manifest_path.with_file_name(format!("{}.forja.bak", manifest_path.file_name().unwrap().to_string_lossy()));
+        let backup = manifest_path.with_file_name(format!(
+            "{}.forja.bak",
+            manifest_path.file_name().unwrap().to_string_lossy()
+        ));
         let _ = std::fs::copy(manifest_path, &backup).map_err(|e| e.to_string())?;
         let new_text = serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?;
         std::fs::write(manifest_path, new_text).map_err(|e| e.to_string())?;
@@ -1213,14 +1310,14 @@ fn apply_autofix_cargo(manifest_path: &Path) -> Result<bool, String> {
     let mut val: toml::Value = toml::from_str(&text).map_err(|e| e.to_string())?;
     let mut changed = false;
 
-    for section in ["dependencies","dev-dependencies","build-dependencies"] {
+    for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
         if let Some(table) = val.get_mut(section).and_then(|v| v.as_table_mut()) {
             for (_name, spec) in table.iter_mut() {
                 match spec {
                     toml::Value::String(s) => {
                         let trimmed = s.trim();
                         if trimmed.starts_with('^') || trimmed.starts_with('~') {
-                            let new_s = trimmed.trim_start_matches(['^','~',' ']).to_string();
+                            let new_s = trimmed.trim_start_matches(['^', '~', ' ']).to_string();
                             *spec = toml::Value::String(new_s);
                             changed = true;
                         }
@@ -1230,7 +1327,8 @@ fn apply_autofix_cargo(manifest_path: &Path) -> Result<bool, String> {
                             if let Some(s) = ver_value.as_str() {
                                 let trimmed = s.trim();
                                 if trimmed.starts_with('^') || trimmed.starts_with('~') {
-                                    let new_s = trimmed.trim_start_matches(['^','~',' ']).to_string();
+                                    let new_s =
+                                        trimmed.trim_start_matches(['^', '~', ' ']).to_string();
                                     *ver_value = toml::Value::String(new_s);
                                     changed = true;
                                 }
@@ -1244,7 +1342,10 @@ fn apply_autofix_cargo(manifest_path: &Path) -> Result<bool, String> {
     }
 
     if changed {
-        let backup = manifest_path.with_file_name(format!("{}.forja.bak", manifest_path.file_name().unwrap().to_string_lossy()));
+        let backup = manifest_path.with_file_name(format!(
+            "{}.forja.bak",
+            manifest_path.file_name().unwrap().to_string_lossy()
+        ));
         let _ = std::fs::copy(manifest_path, &backup).map_err(|e| e.to_string())?;
         let new_text = toml::to_string_pretty(&val).map_err(|e| e.to_string())?;
         std::fs::write(manifest_path, new_text).map_err(|e| e.to_string())?;
@@ -1262,87 +1363,6 @@ fn is_exact_version(version: &str) -> bool {
 
 fn encode_registry_path(value: &str) -> String {
     value.replace('/', "%2f")
-}
-
-fn find_repo_env_plaintext_secrets(root: &Path) -> Result<Vec<String>, String> {
-    let mut warnings = Vec::new();
-    let secret_re = regex::Regex::new(r"(?i)^\s*([a-z0-9_.-]*?(secret|password|api[_-]?key|token|bearer|private_key|access[_-]?token|secret_key|aws_secret_access_key|db_password|passwd)[a-z0-9_.-]*)\s*=")
-        .map_err(|e| e.to_string())?;
-
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        for entry in entries {
-            let entry = match entry {
-                Ok(en) => en,
-                Err(_) => continue,
-            };
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-                continue;
-            }
-            if let Some(fname) = path.file_name().and_then(|n| n.to_str()) {
-                if !fname.starts_with(".env") && !fname.ends_with(".env") && !fname.contains(".env.") {
-                    continue;
-                }
-                let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-                for (i, line) in content.lines().enumerate() {
-                    if secret_re.is_match(line) {
-                        warnings.push(format!("{}: line {}: {}", path.display(), i + 1, line.trim()));
-                    }
-                }
-            }
-        }
-    }
-    Ok(warnings)
-}
-
-fn check_npm_lockfile_injection(root: &Path) -> Result<Vec<String>, String> {
-    let mut warnings = Vec::new();
-    let lock_path = root.join("package-lock.json");
-    if !lock_path.exists() {
-        return Ok(warnings);
-    }
-    let text = std::fs::read_to_string(&lock_path).map_err(|e| e.to_string())?;
-    let json: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-
-    fn traverse(v: &Value, warnings: &mut Vec<String>) {
-        match v {
-            Value::Object(map) => {
-                if let Some(Value::String(resolved)) = map.get("resolved") {
-                    let s = resolved.trim();
-                    if s.starts_with("file:") {
-                        warnings.push(format!("package-lock.json contains file: resolved url: {}", s));
-                    }
-                    if s.starts_with("http://") {
-                        warnings.push(format!("package-lock.json contains non-HTTPS resolved url: {}", s));
-                    }
-                    if s.contains("localhost") || s.contains("127.") || s.contains("192.168.") || s.contains("10.") || s.contains("172.") {
-                        warnings.push(format!("package-lock.json contains resolved url to local/private host: {}", s));
-                    }
-                    if !map.contains_key("integrity") {
-                        warnings.push(format!("package-lock.json entry '{}' has no integrity field", s));
-                    }
-                }
-                for (_k, v2) in map {
-                    traverse(v2, warnings);
-                }
-            }
-            Value::Array(arr) => {
-                for it in arr {
-                    traverse(it, warnings);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    traverse(&json, &mut warnings);
-    Ok(warnings)
 }
 
 fn derive_project_name(git_url: &str) -> String {
@@ -1382,8 +1402,9 @@ fn clone_session_root() -> PathBuf {
 
 fn move_or_copy_dir(from: &Path, to: &Path) -> Result<(), String> {
     if let Err(rename_error) = std::fs::rename(from, to) {
-        copy_dir_recursive(from, to)
-            .map_err(|error| format!("Failed to save project after rename error ({rename_error}): {error}"))?;
+        copy_dir_recursive(from, to).map_err(|error| {
+            format!("Failed to save project after rename error ({rename_error}): {error}")
+        })?;
         remove_path(from)?;
     }
 
@@ -1503,6 +1524,10 @@ fn emit_clone_progress(app: &AppHandle, progress: CloneProgress) {
     let _ = app.emit(CLONE_PROGRESS_EVENT, progress);
 }
 
+fn emit_clone_scan(app: &AppHandle, result: CloneValidationResult) {
+    let _ = app.emit(CLONE_SCAN_EVENT, result);
+}
+
 fn emit_install_progress(app: &AppHandle, progress: InstallProgress) {
     let _ = app.emit(INSTALL_PROGRESS_EVENT, progress);
 }
@@ -1513,9 +1538,18 @@ mod tests {
 
     #[test]
     fn derive_project_name_handles_https_and_ssh() {
-        assert_eq!(derive_project_name("https://github.com/forja/editor.git"), "editor");
-        assert_eq!(derive_project_name("git@github.com:forja/editor.git"), "editor");
-        assert_eq!(derive_project_name("ssh://git@example.com/team/space repo.git"), "space-repo");
+        assert_eq!(
+            derive_project_name("https://github.com/forja/editor.git"),
+            "editor"
+        );
+        assert_eq!(
+            derive_project_name("git@github.com:forja/editor.git"),
+            "editor"
+        );
+        assert_eq!(
+            derive_project_name("ssh://git@example.com/team/space repo.git"),
+            "space-repo"
+        );
     }
 
     #[test]

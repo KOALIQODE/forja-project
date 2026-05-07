@@ -91,6 +91,10 @@ async function ensureListeners() {
     cloneProgress.set(event.payload);
   });
 
+  await listen<CloneValidationResult>('clone:scan_results', (event) => {
+    validationResult.set(event.payload);
+  });
+
   await listen<InstallProgress>('install:progress', (event) => {
     installProgress.set(event.payload);
   });
