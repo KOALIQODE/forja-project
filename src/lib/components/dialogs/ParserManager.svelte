@@ -305,10 +305,10 @@
   .item-row {
     border-bottom: none;
     border-radius: 8px;
-    transition: background 0.12s, transform 0.06s;
+    transition: background 0.12s;
   }
   .item-row + .item-row { margin-top: 6px; }
-  .item-row:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); transform: translateY(-1px); }
+  .item-row:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); }
 
   .item-icon {
     color: var(--forja-ui-text-muted, #b4b4c0);

@@ -6,6 +6,7 @@
   import PreferencesDialog from "./PreferencesDialog.svelte";
   import ExtensionsManager from "./ExtensionsManager.svelte";
   import ThemePicker from "../ThemePicker.svelte";
+  import CloneRepositoryDialog from "./CloneRepositoryDialog.svelte";
   import { dialogState, closeDialog, DIALOG_IDS } from "../../stores/dialogStore";
 
   let currentDialog: any = null;
@@ -56,6 +57,10 @@
   {:else if currentDialog.id === DIALOG_IDS.THEME_PICKER}
     <div data-program-ui>
       <ThemePicker />
+    </div>
+  {:else if currentDialog.id === DIALOG_IDS.CLONE_REPOSITORY}
+    <div data-program-ui>
+      <CloneRepositoryDialog />
     </div>
   {/if}
 {/if}

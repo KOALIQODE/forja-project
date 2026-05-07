@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { FolderOpen, Clock } from "@lucide/svelte";
+  import { FolderOpen, Clock, Download } from "@lucide/svelte";
   import { openProject } from "../stores/projectStore";
-  import { openRecentProjectsDialog } from "../stores/dialogStore";
+  import { openCloneRepositoryDialog, openRecentProjectsDialog } from "../stores/dialogStore";
   import { open } from "@tauri-apps/plugin-dialog";
   import { activeUITheme } from "../stores/uiThemeStore";
   import ForjaLogo from "./ForjaLogo.svelte";
@@ -68,6 +68,7 @@
     <!-- Action buttons -->
     <section class="mb-10 flex flex-col gap-3 animate-[fadeInUp_0.6s_ease_0.3s_both] text-[13px]">
       {@render actionButton(FolderOpen, "Open Project", handleOpenProject)}
+      {@render actionButton(Download, "Clone Repository", openCloneRepositoryDialog)}
       {@render actionButton(Clock, "Recent Projects", openRecentProjectsDialog)}
     </section>
   </div>

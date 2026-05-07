@@ -13,5 +13,4 @@ pub mod git;
 pub mod lsp;
 pub mod parser_manager;
 pub mod plugin_host;
-pub mod security;
 pub mod syntax;

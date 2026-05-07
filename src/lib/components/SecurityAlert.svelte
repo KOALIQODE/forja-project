@@ -23,6 +23,44 @@
     expanded = false;
   });
 
+  // Header: prefer current project if present, else single nested report, else aggregated
+  let headerName = $state('Workspace');
+  let headerCounts = $state({ critical: 0, high: 0, total: 0, moderate: 0, low: 0, info: 0 });
+
+  $effect(() => {
+    // recompute when any of these change
+    $currentProject;
+    $nestedReports;
+    $auditReport;
+
+    // try current project match
+    if ($currentProject) {
+      const match = ($nestedReports || []).find((r) => r.project_path === $currentProject);
+      if (match) {
+        headerName = ($currentProject.split('/').pop() ?? $currentProject) as string;
+        headerCounts = match.total_counts || headerCounts;
+        return;
+      }
+    }
+
+    // if only one nested report, show it
+    if ($nestedReports && $nestedReports.length === 1) {
+      headerName = ($nestedReports[0].project_path ?? 'workspace').split('/').pop() ?? 'workspace';
+      headerCounts = $nestedReports[0].total_counts || headerCounts;
+      return;
+    }
+
+    // otherwise fallback to aggregated auditReport if it has a meaningful project_path
+    if ($auditReport && $auditReport.project_path && $auditReport.project_path !== 'workspace') {
+      headerName = ($auditReport.project_path.split('/').pop() ?? $auditReport.project_path) as string;
+      headerCounts = $auditReport.total_counts || headerCounts;
+      return;
+    }
+
+    headerName = 'Workspace';
+    headerCounts = { critical: 0, high: 0, total: 0, moderate: 0, low: 0, info: 0 };
+  });
+
   async function rescan() {
     if (!$currentProject) return;
     rescanning = true;
@@ -97,7 +135,7 @@
     report?.ecosystems.filter((e) => e.tool_missing) ?? []
   );
 
-  let projectName = $derived(report?.project_path.split('/').pop() ?? '');
+  // legacy projectName removed; headerName computed above
 </script>
 
 {#if visible}
@@ -123,11 +161,11 @@
             {#if $criticalCount > 0}{$criticalCount} critical{/if}
             {#if $criticalCount > 0 && $highCount > 0} · {/if}
             {#if $highCount > 0}{$highCount} high{/if}
-            &nbsp;— {projectName}
+            &nbsp;— {headerName}
           </p>
         {:else}
           <p class="text-[11px] font-semibold text-emerald-300 leading-tight">No vulnerabilities found</p>
-          <p class="text-[10px] text-emerald-400/70 leading-tight mt-0.5">{projectName} is clean</p>
+          <p class="text-[10px] text-emerald-400/70 leading-tight mt-0.5">{headerName} is clean</p>
         {/if}
       </div>
 

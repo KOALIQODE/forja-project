@@ -15,6 +15,7 @@ import {
   openRecentProjectsDialog,
   openBufferDeleteDialog,
   openExtensionsManager,
+  openCloneRepositoryDialog,
   openThemePicker,
   dialogState,
   DIALOG_IDS,
@@ -33,6 +34,7 @@ describe('dialogStore', () => {
       expect(DIALOG_IDS.PREFERENCES).toBe('preferences');
       expect(DIALOG_IDS.EXTENSIONS).toBe('extensions');
       expect(DIALOG_IDS.THEME_PICKER).toBe('theme-picker');
+      expect(DIALOG_IDS.CLONE_REPOSITORY).toBe('clone-repository');
       expect(DIALOG_IDS.BUFFER_DELETE).toBe('buffer-delete');
     });
 
@@ -149,6 +151,14 @@ describe('dialogStore', () => {
       openThemePicker();
       const state = get(dialogState);
       expect(state.activeDialog?.id).toBe(DIALOG_IDS.THEME_PICKER);
+    });
+  });
+
+  describe('openCloneRepositoryDialog', () => {
+    it('opens the clone repository dialog', () => {
+      openCloneRepositoryDialog();
+      const state = get(dialogState);
+      expect(state.activeDialog?.id).toBe(DIALOG_IDS.CLONE_REPOSITORY);
     });
   });
 });

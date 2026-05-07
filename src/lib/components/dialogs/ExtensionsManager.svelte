@@ -633,7 +633,6 @@
   }
 
   /* Content */
-  .content-area { }
 
   .section-label {
     color: var(--forja-ui-text-muted, #b4b4c0);
@@ -649,10 +648,10 @@
     /* remove full-width separators to allow inset hover */
     border-bottom: none;
     border-radius: 8px;
-    transition: background 0.12s, transform 0.06s;
+    transition: background 0.12s;
   }
   .item-row + .item-row { margin-top: 6px; }
-  .item-row:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); transform: translateY(-1px); }
+  .item-row:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); }
   .item-row--active { background: color-mix(in srgb, var(--forja-ui-picker-active, rgba(52,211,153,0.08)) 60%, transparent); }
   .item-row--disabled { opacity: 0.5; }
 
@@ -680,8 +679,6 @@
     background: rgba(52,211,153,0.10);
     border: 1px solid rgba(52,211,153,0.20);
   }
-  .perm-badge { }
-  .method-badge { }
   .installed-badge { color: var(--forja-ui-gradient-from, #34d399); opacity: 0.7; }
   .manual-badge { color: var(--forja-ui-text-muted, #b4b4c0); }
 

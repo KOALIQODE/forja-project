@@ -16,6 +16,8 @@
   import { watchLockfile } from "$lib/utils/securityClient";
   import { clearAuditReport } from "$lib/stores/securityStore";
   import SecurityAlert from "$lib/components/SecurityAlert.svelte";
+  import { clearDepsState, closeDepsSidebar } from "$lib/DepsStore";
+  import CloneProgressToast from "$lib/components/CloneProgressToast.svelte";
 
   let { children }: { children: Snippet } = $props();
 
@@ -38,8 +40,10 @@
     // Watch the lockfile of the current project and re-audit on changes
     const unsubscribe = currentProject.subscribe((project) => {
       if (project) {
-        watchLockfile(project);
+        void watchLockfile(project);
       } else {
+        closeDepsSidebar();
+        void clearDepsState();
         clearAuditReport();
       }
     });
@@ -159,6 +163,7 @@
 </div>
 <DialogManager />
 <SecurityAlert />
+<CloneProgressToast />
 
 <style>
   :global(html, body) {

@@ -3,6 +3,7 @@
   import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
   import Explorer from "$lib/components/explorer/Explorer.svelte";
   import TodoSidebar from "$lib/components/TodoSidebar.svelte";
+  import DepsSidebar from "$lib/components/DepsSidebar.svelte";
   import EditorBuffer from "$lib/components/editor/EditorBuffer.svelte";
   import { activeBuffer, activeBufferId, openBuffer } from "$lib/stores/bufferStore";
   import { currentProject } from "$lib/stores/projectStore";
@@ -51,4 +52,5 @@
   </section>
 
   <TodoSidebar />
+  <DepsSidebar />
 </main>

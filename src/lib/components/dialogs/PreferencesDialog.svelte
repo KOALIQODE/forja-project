@@ -383,7 +383,8 @@
 
   /* Sidebar */
   .sidebar {
-    border-right: 1px solid var(--forja-ui-btn-border, #27272a);
+    /* remove right border to match other dialogs */
+    border-right: none;
     background: var(--forja-ui-explorer-bg, #0a0a0a);
   }
 
@@ -412,11 +413,17 @@
   .close-btn:hover { color: var(--forja-ui-text-primary, #f4f4f5); }
 
   /* Nav */
+  .sidebar nav { padding: 6px 8px; }
   .nav-item {
     color: var(--forja-ui-text-muted, #b4b4c0);
-    border-left: 2px solid transparent;
+    border-left: none;
+    border-radius: 0; /* no rounded corners for preferences nav */
+    transition: background 0.12s;
+    padding-left: 8px;
+    padding-right: 8px;
   }
-  .nav-item:hover { background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)); }
+  .nav-item + .nav-item { margin-top: 4px; }
+  .nav-item:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)) 60%, transparent); }
   .nav-item--active {
     color: var(--forja-ui-text-primary, #f4f4f5);
     border-left-color: var(--forja-ui-gradient-from, #34d399);
@@ -439,7 +446,6 @@
   .preview-code { color: var(--forja-ui-text-primary, #f4f4f5); }
 
   /* Main panel */
-  .main-panel { }
 
   .section-title { color: var(--forja-ui-text-primary, #f4f4f5); }
 

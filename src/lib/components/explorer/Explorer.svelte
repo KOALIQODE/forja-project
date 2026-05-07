@@ -12,17 +12,21 @@
         ListTodo,
         ListTree,
         LogOut,
+        Package,
         Pin,
         PinOff,
         Plus,
         RefreshCw,
+        ShieldCheck,
         Trash2,
+        X,
     } from '@lucide/svelte';
     import { onMount, untrack } from 'svelte';
 
     import ContextMenu from '../ContextMenu.svelte';
     import FileDrillItem from './FileDrillItem.svelte';
     import FileTreeItem from './FileTreeItem.svelte';
+    import DependencyValidator from './DependencyValidator.svelte';
 
     import { openBuffer } from '$lib/stores/bufferStore';
     import {
@@ -38,6 +42,11 @@
     } from '$lib/stores/preferencesStore';
     import { closeProject, currentProject } from '$lib/stores/projectStore';
     import { toggleTodoSidebar } from '$lib/stores/todoStore';
+    import {
+        isScanning as isDepsScanning,
+        toggleDepsSidebar,
+        validatableEcosystems,
+    } from '$lib/DepsStore';
     import { activeUITheme } from '$lib/stores/uiThemeStore';
 
     let themeStyle = $derived(
@@ -64,12 +73,17 @@
     let searchResults: FileEntry[] = $state([]);
     let isSearching = $state(false);
 
+    let showValidator = $state(false);
+
     let entries: FileEntry[] = $state([]);
     let currentPath = $state("");
     let loading = $state(false);
     let gitBranch = $state<string | null>(null);
 
     let hasProject = $derived(!!$currentProject);
+    let canOpenDependencyValidator = $derived(
+        $isDepsScanning || $validatableEcosystems.length > 0,
+    );
     let effectiveRoot = $derived($pinnedPath || $currentProject);
     let canGoUp = $derived(currentPath !== effectiveRoot);
     let currentFolderName = $derived(
@@ -397,6 +411,12 @@
         }
     });
 
+    $effect(() => {
+        if (!canOpenDependencyValidator && showValidator) {
+            showValidator = false;
+        }
+    });
+
     function handleContainerScroll(e: Event) {
         const target = e.target as HTMLElement;
         scrollTop = target.scrollTop;
@@ -449,15 +469,37 @@
                         >
                             <PinOff size="13" />
                         </button>
-                    {/if}
-                    <button
+                        {/if}
+
+                        <button
                         type="button"
+                        disabled={!canOpenDependencyValidator}
+                        onclick={() => showValidator = !showValidator}
+                        title={canOpenDependencyValidator ? "Validate dependencies before install" : "No supported dependency manifests detected yet"}
+                        class="flex cursor-pointer items-center p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 {showValidator ? 'bg-emerald-500/10 text-emerald-400' : 'hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)'}"
+                        >
+                        <ShieldCheck size="13" />
+                        </button>
+
+                        <button
+                        type="button"
+
                         onclick={toggleTodoSidebar}
                         title="Lista de TODOs del proyecto"
                         class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
                     >
                         <ListTodo size="13" />
                     </button>
+
+                    <button
+                        type="button"
+                        onclick={toggleDepsSidebar}
+                        title="Project dependencies and security"
+                        class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
+                    >
+                        <Package size="13" />
+                    </button>
+
                     <button
                         type="button"
                         onclick={toggleViewMode}
@@ -513,9 +555,25 @@
         {/if}
     </header>
 
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-        class="flex-1 overflow-auto custom-scrollbar relative"
+    {#if showValidator}
+        <div class="flex-1 min-h-0 border-t border-zinc-800 flex flex-col">
+            <div class="flex items-center justify-between px-3 py-1 bg-zinc-900/50 shrink-0">
+                <span class="text-[9px] uppercase tracking-widest text-zinc-500">Security Sandbox</span>
+                <button 
+                    onclick={() => showValidator = false}
+                    class="p-1 hover:bg-white/5 text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                    <X size={10} />
+                </button>
+            </div>
+            <div class="flex-1 overflow-auto">
+                <DependencyValidator />
+            </div>
+        </div>
+    {:else}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+            class="flex-1 overflow-auto custom-scrollbar relative"
         use:handleResizeContainer
         onscroll={handleContainerScroll}
         oncontextmenu={(e) => handleContextMenu(e)}
@@ -563,6 +621,7 @@
             </div>
         {/if}
     </div>
+    {/if}
 
     <button
         class="absolute top-0 right-0 z-[100] h-full w-[2px] cursor-col-resize transition-all duration-300 hover:bg-(--forja-ui-explorer-resize,rgba(82,82,91,0.5)) p-0 border-none"

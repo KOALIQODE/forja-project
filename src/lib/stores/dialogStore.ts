@@ -12,6 +12,7 @@ export const DIALOG_IDS = {
   PREFERENCES: 'preferences',
   EXTENSIONS: 'extensions',
   THEME_PICKER: 'theme-picker',
+  CLONE_REPOSITORY: 'clone-repository',
 } as const;
 
 // Dialog types
@@ -105,5 +106,12 @@ export function openThemePicker() {
   openDialog({
     id: DIALOG_IDS.THEME_PICKER,
     component: 'ThemePicker'
+  });
+}
+
+export function openCloneRepositoryDialog() {
+  openDialog({
+    id: DIALOG_IDS.CLONE_REPOSITORY,
+    component: 'CloneRepositoryDialog'
   });
 }

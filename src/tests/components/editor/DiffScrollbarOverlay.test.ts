@@ -7,6 +7,7 @@ vi.mock('$lib/stores/uiThemeStore', () => ({
   activeUITheme: { subscribe: (fn: any) => { fn({ vars: {} }); return () => {}; } },
 }));
 
+import type { Hunk } from '$lib/utils/diff/types';
 import DiffScrollbarOverlay from '$lib/components/editor/DiffScrollbarOverlay.svelte';
 
 describe('DiffScrollbarOverlay', () => {
@@ -23,10 +24,10 @@ describe('DiffScrollbarOverlay', () => {
   });
 
   it('renders one marker per hunk', () => {
-    const hunks = [
-      { status: 'added', newStart: 5, newEnd: 8, afterLine: 4 },
-      { status: 'deleted', newStart: 0, newEnd: 0, afterLine: 20 },
-      { status: 'modified', newStart: 30, newEnd: 33, afterLine: 29 },
+    const hunks: Hunk[] = [
+      { id: '5-8-added', status: 'added', newStart: 5, newEnd: 8, oldStart: 5, oldEnd: 8, afterLine: 4 },
+      { id: '0-0-deleted', status: 'deleted', newStart: 0, newEnd: 0, oldStart: 0, oldEnd: 0, afterLine: 20 },
+      { id: '30-33-modified', status: 'modified', newStart: 30, newEnd: 33, oldStart: 30, oldEnd: 33, afterLine: 29 },
     ];
 
     const { container } = render(DiffScrollbarOverlay, {
@@ -41,7 +42,7 @@ describe('DiffScrollbarOverlay', () => {
 
   it('clicking a marker updates scrollContainer.scrollTop', async () => {
     const scrollContainer = { clientHeight: 200, scrollTop: 0 } as HTMLElement;
-    const hunks = [{ status: 'modified', newStart: 10, newEnd: 12, afterLine: 9 }];
+    const hunks: Hunk[] = [{ id: '10-12-modified', status: 'modified', newStart: 10, newEnd: 12, oldStart: 10, oldEnd: 12, afterLine: 9 }];
 
     const { container } = render(DiffScrollbarOverlay, {
       hunks,

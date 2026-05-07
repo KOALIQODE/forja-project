@@ -485,9 +485,9 @@
     opacity: 0.6;
   }
 
-  .result-item { color: var(--forja-ui-text-secondary, #dedee2); border-radius: 8px; transition: background 0.12s, transform 0.06s; }
+  .result-item { color: var(--forja-ui-text-secondary, #dedee2); border-radius: 8px; transition: background 0.12s; }
   .result-item + .result-item { margin-top: 6px; }
-  .result-item:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)) 60%, transparent); transform: translateY(-1px); }
+  .result-item:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03)) 60%, transparent); }
   .result-item--selected { background: color-mix(in srgb, var(--forja-ui-picker-active, rgba(52,211,153,0.08)) 60%, transparent); }
 
   .file-icon-wrap { color: var(--forja-ui-text-muted, #b4b4c0); }

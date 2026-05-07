@@ -153,7 +153,7 @@
 </div>
 
 <style>
-  .perm-item { border-radius: 8px; transition: background 0.12s, transform 0.06s; }
+  .perm-item { border-radius: 8px; transition: background 0.12s; }
   .perm-item + .perm-item { margin-top: 6px; }
-  .perm-item:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); transform: translateY(-1px); }
+  .perm-item:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); }
 </style>

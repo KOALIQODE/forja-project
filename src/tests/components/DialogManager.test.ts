@@ -32,6 +32,9 @@ vi.mock('$lib/components/dialogs/ExtensionsManager.svelte', () => ({
 vi.mock('$lib/components/ThemePicker.svelte', () => ({
   default: () => null,
 }));
+vi.mock('$lib/components/dialogs/CloneRepositoryDialog.svelte', () => ({
+  default: () => null,
+}));
 
 import DialogManager from '$lib/components/dialogs/DialogManager.svelte';
 import { closeDialog, openDialog, DIALOG_IDS } from '$lib/stores/dialogStore';
@@ -81,6 +84,12 @@ describe('DialogManager', () => {
     openDialog({ id: DIALOG_IDS.PREFERENCES, component: 'PreferencesDialog' });
     render(DialogManager);
     expect(screen.getByText('PREFERENCES')).toBeInTheDocument();
+  });
+
+  it('renders CloneRepositoryDialog when the clone dialog is active', () => {
+    openDialog({ id: DIALOG_IDS.CLONE_REPOSITORY, component: 'CloneRepositoryDialog' });
+    const { container } = render(DialogManager);
+    expect(container.querySelector('[data-program-ui]')).not.toBeNull();
   });
 
   describe('dialog shell — border and shadow', () => {

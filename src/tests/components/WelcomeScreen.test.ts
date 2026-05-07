@@ -14,6 +14,7 @@ vi.mock('$lib/stores/projectStore', () => ({
 
 vi.mock('$lib/stores/dialogStore', () => ({
   openRecentProjectsDialog: vi.fn(),
+  openCloneRepositoryDialog: vi.fn(),
 }));
 
 vi.mock('$lib/stores/uiThemeStore', () => ({
@@ -24,7 +25,7 @@ vi.mock('$lib/stores/uiThemeStore', () => ({
 
 import { open } from '@tauri-apps/plugin-dialog';
 import { openProject } from '$lib/stores/projectStore';
-import { openRecentProjectsDialog } from '$lib/stores/dialogStore';
+import { openCloneRepositoryDialog, openRecentProjectsDialog } from '$lib/stores/dialogStore';
 import WelcomeScreen from '$lib/components/WelcomeScreen.svelte';
 
 // ---
@@ -54,6 +55,7 @@ describe('WelcomeScreen', () => {
   it('renders both action buttons', () => {
     render(WelcomeScreen);
     expect(screen.getByRole('button', { name: /open project/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /clone repository/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /recent projects/i })).toBeInTheDocument();
   });
 
@@ -111,6 +113,16 @@ describe('WelcomeScreen', () => {
       await fireEvent.click(screen.getByRole('button', { name: /recent projects/i }));
 
       expect(openRecentProjectsDialog).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Clone Repository button', () => {
+    it('opens the clone repository dialog when clicked', async () => {
+      render(WelcomeScreen);
+
+      await fireEvent.click(screen.getByRole('button', { name: /clone repository/i }));
+
+      expect(openCloneRepositoryDialog).toHaveBeenCalledTimes(1);
     });
   });
 });

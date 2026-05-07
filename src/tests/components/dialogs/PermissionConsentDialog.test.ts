@@ -8,8 +8,9 @@ vi.mock('$lib/stores/uiThemeStore', () => ({
 }));
 
 import PermissionConsentDialog from '$lib/components/dialogs/PermissionConsentDialog.svelte';
+import type { PluginPreflightInfo } from '$lib/utils/pluginClient';
 
-const baseInfo = {
+const baseInfo: PluginPreflightInfo = {
   name: 'git-tools',
   kind: 'plugin',
   version: '1.2.3',

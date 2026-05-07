@@ -67,19 +67,18 @@
         transition:fly={{ x: 320, duration: 300 }}
     >
         <!-- Resize handle -->
-        <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
-        <div
+        <button
+            type="button"
             role="separator"
             aria-label="Resize sidebar"
             aria-orientation="vertical"
-            tabindex="0"
             class="resize-handle absolute left-0 top-0 h-full w-1 cursor-col-resize focus:outline-none transition-colors"
             onmousedown={startResizing}
             onkeydown={(e) => {
                 if (e.key === 'ArrowLeft') sidebarWidth = Math.min(sidebarWidth + 10, MAX_WIDTH);
                 if (e.key === 'ArrowRight') sidebarWidth = Math.max(sidebarWidth - 10, MIN_WIDTH);
             }}
-        ></div>
+        ></button>
 
         <header class="shrink-0 border-b px-3 py-2 flex items-center justify-between
                        border-(--forja-ui-picker-border,#2a2a2e) bg-(--forja-ui-explorer-bg,#0a0a0a)">

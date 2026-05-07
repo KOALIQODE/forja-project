@@ -1,6 +1,7 @@
-import { writable, derived } from 'svelte/store';
+import { derived, writable } from 'svelte/store';
+import { activeProjectRoot, scanResults, type ScanResult, type Dependency } from '$lib/DepsStore';
 
-// ── Types (mirror Rust DTOs) ──────────────────────────────────────────────────
+// ── Types (legacy support for SecurityAlert and Tests) ─────────────────────────
 
 export interface SeverityCounts {
   info: number;
@@ -13,14 +14,19 @@ export interface SeverityCounts {
 
 export interface VulnEntry {
   name: string;
-  severity: 'critical' | 'high' | 'moderate' | 'medium' | 'low' | 'info' | string;
-  range: string;
+  severity: string;
+  range?: string;
   fix_available: boolean;
   advisory_id: string | null;
+  id?: string;
+  title?: string;
+  description?: string;
+  url?: string;
+  patched_versions?: string;
 }
 
 export interface EcosystemReport {
-  ecosystem: string; // "npm" | "cargo" | "python" | "go" | "ruby" | "yarn" | "pnpm"
+  ecosystem: string;
   lockfile: string;
   counts: SeverityCounts;
   vulnerabilities: VulnEntry[];
@@ -36,93 +42,57 @@ export interface AuditReport {
   error: string | null;
 }
 
-// ── Core store ────────────────────────────────────────────────────────────────
+// ── Derived stores for SecurityAlert.svelte ──────────────────────────────────
 
-export const nestedReports = writable<AuditReport[]>([]);
+const legacyAuditReport = writable<AuditReport | null>(null);
 
-// auditReport remains the aggregated view used by the UI (backwards compatible)
-export const auditReport = writable<AuditReport | null>(null);
+const computedAuditReport = derived([scanResults, activeProjectRoot], ([$results, $activeProjectRoot]) => {
+  if (!$results || $results.length === 0) return null;
 
-function emptyCounts(): SeverityCounts {
-  return { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 };
-}
-
-function aggregateReports(reports: AuditReport[]): AuditReport | null {
-  if (!reports || reports.length === 0) return null;
-  const aggregated: AuditReport = {
-    project_path: 'workspace',
-    ecosystems: [],
-    total_counts: emptyCounts(),
-    has_issues: false,
-    error: null,
+  const total_counts: SeverityCounts = {
+    info: 0,
+    low: $results.reduce((acc, r) => acc + r.summary.low, 0),
+    moderate: $results.reduce((acc, r) => acc + r.summary.moderate, 0),
+    high: $results.reduce((acc, r) => acc + r.summary.high, 0),
+    critical: $results.reduce((acc, r) => acc + r.summary.critical, 0),
+    total: $results.reduce((acc, r) => acc + r.summary.vulnerable, 0),
   };
 
-  for (const r of reports) {
-    // prefix ecosystem lockfile paths with project path to keep them unique
-    const prefixedEcosystems = r.ecosystems.map((e) => ({
-      ...e,
-      lockfile: r.project_path && r.project_path !== '.' ? `${r.project_path}/${e.lockfile}` : e.lockfile,
-    }));
+  const report: AuditReport = {
+    project_path: $activeProjectRoot ?? 'workspace',
+    ecosystems: $results.map(r => ({
+      ecosystem: r.ecosystem,
+      lockfile: r.manifest_path.split('/').pop() || 'manifest',
+      counts: {
+        critical: r.summary.critical,
+        high: r.summary.high,
+        moderate: r.summary.moderate,
+        low: r.summary.low,
+        info: 0,
+        total: r.summary.vulnerable
+      },
+      vulnerabilities: r.dependencies.flatMap(d => d.vulnerabilities.map(v => ({
+        ...v,
+        name: d.name,
+        severity: v.severity.toLowerCase(),
+        fix_available: !!v.patched_versions,
+        advisory_id: v.id
+      }))),
+      tool_missing: false,
+      error: r.errors.length > 0 ? r.errors.join('; ') : null
+    })),
+    total_counts,
+    has_issues: total_counts.critical > 0 || total_counts.high > 0,
+    error: null
+  };
 
-    aggregated.ecosystems.push(...prefixedEcosystems);
+  return report;
+});
 
-    // sum counts
-    if (r.total_counts) {
-      aggregated.total_counts.critical += r.total_counts.critical || 0;
-      aggregated.total_counts.high += r.total_counts.high || 0;
-      aggregated.total_counts.moderate += r.total_counts.moderate || 0;
-      aggregated.total_counts.low += r.total_counts.low || 0;
-      aggregated.total_counts.info += r.total_counts.info || 0;
-      aggregated.total_counts.total += r.total_counts.total || 0;
-    }
-
-    if (r.has_issues) aggregated.has_issues = true;
-    if (r.error) {
-      aggregated.error = aggregated.error ? `${aggregated.error}; ${r.error}` : r.error;
-    }
-  }
-
-  return aggregated;
-}
-
-export function setAuditReport(report: AuditReport | AuditReport[]) {
-  if (Array.isArray(report)) {
-    nestedReports.set(report);
-    auditReport.set(aggregateReports(report));
-  } else {
-    // single report -> set nestedReports to single entry and use the report as-is
-    nestedReports.set([report]);
-    auditReport.set(report);
-  }
-}
-
-/** Add or update a nested audit report (useful for real-time updates per-subproject). */
-export function upsertNestedReport(report: AuditReport) {
-  nestedReports.update((list) => {
-    const idx = list.findIndex((r) => r.project_path === report.project_path);
-    if (idx >= 0) list[idx] = report;
-    else list.push(report);
-    // update aggregated view
-    auditReport.set(aggregateReports(list));
-    return list;
-  });
-}
-
-/** Remove a nested report by project path (e.g., when a subproject is closed). */
-export function removeNestedReport(projectPath: string) {
-  nestedReports.update((list) => {
-    const out = list.filter((r) => r.project_path !== projectPath);
-    auditReport.set(aggregateReports(out));
-    return out;
-  });
-}
-
-export function clearAuditReport() {
-  nestedReports.set([]);
-  auditReport.set(null);
-}
-
-// ── Derived helpers ───────────────────────────────────────────────────────────
+export const auditReport = derived(
+  [computedAuditReport, legacyAuditReport],
+  ([$computedAuditReport, $legacyAuditReport]) => $legacyAuditReport ?? $computedAuditReport
+);
 
 export const hasSecurityIssues = derived(auditReport, ($r) => $r?.has_issues ?? false);
 
@@ -132,19 +102,58 @@ export const highCount = derived(auditReport, ($r) => $r?.total_counts.high ?? 0
 
 export const totalVulnCount = derived(auditReport, ($r) => $r?.total_counts.total ?? 0);
 
-/** Ecosystems with at least one vulnerability (or a tool-missing/error state). */
 export const affectedEcosystems = derived(auditReport, ($r) =>
   $r?.ecosystems.filter((e) => e.counts.total > 0 || e.tool_missing || e.error !== null) ?? []
 );
 
-/** All ecosystems that were scanned successfully (tool present, no error). */
 export const scannedEcosystems = derived(auditReport, ($r) =>
   $r?.ecosystems.filter((e) => !e.tool_missing && e.error === null) ?? []
 );
 
-// Additionally expose flattened vulns across nested reports
-export const allVulnerabilities = derived(nestedReports, ($list) =>
-  $list.flatMap((r) =>
-    r.ecosystems.flatMap((e) => e.vulnerabilities.map((v) => ({ ...v, ecosystem: e.ecosystem, project_path: r.project_path })))
-  )
-);
+export const nestedReports = derived(scanResults, ($results: ScanResult[]): AuditReport[] => {
+    // Return individual reports per project path for the "Projects scanned" list
+    return $results.map((r: ScanResult) => ({
+        project_path: r.manifest_path,
+        total_counts: {
+            total: r.summary.vulnerable,
+            critical: r.summary.critical,
+            high: r.summary.high,
+            moderate: r.summary.moderate,
+            low: r.summary.low,
+            info: 0
+        },
+        has_issues: r.summary.critical > 0 || r.summary.high > 0,
+        error: null,
+        ecosystems: [{
+            ecosystem: r.ecosystem,
+            lockfile: r.manifest_path.split('/').pop() || 'manifest',
+            counts: {
+                total: r.summary.vulnerable,
+                critical: r.summary.critical,
+                high: r.summary.high,
+                moderate: r.summary.moderate,
+                low: r.summary.low,
+                info: 0
+            },
+            vulnerabilities: r.dependencies.flatMap((d: Dependency) => d.vulnerabilities.map((v) => ({
+                ...v,
+                name: d.name,
+                severity: v.severity.toLowerCase(),
+                fix_available: !!v.patched_versions,
+                advisory_id: v.id
+            }))),
+            tool_missing: false,
+            error: null
+        }]
+    }));
+});
+
+export function clearAuditReport() {
+  legacyAuditReport.set(null);
+  scanResults.set([]);
+}
+
+/** Legacy setAuditReport to support existing tests */
+export function setAuditReport(report: any) {
+    legacyAuditReport.set(report ?? null);
+}
