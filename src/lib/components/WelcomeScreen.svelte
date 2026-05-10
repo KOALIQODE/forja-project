@@ -30,7 +30,7 @@
 {#snippet actionButton(Icon: Component, label: string, handler: () => void)}
   <button
     type="button"
-    class="group relative flex cursor-pointer items-center overflow-hidden bg-(--forja-ui-btn-bg,#09090b) px-5 py-4 font-medium text-(--forja-ui-btn-text,#a1a1aa) transition-all duration-300 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.06)) hover:text-(--forja-ui-btn-hover-text,#f4f4f5)"
+    class="group relative flex cursor-pointer items-center overflow-hidden bg-(--forja-ui-btn-bg,#09090b) px-5 py-4 font-medium text-(--forja-ui-btn-text,#a1a1aa) transition-all duration-300  hover:text-(--forja-ui-btn-hover-text,#f4f4f5)"
     onclick={handler}
   >
     <div class="absolute top-0 -left-full h-full w-full bg-linear-to-r from-transparent via-white/5 to-transparent transition-all duration-1000 group-hover:left-full"></div>
@@ -43,7 +43,6 @@
 
 <main
   class="flex h-full w-full items-center justify-center outline-none"
-  data-program-ui
   style={themeStyle}
 >
   <div class="w-full max-w-120 px-8 py-12 text-center">

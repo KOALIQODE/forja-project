@@ -8,6 +8,7 @@
   import { getFileIcon } from "../../utils/fileIcons";
   import { currentProject } from "../../stores/projectStore";
   import { GIT_STATUS_LABELS } from "../../utils/explorerHelpers";
+  import { gitFileStatuses, getFileGitStatus } from "../../stores/gitStatusStore";
   import { fade, scale } from 'svelte/transition';
 
   let themeStyle = $derived(
@@ -17,7 +18,6 @@
   let searchQuery = $state("");
   let selectedIndex = $state(0);
   let inputElement = $state<HTMLInputElement>();
-  let gitStatuses = $state<Record<string, string>>({});
 
   function gitStatusStyle(status: string | undefined): string {
     switch (status) {
@@ -97,24 +97,7 @@
 
   onMount(() => {
     inputElement?.focus();
-    fetchGitStatuses();
   });
-
-  async function fetchGitStatuses() {
-    const project = $currentProject;
-    if (!project) return;
-    const paths = Array.from($openBuffers.values()).map(b => b.filePath);
-    if (paths.length === 0) return;
-    try {
-      const result = await invoke<Record<string, string>>('get_files_git_status', {
-        projectPath: project,
-        filePaths: paths,
-      });
-      gitStatuses = result;
-    } catch {
-      // git status is best-effort
-    }
-  }
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -186,11 +169,11 @@
                   {#if isActive}
                     <span class="active-badge px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-tighter">active</span>
                   {/if}
-                  {#if gitStatuses[buffer.filePath]}
+                  {#if gitFileStatuses[buffer.filePath]}
                     <span
                       class="ml-auto shrink-0 font-mono text-[9px] font-bold"
-                      style="color: {gitStatusStyle(gitStatuses[buffer.filePath])}"
-                    >{GIT_STATUS_LABELS[gitStatuses[buffer.filePath]] ?? '?'}</span>
+                      style="color: {gitStatusStyle(gitFileStatuses[buffer.filePath])}"
+                    >{GIT_STATUS_LABELS[gitFileStatuses[buffer.filePath]] ?? '?'}</span>
                   {/if}
                 </div>
                 <span class="item-dir truncate font-mono text-[10px] tracking-tight">{getDirectory(buffer.filePath)}</span>

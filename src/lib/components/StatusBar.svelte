@@ -35,7 +35,7 @@
 </script>
 
 <footer
-  class="flex h-6 w-full items-center justify-between border-t border-(--forja-ui-btn-border,#27272a) bg-(--forja-ui-explorer-bg,#111111) px-2 text-[10px] tracking-wide text-(--forja-ui-text-secondary,#a1a1aa) select-none"
+  class="flex h-6 w-full items-center justify-between bg-(--forja-ui-explorer-bg,#111111) px-2 text-[10px] tracking-wide text-(--forja-ui-text-secondary,#a1a1aa) select-none"
   data-program-ui
   data-testid="status-bar"
   style="font-family: var(--forja-buffer-font-family, var(--font-family-mono)); {themeStyle}"

@@ -46,6 +46,7 @@ export const BUFFER_FONT_OPTIONS = [
 export interface ProgramPreferences {
   fontFamily: string;
   fontSize: number;
+  fontWeight: string;
   explorerWidth: number;
   reduceMotion: boolean;
 }
@@ -63,6 +64,7 @@ export interface BufferPreferences {
 export const DEFAULT_PROGRAM_PREFERENCES: ProgramPreferences = {
   fontFamily: PROGRAM_FONT_OPTIONS[0].value,
   fontSize: 12,
+  fontWeight: 'normal',
   explorerWidth: 260,
   reduceMotion: false,
 };
@@ -105,6 +107,10 @@ function sanitizeProgramPreferences(value: Partial<ProgramPreferences>): Program
       typeof value.fontFamily === 'string' && value.fontFamily.trim()
         ? value.fontFamily
         : DEFAULT_PROGRAM_PREFERENCES.fontFamily,
+    fontWeight:
+      typeof value.fontWeight === 'string' && value.fontWeight.trim()
+        ? value.fontWeight
+        : DEFAULT_PROGRAM_PREFERENCES.fontWeight,
     fontSize: clamp(Number(value.fontSize ?? DEFAULT_PROGRAM_PREFERENCES.fontSize), 10, 18),
     explorerWidth: clamp(
       Number(value.explorerWidth ?? DEFAULT_PROGRAM_PREFERENCES.explorerWidth),
@@ -153,10 +159,10 @@ function applyProgramPreferences(preferences: ProgramPreferences) {
   const root = document.documentElement;
   root.style.setProperty('--forja-program-font-family', preferences.fontFamily);
   root.style.setProperty('--forja-program-font-size', `${preferences.fontSize}px`);
-  root.style.setProperty(
-    '--forja-program-ui-scale',
-    (preferences.fontSize / DEFAULT_PROGRAM_PREFERENCES.fontSize).toFixed(3),
-  );
+  // root.style.setProperty(
+  //   '--forja-program-ui-scale',
+  //   (preferences.fontSize / DEFAULT_PROGRAM_PREFERENCES.fontSize).toFixed(3),
+  // );
   root.style.setProperty('--forja-explorer-width', `${preferences.explorerWidth}px`);
   root.dataset.reduceMotion = preferences.reduceMotion ? 'true' : 'false';
 }

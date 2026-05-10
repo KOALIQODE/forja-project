@@ -2,7 +2,9 @@
     import { invoke } from "@tauri-apps/api/core";
     import { untrack, onMount } from "svelte";
     import { get } from "svelte/store";
-    import { listen } from "@tauri-apps/api/event"; 
+    import { listen } from "@tauri-apps/api/event";
+    import { normalizePath } from "$lib/utils/path";
+    import { gitFileStatuses, getFileGitStatus } from "$lib/stores/gitStatusStore"; 
 
     import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/constants";
     import { ChunkRenderer } from "$lib/utils/ChunkRenderer";
@@ -854,6 +856,16 @@
         }
     }
 
+    // Refresh blame when git status changes for the current file
+    $effect(() => {
+        // Trigger whenever gitFileStatuses changes
+        get(gitFileStatuses);
+        // If the current file's git status changed, refetch blame
+        if (filePath && currentFilePath === filePath) {
+            void fetchBlame();
+        }
+    });
+
     function draw() {
         if (!canvas || !scrollContainer) {
             requestAnimationFrame(draw);
@@ -1563,8 +1575,9 @@
         });
 
         const unlistenFileChanged = await listen("file-changed", async (event: any) => {
-            const changedPath = event.payload;
-            if (changedPath !== filePath || suppressExternalReload) return;
+            const changedPath = normalizePath(event.payload);
+            const targetPath = normalizePath(filePath);
+            if (changedPath !== targetPath || suppressExternalReload) return;
             resetAndLoad(filePath);
         });
 
@@ -1734,7 +1747,7 @@
         queueRedraw();
     }
 
-    onMount(() => {
+    onMount(async () => {
         requestAnimationFrame(draw);
         startFetchLoop();
         // Only load here if the $effect below hasn't already loaded (order of
@@ -1764,12 +1777,17 @@
         });
         if (canvas) resizeObserver.observe(canvas);
 
-        invoke("watch_directory", {
-            path: filePath.substring(0, filePath.lastIndexOf("/")),
-        }).catch((e) => console.error("Failed to start directory watcher:", e));
-
         let cleanupListeners: (() => void) | null = null;
-        void setupEventListeners().then((cleanup) => { cleanupListeners = cleanup; });
+        // Register listeners before starting backend watcher to avoid races where
+        // the watcher emits events before the frontend has attached handlers.
+        cleanupListeners = await setupEventListeners();
+        try {
+            await invoke("watch_directory", {
+                path: filePath.substring(0, filePath.lastIndexOf("/")),
+            });
+        } catch (e) {
+            console.error("Failed to start directory watcher:", e);
+        }
 
         return () => {
             cancelAnimationFrame(fetchLoopId);

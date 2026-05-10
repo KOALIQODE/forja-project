@@ -1,6 +1,6 @@
 <script lang="ts">
   import { X, Package, RefreshCw } from '@lucide/svelte';
-  import { isDepsSidebarOpen, toggleDepsSidebar, scanAll, isScanning } from '$lib/DepsStore';
+  import { isDepsSidebarOpen, toggleDepsSidebar, scanAll, isScanning } from '$lib/stores/DepsStore';
   import { currentProject } from '$lib/stores/projectStore';
   import DepsPanel from '../DepsPanel.svelte';
   import { activeUITheme } from '$lib/stores/uiThemeStore';

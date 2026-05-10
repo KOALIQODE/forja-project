@@ -19,7 +19,7 @@
 <!-- Floating file info — top-right of editor, reacts to active theme -->
 <div
   class="absolute top-3 right-4 z-50 flex items-center gap-0 pointer-events-none select-none divide-x"
-  style="{themeStyle};background:var(--forja-editor-bg,#0e0e0e);outline:1px solid var(--forja-ui-btn-border,rgba(255,255,255,0.06));divide-color:var(--forja-ui-btn-border,rgba(255,255,255,0.06));"
+  style="{themeStyle};background:var(--forja-editor-bg,#0e0e0e); border-solid: transparent;"
   data-testid="editor-file-info"
 >
   <!-- Filename -->

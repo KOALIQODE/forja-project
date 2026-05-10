@@ -2,10 +2,14 @@
   import { untrack } from "svelte";
   import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
   import Explorer from "$lib/components/explorer/Explorer.svelte";
-  import TodoSidebar from "$lib/components/TodoSidebar.svelte";
-  import DepsSidebar from "$lib/components/DepsSidebar.svelte";
+  import TodoSidebar from "$lib/components/sidebars/TodoSidebar.svelte";
+  import DepsSidebar from "$lib/components/sidebars/DepsSidebar.svelte";
   import EditorBuffer from "$lib/components/editor/EditorBuffer.svelte";
-  import { activeBuffer, activeBufferId, openBuffer } from "$lib/stores/bufferStore";
+  import {
+    activeBuffer,
+    activeBufferId,
+    openBuffer,
+  } from "$lib/stores/bufferStore";
   import { currentProject } from "$lib/stores/projectStore";
 
   // Determinar si mostrar la pantalla de bienvenida o el editor basado en el proyecto
@@ -21,10 +25,16 @@
         if (!$activeBufferId) {
           const openDefaultFile = async () => {
             try {
-              const readmePath = project + ( project.endsWith('/') || project.endsWith('\\') ? '' : '/' ) + 'README.md';
+              const readmePath =
+                project +
+                (project.endsWith("/") || project.endsWith("\\") ? "" : "/") +
+                "README.md";
               openBuffer(readmePath);
             } catch (error) {
-              console.log("No se pudo auto-abrir README.md o no existe:", error);
+              console.log(
+                "No se pudo auto-abrir README.md o no existe:",
+                error,
+              );
             }
           };
           openDefaultFile();
@@ -47,10 +57,13 @@
     {#if showWelcome}
       <WelcomeScreen />
     {:else if $activeBuffer}
-      <EditorBuffer filePath={$activeBuffer.filePath} bufferId={$activeBuffer.id} language={$activeBuffer.language ?? 'unknown'} />
+      <EditorBuffer
+        filePath={$activeBuffer.filePath}
+        bufferId={$activeBuffer.id}
+        language={$activeBuffer.language ?? "unknown"}
+      />
+      <TodoSidebar />
+      <DepsSidebar />
     {/if}
   </section>
-
-  <TodoSidebar />
-  <DepsSidebar />
 </main>

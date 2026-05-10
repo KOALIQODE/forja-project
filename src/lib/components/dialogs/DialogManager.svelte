@@ -1,18 +1,22 @@
 <script lang="ts">
-  import RecentProjectsDialog from "../RecentProjectsDialog.svelte";
+  import RecentProjectsDialog from "./RecentProjectsDialog.svelte";
   import BufferDeleteDialog from "./BufferDeleteDialog.svelte";
   import Telescope from "./Telescope.svelte";
   import ParserManager from "./ParserManager.svelte";
   import PreferencesDialog from "./PreferencesDialog.svelte";
   import ExtensionsManager from "./ExtensionsManager.svelte";
-  import ThemePicker from "../ThemePicker.svelte";
+  import ThemePicker from "./ThemePicker.svelte";
   import CloneRepositoryDialog from "./CloneRepositoryDialog.svelte";
-  import { dialogState, closeDialog, DIALOG_IDS } from "../../stores/dialogStore";
+  import {
+    dialogState,
+    closeDialog,
+    DIALOG_IDS,
+  } from "../../stores/dialogStore";
 
   let currentDialog: any = null;
 
   // Subscribe to dialog state
-  dialogState.subscribe(state => {
+  dialogState.subscribe((state) => {
     if (state.activeDialog) {
       currentDialog = state.activeDialog;
     } else {
@@ -28,10 +32,10 @@
 {#if currentDialog}
   {#if currentDialog.id === DIALOG_IDS.RECENT_PROJECTS}
     <div data-program-ui>
-      <RecentProjectsDialog 
-        isOpen={true} 
+      <RecentProjectsDialog
+        isOpen={true}
         onClose={handleClose}
-        {...(currentDialog.props || {})}
+        {...currentDialog.props || {}}
       />
     </div>
   {:else if currentDialog.id === DIALOG_IDS.BUFFER_DELETE}
@@ -40,7 +44,7 @@
     </div>
   {:else if currentDialog.id === DIALOG_IDS.TELESCOPE}
     <div data-program-ui>
-      <Telescope {...(currentDialog.props || {})} />
+      <Telescope {...currentDialog.props || {}} />
     </div>
   {:else if currentDialog.id === DIALOG_IDS.GRAMMAR_HUB}
     <div data-program-ui>
@@ -48,7 +52,7 @@
     </div>
   {:else if currentDialog.id === DIALOG_IDS.PREFERENCES}
     <div data-program-ui>
-      <PreferencesDialog {...(currentDialog.props || {})} />
+      <PreferencesDialog {...currentDialog.props || {}} />
     </div>
   {:else if currentDialog.id === DIALOG_IDS.EXTENSIONS}
     <div data-program-ui>

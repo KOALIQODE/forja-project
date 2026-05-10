@@ -8,6 +8,7 @@
   import { getFileIcon } from '$lib/utils/fileIcons';
   import { tick } from 'svelte';
   import { activeUITheme } from '$lib/stores/uiThemeStore';
+  import { gitFileStatuses, getFileGitStatus } from '$lib/stores/gitStatusStore';
   
   let { 
     entry, 
@@ -24,6 +25,12 @@
   let themeStyle = $derived(
     Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
   );
+
+  // Git status from reactive store (takes precedence over entry.git_status)
+  let reactiveGitStatus = $derived.by(() => {
+    const status = getFileGitStatus(entry.path);
+    return status?.status ?? entry.git_status ?? null;
+  });
 
   let isExpanded = $derived(entry.is_dir && $expandedPaths.has(entry.path));
   let iconConfig = $derived(!entry.is_dir ? getFileIcon(entry.name) : null);
@@ -104,7 +111,7 @@
   >
     <div class="flex w-3 shrink-0 items-center justify-center"></div>
     <span class="mr-2 flex shrink-0 items-center opacity-90 transition-opacity duration-150 group-hover:opacity-100 {$activeBufferId === entry.path ? 'scale-[1.04]' : ''}" 
-          style={entry.is_dir && !entry.git_status ? 'color: var(--forja-ui-explorer-folder, #7a7a8a)' : entry.git_status === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : entry.git_status === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : entry.is_ignored || entry.git_status === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)' : !entry.is_dir && iconConfig ? `color: ${iconConfig.color}` : ''
+          style={entry.is_dir && !reactiveGitStatus ? 'color: var(--forja-ui-explorer-folder, #7a7a8a)' : reactiveGitStatus === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : reactiveGitStatus === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : reactiveGitStatus === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : reactiveGitStatus === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : entry.is_ignored || reactiveGitStatus === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)' : !entry.is_dir && iconConfig ? `color: ${iconConfig.color}` : ''
           }>
       {#if entry.is_dir}
         {#if isExpanded}<FolderOpen size="15" strokeWidth={2.75} />{:else}<Folder size="15" strokeWidth={2.75} />{/if}
@@ -127,16 +134,16 @@
       />
     {:else}
       <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left font-medium transition-colors group-hover:text-(--forja-ui-text-primary,#f4f4f5)"
-            style={entry.git_status === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : entry.git_status === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : entry.git_status === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)' : $activeBufferId === entry.path ? 'color: var(--forja-ui-text-primary, #f4f4f5)' : 'color: var(--forja-ui-text-secondary, #a1a1aa)'}>
+            style={reactiveGitStatus === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : reactiveGitStatus === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : reactiveGitStatus === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : reactiveGitStatus === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : reactiveGitStatus === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)' : $activeBufferId === entry.path ? 'color: var(--forja-ui-text-primary, #f4f4f5)' : 'color: var(--forja-ui-text-secondary, #a1a1aa)'}>
         {entry.name}
       </span>
     {/if}
 
     <div class="flex w-20 shrink-0 items-center justify-end gap-1 pr-3 ml-auto">
-      {#if entry.git_status}
+      {#if reactiveGitStatus}
         <span class="text-[9px] font-bold uppercase w-3.5 text-center"
-              style={entry.git_status === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : entry.git_status === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : entry.git_status === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : entry.git_status === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : 'color: var(--forja-ui-text-muted, #71717a)'}>
-          {GIT_STATUS_LABELS[entry.git_status as keyof typeof GIT_STATUS_LABELS] || '?'}
+              style={reactiveGitStatus === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : reactiveGitStatus === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : reactiveGitStatus === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : reactiveGitStatus === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : 'color: var(--forja-ui-text-muted, #71717a)'}>
+          {GIT_STATUS_LABELS[reactiveGitStatus as keyof typeof GIT_STATUS_LABELS] || '?'}
         </span>
       {/if}
 
