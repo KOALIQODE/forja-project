@@ -49,7 +49,7 @@
 <div
   bind:this={menuElement}
   transition:fade={{ duration: 100 }}
-  class="fixed z-[999] min-w-[160px] overflow-hidden rounded-lg border border-zinc-800 bg-[#121212]/95 p-1 shadow-2xl backdrop-blur-md"
+  class="fixed z-[999] min-w-[160px] overflow-hidden border border-zinc-800 bg-[#121212]/95 p-1 shadow-2xl"
   style="left: {x}px; top: {y}px;"
 >
   {#each options as option}
@@ -58,7 +58,7 @@
     {:else}
       <button
         type="button"
-        class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors
+        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] transition-colors
                {option.danger ? 'text-red-400 hover:bg-red-500/10' : 'text-zinc-300 hover:bg-white/5 hover:text-zinc-100'}"
         onclick={() => {
           option.onClick();

@@ -2,30 +2,31 @@ editor.register_theme({
   name = "misto-dark",
 
   colors = {
-    bg          = "#0a0a0a",
-    fg          = "#f4f4f5",
-    cursor      = "#f4f4f5",
-    selection   = "#2d4a3e",
-    line_number = "#52525b",
-    gutter_bg   = "#0a0a0a",
-    border      = "#27272a",
-    active_line = "#111111",
+    bg             = "#0a0a0a",
+    fg             = "#f4f4f5",
+    cursor         = "#34d399",
+    selection      = "rgba(52,211,153,0.18)",
+    line_number    = "#3a3a3a",
+    gutter_bg      = "#0a0a0a",
+    border         = "#27272a",
+    active_line    = "rgba(52,211,153,0.07)",
+    cursor_blink_ms = 530,
   },
 
   syntax = {
-    keyword       = "#34d399",
-    string        = "#a3e635",
-    function_name = "#2dd4bf",
-    variable      = "#f4f4f5",
-    type          = "#34d399",
-    constant      = "#fb923c",
-    comment       = "#52525b",
-    operator      = "#94a3b8",
-    number        = "#fb923c",
-    punctuation   = "#94a3b8",
-    attribute     = "#a78bfa",
-    tag           = "#f87171",
-    namespace     = "#2dd4bf",
+    keyword       = "#a78bfa",   -- violet  — let, const, if, return, async…
+    string        = "#a3e635",   -- lime    — string literals
+    function_name = "#38bdf8",   -- sky     — function & method names
+    variable      = "#f4f4f5",   -- white   — identifiers
+    type          = "#2dd4bf",   -- teal    — TypeScript types, interfaces, generics
+    constant      = "#fb923c",   -- orange  — enum values, ALL_CAPS constants
+    comment       = "#52525b",   -- gray    — comments
+    operator      = "#f472b6",   -- pink    — = + - => && || …
+    number        = "#fdba74",   -- peach   — numeric literals
+    punctuation   = "#71717a",   -- muted   — ; , { } ( ) [ ]
+    attribute     = "#c4b5fd",   -- lavender — HTML attrs, decorators, annotations
+    tag           = "#f87171",   -- red     — HTML / Svelte tags
+    namespace     = "#34d399",   -- emerald — module paths (brand accent)
   },
 
   brackets = {

@@ -1,140 +1,116 @@
 <script lang="ts">
-  import { activeBuffer, activeBufferId, openBuffers } from "$lib/stores/bufferStore";
+  import { activeBuffer, openBuffers } from "$lib/stores/bufferStore";
   import { cursorPosition, currentBreadcrumb, vimStatus } from "$lib/stores/editorStore";
   import { openBufferDeleteDialog } from "$lib/stores/dialogStore";
-  import { FileCode, AlertCircle, AlertTriangle, List, ChevronRight } from "@lucide/svelte";
-  import { getFileIcon } from "$lib/utils/fileIcons";
+  import { AlertCircle, AlertTriangle, ChevronRight, FileCode, LayoutGrid } from "@lucide/svelte";
   import { errorCount, warningCount } from "$lib/stores/diagnosticsStore";
-  
-  // Mock diagnostics for now
-  // let errors = 0;
-  // let warnings = 0;
+  import { activeUITheme } from "$lib/stores/uiThemeStore";
+  import { getFileIcon } from "$lib/utils/fileIcons";
+  import { getBreadcrumbIcon } from "$lib/utils/explorerHelpers";
 
   function handleOpenBufferDialog() {
     openBufferDeleteDialog();
   }
 
-  function getBreadcrumbIcon(kind: string) {
-    switch (kind) {
-      case 'function_item':
-      case 'function_declaration':
-      case 'function_expression':
-      case 'generator_function_declaration':
-      case 'generator_function':
-      case 'method_definition':
-      case 'arrow_function':
-        return 'ƒ';
-      case 'impl_item':
-        return '⧬';
-      case 'module':
-        return '📦';
-      case 'class_declaration':
-      case 'class_expression':
-      case 'abstract_class_declaration':
-        return '🏛';
-      case 'struct_item':
-        return 'S';
-      case 'enum_item':
-      case 'enum_declaration':
-        return 'E';
-      case 'pair':
-      case 'method_signature':
-      case 'property_signature':
-        return '{}';
+  let themeStyle = $derived(
+    Object.entries($activeUITheme.vars)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('; ')
+  );
 
-      case 'type_alias_declaration':
-        return 'T';
-      case 'trait_item':
-        return '◈';
-      default:
-        return '•';
-    }
-  }
-
-  let activeFileIcon = $derived($activeBuffer ? getFileIcon($activeBuffer.filePath) : null);
-  let activeFileName = $derived($activeBuffer ? $activeBuffer.filePath.split('/').pop() ?? '' : '');
+  let hasActiveBuffer = $derived(Boolean($activeBuffer));
+  let activeFileIconData = $derived($activeBuffer ? getFileIcon($activeBuffer.filePath) : null);
+  let activeFileName = $derived($activeBuffer?.filePath.split('/').pop() ?? '');
+  let breadcrumbItems = $derived($currentBreadcrumb?.items ?? []);
+  let openBufferCount = $derived(Array.from($openBuffers.keys()).length);
+  let cursorLine = $derived($cursorPosition.line);
+  let cursorColumn = $derived($cursorPosition.column);
   let vimModeLabel = $derived(
     $vimStatus.mode === 'off'
       ? 'VIM OFF'
       : $vimStatus.mode === 'command' && $vimStatus.command
-      ? `:${$vimStatus.command}`
-      : [
-          $vimStatus.mode.toUpperCase(),
-          $vimStatus.pending,
-          $vimStatus.count
-        ].filter(Boolean).join(' ')
+        ? `:${$vimStatus.command}`
+        : [$vimStatus.mode.toUpperCase(), $vimStatus.pending, $vimStatus.count].filter(Boolean).join(' ')
   );
 </script>
 
-<footer class="h-8 bg-black/15 backdrop-blur-xl border-t border-white/5 flex items-center justify-between px-3 text-[11px] text-[#cccccc] select-none z-50" data-program-ui style="font-family: var(--forja-buffer-font-family);">
-  <div class="flex items-center gap-1 h-full overflow-hidden">
-    <!-- Breadcrumb -->
-    {#if $activeBuffer}
-      <div class="flex items-center hover:bg-white/5 px-2 h-full cursor-pointer transition-colors shrink-0 gap-1.5">
-        {#if activeFileIcon}
-          <activeFileIcon.icon size={14} style={`color: ${activeFileIcon.color}`} />
+<footer
+  class="flex h-6 w-full items-center justify-between bg-(--forja-ui-explorer-bg,#111111) px-2 text-[10px] tracking-wide text-(--forja-ui-text-secondary,#a1a1aa) select-none"
+  data-program-ui
+  data-testid="status-bar"
+  style="font-family: var(--forja-buffer-font-family, var(--font-family-mono)); {themeStyle}"
+>
+  <div class="flex min-w-0 items-center overflow-hidden">
+    {#if hasActiveBuffer}
+      <div class="flex h-full min-w-0 items-center gap-1 px-2 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))">
+        {#if activeFileIconData}
+          <activeFileIconData.icon size={12} style={`color: ${activeFileIconData.color}`} />
         {:else}
-          <FileCode size={14} class="text-[#ce9178]" />
+          <FileCode size={12} class="text-(--forja-ui-text-muted,#71717a)" />
         {/if}
-        <span class="opacity-70 text-[11px]">{activeFileName}</span>
+        <span class="truncate text-(--forja-ui-text-primary,#f4f4f5)" data-testid="status-file-name">{activeFileName}</span>
       </div>
-      
-      {#if $currentBreadcrumb && $currentBreadcrumb.items.length > 0}
-        {#each $currentBreadcrumb.items as item, i (i)}
-          <ChevronRight size={12} class="text-white/10 shrink-0" />
-          <div class="flex items-center gap-1 hover:bg-white/5 px-2 h-full cursor-pointer transition-colors shrink-0 max-w-[150px]">
-            <span class="text-[10px] opacity-40">{getBreadcrumbIcon(item.kind)}</span>
-            <span class="truncate opacity-80">{item.name}</span>
-          </div>
-        {/each}
+
+      {#if breadcrumbItems.length > 0}
+        <div class="mx-1 h-3 w-px shrink-0 bg-(--forja-ui-btn-border,#27272a)"></div>
+        <div class="flex min-w-0 items-center overflow-hidden">
+          {#each breadcrumbItems as item, index (`${item.name}-${index}`)}
+            {#if index > 0}
+              <ChevronRight size={10} class="mx-1 shrink-0 text-(--forja-ui-text-muted,#71717a)" />
+            {/if}
+            <div class="flex min-w-0 items-center gap-1 px-2 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))">
+              <span class="text-[9px] text-(--forja-ui-text-muted,#71717a)">{getBreadcrumbIcon(item.kind)}</span>
+              <span class="truncate">{item.name}</span>
+            </div>
+          {/each}
+        </div>
       {/if}
     {:else}
-      <div class="flex items-center gap-2 px-2 h-full">
-        <FileCode size={14} class="text-white/10" />
-        <span class="opacity-40">No buffer open</span>
+      <div class="flex h-full items-center gap-1 px-2 uppercase text-(--forja-ui-text-muted,#71717a)">
+        <FileCode size={12} class="shrink-0" />
+        <span>No buffer open</span>
       </div>
     {/if}
 
-    <!-- Diagnostics (Placeholder) -->
-    <div class="flex items-center gap-0 h-full ml-4">
-      <div class="flex items-center gap-1 hover:bg-white/5 px-2 h-full cursor-pointer transition-colors">
-        <AlertCircle size={14} class="text-red-500/70" />
-        <span class="opacity-70">{$errorCount}</span>
+    <div class="mx-1 h-3 w-px shrink-0 bg-(--forja-ui-btn-border,#27272a)"></div>
+
+    <div class="flex items-center">
+      <div class="flex h-full items-center gap-1 px-2 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))">
+        <AlertCircle size={12} class="text-rose-400" />
+        <span class="font-semibold text-rose-400" data-testid="status-error-count">{$errorCount}</span>
       </div>
-      <div class="flex items-center gap-1 hover:bg-white/5 px-2 h-full cursor-pointer transition-colors">
-        <AlertTriangle size={14} class="text-amber-500/70" />
-        <span class="opacity-70">{$warningCount}</span>
+      <div class="flex h-full items-center gap-1 px-2 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))">
+        <AlertTriangle size={12} class="text-amber-400" />
+        <span class="font-semibold text-amber-400" data-testid="status-warning-count">{$warningCount}</span>
       </div>
     </div>
   </div>
 
-  <div class="flex items-center h-full shrink-0">
-    <div class="flex items-center gap-1 hover:bg-white/5 px-3 h-full transition-colors min-w-[120px]">
-      <span class="rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-bold tracking-[0.12em] text-emerald-400">
-        {vimModeLabel || 'NORMAL'}
-      </span>
+  <div class="ml-2 flex shrink-0 items-center">
+    <div class="flex h-full items-center gap-2 px-2 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))">
+      <span class="uppercase tracking-widest text-[9px] font-bold leading-none text-(--forja-ui-text-secondary,#a1a1aa)" style="transform:translateY(1px)">Vim</span>
+      <span class="font-bold tracking-[0.1em] text-(--forja-ui-gradient-from,#34d399)" data-testid="status-vim-mode">{vimModeLabel}</span>
     </div>
 
-    <!-- Active Buffers Icon - Now triggers Telescope Dialog -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div 
-      class="flex items-center gap-2 hover:bg-white/5 px-3 h-full cursor-pointer transition-colors"
+    <div class="mx-1 h-3 w-px shrink-0 bg-(--forja-ui-btn-border,#27272a)"></div>
+
+    <button
+      class="flex h-full items-center gap-1.5 px-2 text-(--forja-ui-text-secondary,#a1a1aa)"
       onclick={handleOpenBufferDialog}
+      type="button"
     >
-      <List size={14} class="opacity-60" />
-      <span class="opacity-60">{Array.from($openBuffers.keys()).length} Buffers</span>
-    </div>
+      <LayoutGrid size={11} class="text-(--forja-ui-text-secondary,#a1a1aa)" />
+      <span class="uppercase tracking-widest text-[9px] font-bold leading-none text-(--forja-ui-text-secondary,#a1a1aa)" style="transform:translateY(1px)">Buf</span>
+      <span class="font-semibold" data-testid="status-buffer-count">{openBufferCount}</span>
+    </button>
 
-    <!-- Cursor Position -->
-    <div class="flex items-center gap-1 hover:bg-white/5 px-3 h-full cursor-pointer transition-colors min-w-[100px] justify-end">
-      <span class="opacity-60 font-mono">Ln {$cursorPosition.line}, Col {$cursorPosition.column}</span>
+    <div class="mx-1 h-3 w-px shrink-0 bg-(--forja-ui-btn-border,#27272a)"></div>
+
+    <div class="flex h-full items-center gap-1.5 px-2 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))">
+      <span class="uppercase tracking-widest text-[9px] font-bold leading-none text-(--forja-ui-text-secondary,#a1a1aa)" style="transform:translateY(1px)">Pos</span>
+      <span class="font-semibold" data-testid="status-cursor">Ln {cursorLine}, Col {cursorColumn}</span>
     </div>
   </div>
 </footer>
 
-<style>
-  footer {
-    font-family: var(--forja-buffer-font-family, var(--font-family-mono));
-  }
-</style>
+<style></style>

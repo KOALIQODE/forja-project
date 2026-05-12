@@ -7,7 +7,7 @@
 *Donde la potencia nativa se une a la elegancia moderna*
 
 ![Version](https://img.shields.io/badge/version-0.1.0-orange?style=flat-square)
-![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
+![License](https://img.shields.io/badge/license-Elastic--2.0-purple?style=flat-square)
 ![Rust](https://img.shields.io/badge/Rust-1.75+-orange?style=flat-square&logo=rust)
 ![Svelte](https://img.shields.io/badge/Svelte-5.0-red?style=flat-square&logo=svelte)
 ![Tauri](https://img.shields.io/badge/Tauri-2.0-blue?style=flat-square&logo=tauri)
@@ -331,7 +331,15 @@ Revisa la documentación en `docs/` antes de trabajar en el sistema de plugins o
 
 ## 📄 Licencia
 
-MIT © [KOALIQODE](https://github.com/KOALIQODE)
+Este proyecto está disponible públicamente bajo la **[Elastic License 2.0](./LICENSE)**.
+
+- ✅ Puedes ver, estudiar y contribuir al código
+- ✅ Puedes usar el código para desarrollo personal o interno
+- ❌ No puedes forkear y redistribuir el proyecto
+- ❌ No puedes ofrecer Forja como servicio gestionado/hosted sin permiso escrito
+- ❌ No puedes eliminar avisos de copyright o marcas de KOALIQODE
+
+Copyright © 2026 [KOALIQODE](https://github.com/KOALIQODE). Todos los derechos reservados.
 
 ---
 

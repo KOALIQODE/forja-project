@@ -64,3 +64,46 @@ pub async fn repair_parser_queries(parser_name: &str) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_all_parsers_returns_non_empty_list() {
+        let result = list_all_parsers();
+        assert!(result.is_ok(), "list_all_parsers should succeed: {:?}", result);
+        let parsers = result.unwrap();
+        assert!(!parsers.is_empty(), "parser registry must define at least one parser");
+    }
+
+    #[test]
+    fn list_all_parsers_includes_rust() {
+        let parsers = list_all_parsers().unwrap();
+        let has_rust = parsers.iter().any(|p| p.name.to_lowercase().contains("rust"));
+        assert!(has_rust, "parser registry must include a Rust parser");
+    }
+
+    #[test]
+    fn list_all_parsers_includes_typescript() {
+        let parsers = list_all_parsers().unwrap();
+        let has_ts = parsers.iter().any(|p| {
+            p.name.to_lowercase().contains("typescript") || p.name.to_lowercase().contains("ts")
+        });
+        assert!(has_ts, "parser registry must include a TypeScript parser");
+    }
+
+    #[test]
+    fn get_parser_status_known_parser_returns_ok() {
+        // The manager registry uses short names like "rust", "typescript", etc.
+        let result = get_parser_status("rust");
+        assert!(result.is_ok(), "get_parser_status for 'rust' should return Ok: {:?}", result.err());
+    }
+
+    #[test]
+    fn get_parser_status_unknown_parser_returns_err() {
+        let result = get_parser_status("definitely-not-a-real-parser-xyz");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+}

@@ -1,4 +1,4 @@
-<script lang="ts">
+<!-- <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { onMount, onDestroy } from 'svelte';
@@ -125,4 +125,4 @@
     background: transparent; cursor: pointer; transition: all 0.15s;
   }
   .btn-install:hover { background: var(--accent, #4caf50); color: #fff; }
-</style>
+</style> -->

@@ -13,6 +13,7 @@ import {
 } from "$lib/utils/pluginClient";
 import { loadUIThemesFromBackend } from '$lib/stores/uiThemeStore';
 import { applyTheme } from "$lib/utils/themeEngine";
+import { STORAGE_KEYS } from "$lib/utils/constants";
 
 // ── Core writable stores ──────────────────────────────────────────────────────
 
@@ -30,15 +31,14 @@ export const pluginActivityVersion = writable(0);
 
 // ── Disabled plugin names (persisted in localStorage) ────────────────────────
 
-const DISABLED_KEY = "forja:disabledPlugins";
 const DEFAULT_DISABLED = ["bracket-pair-colorizer"];
 
 function loadDisabledSet(): Set<string> {
     try {
-        const saved = localStorage.getItem(DISABLED_KEY);
+        const saved = localStorage.getItem(STORAGE_KEYS.DISABLED_PLUGINS);
         if (saved === null) {
             // First run — disable bracket-pair-colorizer by default
-            localStorage.setItem(DISABLED_KEY, JSON.stringify(DEFAULT_DISABLED));
+            localStorage.setItem(STORAGE_KEYS.DISABLED_PLUGINS, JSON.stringify(DEFAULT_DISABLED));
             return new Set(DEFAULT_DISABLED);
         }
         return new Set(JSON.parse(saved) as string[]);
@@ -48,7 +48,7 @@ function loadDisabledSet(): Set<string> {
 }
 
 function saveDisabledSet(set: Set<string>): void {
-    localStorage.setItem(DISABLED_KEY, JSON.stringify([...set]));
+    localStorage.setItem(STORAGE_KEYS.DISABLED_PLUGINS, JSON.stringify([...set]));
 }
 
 export const disabledPluginNames = writable<Set<string>>(new Set());
@@ -188,12 +188,14 @@ export async function refreshPlugins(): Promise<void> {
 }
 
 /** Apply theme only if user previously activated one (reads localStorage preference).
- *  On first run (no preference saved), no theme is applied — user must activate manually. */
+ *  Falls back to the saved UI theme so both stores stay in sync on startup. */
 export async function applyFirstTheme(): Promise<void> {
-    const savedTheme = localStorage.getItem("forja:activeTheme");
-    // No preference saved = first run, don't activate anything
+    // Prefer the explicit editor-theme preference; fall back to the UI theme id
+    const savedTheme =
+        localStorage.getItem("forja:activeTheme") ??
+        localStorage.getItem("forja:ui-theme");
+
     if (!savedTheme) return;
-    // User explicitly deactivated
     if (savedTheme === "__none__") return;
 
     const themes = await pluginGetThemes();
@@ -203,6 +205,8 @@ export async function applyFirstTheme(): Promise<void> {
     if (target) {
         activeTheme.set(target);
         applyTheme(target);
+        // Keep both keys in sync
+        localStorage.setItem("forja:activeTheme", target.name);
     }
 }
 

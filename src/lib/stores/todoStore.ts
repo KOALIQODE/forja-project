@@ -1,6 +1,7 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { invoke } from "@tauri-apps/api/core";
 import { currentProject } from './projectStore';
+import { sidebarState, SIDEBAR_IDS, openSidebar, closeSidebar } from './sidebarStore';
 
 export interface TodoItem {
     filePath: string;
@@ -12,6 +13,17 @@ export interface TodoItem {
 export const todoList = writable<TodoItem[]>([]);
 export const isTodoSidebarOpen = writable(false);
 export const isScanningTodos = writable(false);
+
+// Sync with sidebarStore
+sidebarState.subscribe(state => {
+    const isOpen = state.openSidebars.has(SIDEBAR_IDS.TODO);
+    if (get(isTodoSidebarOpen) !== isOpen) {
+        isTodoSidebarOpen.set(isOpen);
+        if (isOpen) {
+            scanTodos();
+        }
+    }
+});
 
 export async function scanTodos() {
     let projectPath: string | null = null;
@@ -44,10 +56,11 @@ export async function scanTodos() {
 }
 
 export function toggleTodoSidebar() {
-    isTodoSidebarOpen.update(open => {
-        if (!open) {
-            scanTodos();
-        }
-        return !open;
-    });
+    const isOpen = get(isTodoSidebarOpen);
+    if (isOpen) {
+        closeSidebar(SIDEBAR_IDS.TODO);
+    } else {
+        openSidebar(SIDEBAR_IDS.TODO);
+        scanTodos();
+    }
 }

@@ -37,18 +37,18 @@
 
 <!-- Backdrop — clicks outside do nothing (force explicit choice) -->
 <div
-  class="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+  class="fixed inset-0 z-[200] flex items-center justify-center"
   role="dialog"
   aria-modal="true"
   aria-label="Plugin permission consent"
 >
   <!-- Panel -->
-  <div class="flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.95)]">
+  <div class="flex w-full max-w-md flex-col overflow-hidden bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.95)]">
 
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-white/5 px-6 py-5">
       <div class="flex items-center gap-3">
-        <div class="rounded-xl {riskClass(overallRisk)} border p-2">
+        <div class="{riskClass(overallRisk)} border p-2">
           {#if overallRisk === "high"}
             <ShieldAlert size={20} />
           {:else if overallRisk === "medium"}
@@ -64,7 +64,7 @@
       </div>
       <button
         onclick={onDeny}
-        class="rounded-full p-1.5 text-white/20 transition-colors hover:bg-white/5 hover:text-white"
+        class="p-1.5 text-white/20 transition-colors hover:bg-white/5 hover:text-white"
         aria-label="Deny"
       >
         <X size={16} />
@@ -73,7 +73,7 @@
 
     <!-- Plugin meta -->
     <div class="flex items-center gap-3 border-b border-white/5 bg-white/[0.02] px-6 py-3">
-      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-black/40 text-white/30">
+      <div class="flex h-8 w-8 items-center justify-center bg-black/40 text-white/30">
         {#if info.kind === "theme"}
           <Palette size={16} />
         {:else}
@@ -90,7 +90,7 @@
     <!-- Permissions list -->
     <div class="px-6 py-5">
       {#if info.permissions.length === 0}
-        <div class="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+        <div class="flex items-center gap-3 border border-emerald-500/20 bg-emerald-500/5 p-4">
           <ShieldCheck size={18} class="shrink-0 text-emerald-400" />
           <p class="text-xs text-emerald-300">This plugin requests no permissions — it runs in a fully isolated sandbox.</p>
         </div>
@@ -101,12 +101,14 @@
         <ul class="flex flex-col gap-2">
           {#each info.permissions as perm}
             {@const RiskIcon = riskIcon(perm.risk)}
-            <li class="flex items-start gap-3 rounded-xl border p-3.5 {riskClass(perm.risk)}">
-              <RiskIcon size={15} class="mt-0.5 shrink-0" />
+            <li class="perm-item group relative flex w-full items-start gap-3 px-3 py-2.5 {riskClass(perm.risk)}">
+              <div class="perm-icon mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center">
+                <RiskIcon size={15} />
+              </div>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center justify-between gap-2">
                   <code class="font-mono text-[10px] font-bold">{perm.id}</code>
-                  <span class="shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider {riskClass(perm.risk)}">
+                  <span class="shrink-0 border px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider {riskClass(perm.risk)}">
                     {riskLabel(perm.risk)}
                   </span>
                 </div>
@@ -120,7 +122,7 @@
 
     <!-- Warning for high-risk plugins -->
     {#if overallRisk === "high"}
-      <div class="mx-6 mb-4 flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-3">
+      <div class="mx-6 mb-4 flex items-start gap-2 border border-rose-500/20 bg-rose-500/5 px-4 py-3">
         <ShieldAlert size={14} class="mt-0.5 shrink-0 text-rose-400" />
         <p class="text-[10px] text-rose-300">This plugin requests high-risk permissions. Only install it if you trust the source.</p>
       </div>
@@ -130,14 +132,14 @@
     <div class="flex gap-3 border-t border-white/5 bg-white/[0.02] px-6 py-4">
       <button
         onclick={onDeny}
-        class="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs font-medium text-white/60 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white"
+        class="flex flex-1 items-center justify-center gap-2 border border-white/10 bg-white/5 py-2.5 text-xs font-medium text-white/60 transition-all hover:border-white/20 hover:bg-white/10 hover:text-white"
       >
         <X size={13} />
         Deny
       </button>
       <button
         onclick={onApprove}
-        class="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition-all
+        class="flex flex-1 items-center justify-center gap-2 py-2.5 text-xs font-semibold transition-all
           {overallRisk === 'high'
             ? 'border border-rose-500/30 bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
             : 'bg-violet-600 text-white hover:bg-violet-500'}"
@@ -149,3 +151,9 @@
 
   </div>
 </div>
+
+<style>
+  .perm-item { border-radius: 8px; transition: background 0.12s; }
+  .perm-item + .perm-item { margin-top: 6px; }
+  .perm-item:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); }
+</style>

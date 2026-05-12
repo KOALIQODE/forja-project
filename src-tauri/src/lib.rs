@@ -96,6 +96,8 @@ mod parser;   // shim → crate::infrastructure::parser
 mod plugins;   // shim → commands/
 mod shared;    // shim → infrastructure/ + domain/
 mod language;  // shim → domain::language
+mod deps;      // Dependency management system
+// mod trust;      // Trust hub for external sources (disabled; kept for future optional use)
 
 use domain::document::DocumentManager;
 use infrastructure::lsp::client::LspClientManager;
@@ -168,6 +170,7 @@ pub fn run() {
             // Explorer
             commands::explorer::search_files,
             commands::explorer::search_in_files,
+            commands::explorer::get_files_git_status,
             commands::explorer::get_project_todos,
             commands::explorer::explore_directory,
             commands::explorer::watch_directory,
@@ -224,6 +227,21 @@ pub fn run() {
             commands::parser_manager::pm_download_or_compile_parser,
             commands::parser_manager::pm_repair_queries,
             commands::parser_manager::pm_repair_all_queries,
+            // Deps
+            deps::scan_all,
+            deps::scan_manifest,
+            deps::install_dep,
+            deps::start_watcher,
+            deps::stop_watcher,
+            deps::validate_dependency,
+            deps::clone::clone_and_validate,
+            deps::clone::save_validated_project,
+            deps::clone::install_project_deps,
+            deps::clone::cleanup_clone_session,
+            // trust::list_trust_entries,
+            // trust::add_trust_entry,
+            // trust::remove_trust_entry,
+            // trust::is_host_trusted,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,11 +1,14 @@
 <script lang="ts">
   // Handle Tauri invoke
   import { invoke } from '@tauri-apps/api/core';
-  import { Folder, FolderOpen, Pin, Edit2, File as FileIcon, Trash2, Plus, FolderPlus } from '@lucide/svelte';
+  import { Folder, FolderOpen, Pin, File as FileIcon } from '@lucide/svelte';
   import { activeBufferId } from '$lib/stores/bufferStore';
   import { expandedPaths, inlineAction, type FileEntry } from '$lib/stores/explorerStore';
+  import { GIT_STATUS_LABELS } from '$lib/utils/explorerHelpers';
   import { getFileIcon } from '$lib/utils/fileIcons';
   import { tick } from 'svelte';
+  import { activeUITheme } from '$lib/stores/uiThemeStore';
+  import { gitFileStatuses, getFileGitStatus } from '$lib/stores/gitStatusStore';
   
   let { 
     entry, 
@@ -19,33 +22,29 @@
     onContextMenu?: (e: MouseEvent, entry: FileEntry) => void
   } = $props();
 
+  let themeStyle = $derived(
+    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+  );
+
+  // Git status from reactive store (takes precedence over entry.git_status)
+  let reactiveGitStatus = $derived.by(() => {
+    const status = getFileGitStatus(entry.path);
+    return status?.status ?? entry.git_status ?? null;
+  });
+
   let isExpanded = $derived(entry.is_dir && $expandedPaths.has(entry.path));
   let iconConfig = $derived(!entry.is_dir ? getFileIcon(entry.name) : null);
-
-  const gitStatusColor = {
-    modified: 'text-orange-400',
-    added: 'text-green-400',
-    untracked: 'text-zinc-500',
-    renamed: 'text-blue-400',
-    deleted: 'text-red-400'
-  };
-
-  const gitStatusLabel = {
-    modified: 'M',
-    added: 'A',
-    untracked: 'U',
-    renamed: 'R',
-    deleted: 'D'
-  };
 
   // Inline action state
   let isRenaming = $derived($inlineAction?.type === 'rename' && $inlineAction?.path === entry.path);
   let isCreatingFile = $derived($inlineAction?.type === 'create_file' && $inlineAction?.path === entry.path);
   let isCreatingDir = $derived($inlineAction?.type === 'create_dir' && $inlineAction?.path === entry.path);
   
-  let newName = $state(entry.name);
+  let newName = $state('');
   let creationName = $state('');
   let inputElement: HTMLInputElement | null = $state(null);
+
+  $effect(() => { if (isRenaming) newName = entry.name; });
 
   $effect(() => {
     if ((isRenaming || isCreatingFile || isCreatingDir) && inputElement) {
@@ -95,10 +94,10 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="flex flex-col w-full">
+<div class="flex flex-col w-full" style={themeStyle}>
   <div 
-    class="group flex h-7 w-full cursor-pointer items-center border-l-2 pl-4 text-[13px] transition-all duration-150 hover:bg-white/[0.03] 
-          {$activeBufferId === entry.path ? 'border-emerald-500 bg-white/5' : 'border-transparent'}" 
+    class="group flex h-[26px] w-full cursor-pointer items-center pl-3 text-[12px] transition-all duration-150 hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.04))
+          {$activeBufferId === entry.path ? 'bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.06))' : ''}" 
     class:opacity-40={entry.is_ignored || entry.git_status === 'deleted'} 
     class:grayscale={entry.is_ignored}
     onclick={() => handleEntryClick(entry)}
@@ -110,19 +109,14 @@
       }
     }}
   >
-    <div class="flex w-5 shrink-0 items-center justify-center"></div>
-    <span class="mr-2.5 flex shrink-0 items-center opacity-70 transition-opacity group-hover:opacity-100" 
-          style={!entry.is_dir && iconConfig && !entry.git_status ? `color: ${iconConfig.color}` : ''}
-          class:text-blue-400={entry.is_dir && !entry.git_status} 
-          class:text-orange-400={entry.git_status === 'modified'}
-          class:text-green-400={entry.git_status === 'added'}
-          class:text-blue-400-git={entry.git_status === 'renamed'}
-          class:text-red-400={entry.git_status === 'deleted'}
-          class:text-zinc-500={entry.is_ignored || entry.git_status === 'untracked'}>
+    <div class="flex w-3 shrink-0 items-center justify-center"></div>
+    <span class="mr-2 flex shrink-0 items-center opacity-90 transition-opacity duration-150 group-hover:opacity-100 {$activeBufferId === entry.path ? 'scale-[1.04]' : ''}" 
+          style={entry.is_dir && !reactiveGitStatus ? 'color: var(--forja-ui-explorer-folder, #7a7a8a)' : reactiveGitStatus === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : reactiveGitStatus === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : reactiveGitStatus === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : reactiveGitStatus === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : entry.is_ignored || reactiveGitStatus === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)' : !entry.is_dir && iconConfig ? `color: ${iconConfig.color}` : ''
+          }>
       {#if entry.is_dir}
-        {#if isExpanded}<FolderOpen size="15" />{:else}<Folder size="15" />{/if}
+        {#if isExpanded}<FolderOpen size="15" strokeWidth={2.75} />{:else}<Folder size="15" strokeWidth={2.75} />{/if}
       {:else if iconConfig}
-        <iconConfig.icon size="15" />
+        <iconConfig.icon size="15" strokeWidth={2.6} />
       {/if}
     </span>
 
@@ -130,7 +124,7 @@
       <input
         bind:this={inputElement}
         bind:value={newName}
-        class="h-5 w-[calc(100%-100px)] bg-zinc-800 px-1 text-[13px] text-zinc-200 outline-none ring-1 ring-emerald-500"
+        class="h-5 w-[calc(100%-40px)] bg-(--forja-ui-btn-bg,#0a0a0a) ring-1 ring-(--forja-ui-btn-border,#27272a) px-1 text-[12px] text-(--forja-ui-text-primary,#f4f4f5) outline-none"
         onblur={handleRename}
         onkeydown={(e) => {
           if (e.key === 'Enter') handleRename();
@@ -139,41 +133,39 @@
         onclick={(e) => e.stopPropagation()}
       />
     {:else}
-      <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left font-medium transition-colors
-                  {$activeBufferId === entry.path || entry.git_status ? 'text-zinc-200' : 'text-zinc-400'}
-                  {entry.git_status ? gitStatusColor[entry.git_status as keyof typeof gitStatusColor] || '' : ''}
-                  group-hover:text-zinc-200">
+      <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left font-medium transition-colors group-hover:text-(--forja-ui-text-primary,#f4f4f5)"
+            style={reactiveGitStatus === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : reactiveGitStatus === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : reactiveGitStatus === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : reactiveGitStatus === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : reactiveGitStatus === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)' : $activeBufferId === entry.path ? 'color: var(--forja-ui-text-primary, #f4f4f5)' : 'color: var(--forja-ui-text-secondary, #a1a1aa)'}>
         {entry.name}
       </span>
     {/if}
 
-    <div class="flex w-24 shrink-0 items-center justify-end gap-1 pr-4 ml-auto">
-      {#if entry.git_status}
-        <span class="text-[10px] font-bold uppercase w-4 text-center
-                    {gitStatusColor[entry.git_status as keyof typeof gitStatusColor] || 'text-zinc-500'}">
-          {gitStatusLabel[entry.git_status as keyof typeof gitStatusLabel] || '?'}
+    <div class="flex w-20 shrink-0 items-center justify-end gap-1 pr-3 ml-auto">
+      {#if reactiveGitStatus}
+        <span class="text-[9px] font-bold uppercase w-3.5 text-center"
+              style={reactiveGitStatus === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : reactiveGitStatus === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : reactiveGitStatus === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : reactiveGitStatus === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : 'color: var(--forja-ui-text-muted, #71717a)'}>
+          {GIT_STATUS_LABELS[reactiveGitStatus as keyof typeof GIT_STATUS_LABELS] || '?'}
         </span>
       {/if}
 
       {#if entry.is_dir && !entry.is_ignored}
-        <button type="button" class="opacity-0 group-hover:opacity-100 p-1 text-zinc-600 hover:text-emerald-400 transition-all cursor-pointer" onclick={(e) => { e.stopPropagation(); pinFolder(entry.path); }} title="Anclar esta carpeta como raíz">
-          <Pin size={12} />
+        <button type="button" class="opacity-0 group-hover:opacity-100 p-1 text-(--forja-ui-text-muted,#71717a) hover:text-(--forja-ui-text-primary,#f4f4f5) transition-colors cursor-pointer" onclick={(e) => { e.stopPropagation(); pinFolder(entry.path); }} title="Anclar esta carpeta como raíz">
+          <Pin size={11} strokeWidth={2.25} />
         </button>
       {/if}
     </div>
   </div>
 
   {#if (isCreatingFile || isCreatingDir)}
-    <div class="flex h-7 items-center pl-8">
-      <div class="flex w-5 shrink-0 items-center justify-center"></div>
-      <span class="mr-2.5 flex items-center opacity-70">
-        {#if isCreatingFile}<FileIcon size="15" />{:else}<Folder size="15" class="text-blue-400" />{/if}
+    <div class="flex h-[26px] items-center pl-6">
+      <div class="flex w-3 shrink-0 items-center justify-center"></div>
+      <span class="mr-2 flex items-center opacity-70">
+        {#if isCreatingFile}<FileIcon size="15" strokeWidth={2.6} />{:else}<Folder size="15" strokeWidth={2.75} class="text-(--forja-ui-explorer-folder,#7a7a8a)" />{/if}
       </span>
       <input
         bind:this={inputElement}
         bind:value={creationName}
         placeholder={isCreatingFile ? "filename..." : "folder name..."}
-        class="h-5 w-[calc(100%-100px)] bg-zinc-800 px-1 text-[13px] text-zinc-200 outline-none ring-1 ring-emerald-500"
+        class="h-5 w-[calc(100%-40px)] bg-(--forja-ui-btn-bg,#0a0a0a) ring-1 ring-(--forja-ui-btn-border,#27272a) px-1 text-[12px] text-(--forja-ui-text-primary,#f4f4f5) outline-none"
         onblur={handleCreate}
         onkeydown={(e) => {
           if (e.key === 'Enter') handleCreate();
@@ -185,6 +177,5 @@
   {/if}
 </div>
 
-<style>
-  .text-blue-400-git { color: #60a5fa; }
-</style>
+
+<style></style>

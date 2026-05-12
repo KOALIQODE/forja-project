@@ -18,6 +18,7 @@
     Sparkles,
   } from "@lucide/svelte";
   import { closeDialog } from "../../stores/dialogStore";
+  import { activeUITheme } from "../../stores/uiThemeStore";
   import {
     loadedPlugins,
     knownPlugins,
@@ -233,6 +234,10 @@
     await disablePlugin(name);
   }
 
+  let themeStyle = $derived(
+    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+  );
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   onMount(() => {
@@ -259,142 +264,116 @@
 </script>
 
 <!-- Backdrop -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-12 backdrop-blur-md"
-  role="button"
-  tabindex="0"
+  class="fixed inset-0 z-[100] flex items-center justify-center p-8"
   onclick={(e) => e.target === e.currentTarget && closeDialog()}
-  onkeydown={(e) => {
-    if (e.target !== e.currentTarget) return;
-    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      closeDialog();
-    }
-  }}
+  style={themeStyle}
+  data-program-ui
 >
-  <!-- Panel -->
-  <div class="flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d0d] shadow-[0_32px_64px_rgba(0,0,0,0.9)]">
-
+  <div
+    class="ext-shell flex h-full w-full max-w-4xl flex-col overflow-hidden"
+    onkeydown={(e) => e.key === 'Escape' && closeDialog()}
+  >
     <!-- Header -->
-    <div class="flex items-center justify-between border-b border-white/5 bg-white/[0.03] px-8 py-6">
-      <div class="flex items-center gap-4">
-        <div class="rounded-xl bg-violet-500/10 p-2.5 text-violet-400">
-          <Puzzle size={24} />
-        </div>
-        <div>
-          <h2 class="text-xl font-medium tracking-tight text-white">Extensions</h2>
-          <p class="text-xs uppercase tracking-wide text-white/30">Plugins · Themes · Language Servers</p>
-        </div>
+    <div class="header-row flex items-center gap-3 px-4 py-2.5">
+      <span class="mode-label">EXTENSIONS</span>
+      <div class="sep-v"></div>
+      <div class="relative flex flex-1 items-center">
+        <Search size={13} style="color: var(--forja-ui-text-secondary, #dedee2); position: absolute; left: 0;" />
+        <input
+          type="text"
+          bind:value={searchQuery}
+          placeholder="Search…"
+          class="search-input w-full bg-transparent pl-5 text-[13px] outline-none"
+        />
       </div>
-
-      <div class="flex items-center gap-4">
-        <div class="relative w-64">
-          <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
-          <input
-            type="text"
-            bind:value={searchQuery}
-            placeholder="Search…"
-            class="w-full rounded-full border border-white/5 bg-white/5 py-2 pl-9 pr-4 text-xs text-white outline-none focus:border-violet-500/30"
-          />
-        </div>
-        <button
-          onclick={closeDialog}
-          class="rounded-full p-2 text-white/20 transition-all hover:bg-white/5 hover:text-white"
-        >
-          <X size={20} />
-        </button>
-      </div>
+      <button onclick={closeDialog} class="close-btn flex h-6 w-6 items-center justify-center">
+        <X size={14} />
+      </button>
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-1 border-b border-white/5 bg-white/[0.015] px-8 pt-3">
+    <div class="tabs-row flex">
       {#each [
-        { id: 'plugins', label: 'Plugins', icon: Puzzle, count: plugins.filter(p => !disabled.has(p.name)).length },
+        { id: 'lsp',     label: 'LSP',     icon: Server,  count: servers.filter(s => s.installed).length },
+        { id: 'plugins', label: 'Plugins', icon: Puzzle,  count: plugins.filter(p => !disabled.has(p.name)).length },
         { id: 'themes',  label: 'Themes',  icon: Palette, count: themes.length },
-        { id: 'lsp',     label: 'Language Servers', icon: Server, count: servers.filter(s => s.installed).length },
       ] as tab}
         <button
           onclick={() => activeTab = tab.id as any}
-          class="flex items-center gap-2 rounded-t-lg px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-all {activeTab === tab.id ? 'border-b-2 border-violet-500 bg-white/5 text-violet-300' : 'text-white/30 hover:text-white/60'}"
+          class="tab-btn flex items-center gap-1.5 px-4 py-2"
+          class:tab-btn--active={activeTab === tab.id}
         >
-          <tab.icon size={13} />
-          {tab.label}
+          <tab.icon size={11} />
+          <span>{tab.label}</span>
           {#if tab.count > 0}
-            <span class="rounded-full bg-white/5 px-1.5 py-0.5 text-[9px]">{tab.count}</span>
+            <span class="tab-count">{tab.count}</span>
           {/if}
         </button>
       {/each}
     </div>
 
     <!-- Content -->
-    <div class="flex-1 overflow-y-auto p-8 custom-scrollbar">
+    <div class="content-area flex-1 overflow-y-auto custom-scrollbar p-3">
 
       <!-- ── Plugins Tab ──────────────────────────────────────────────────── -->
       {#if activeTab === "plugins"}
         {#if isPluginsLoading}
-          <div class="flex h-full items-center justify-center">
-            <Loader2 size={32} class="animate-spin text-violet-500/30" />
+          <div class="empty-state flex h-full items-center justify-center">
+            <Loader2 size={20} class="animate-spin" />
           </div>
         {:else if filteredPlugins.length === 0}
-          <div class="flex h-full flex-col items-center justify-center gap-3 text-white/20">
-            <Puzzle size={32} />
-            <p class="text-xs uppercase tracking-widest">No plugins loaded</p>
-            <p class="text-[10px] text-white/15">Plugins run logic at runtime — bracket colorizers, formatters, etc.</p>
+          <div class="empty-state flex h-full flex-col items-center justify-center gap-2">
+            <Puzzle size={24} strokeWidth={1} />
+            <p class="text-[10px] uppercase tracking-widest">No plugins loaded</p>
           </div>
         {:else}
-          <p class="mb-4 flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] text-white/20">
-            <span class="h-px flex-1 bg-white/5"></span>
+          <div class="section-label flex items-center gap-2 px-4 py-2 text-[9px] uppercase tracking-[0.2em]">
+            <span class="divider-line flex-1"></span>
             Lua Plugins — active at runtime
-            <span class="h-px flex-1 bg-white/5"></span>
-          </p>
-          <div class="flex flex-col gap-3">
+            <span class="divider-line flex-1"></span>
+          </div>
+          <div class="flex flex-col">
             {#each filteredPlugins as plugin (plugin.name)}
               {@const isDisabled = disabled.has(plugin.name)}
-              <div class="group flex items-start justify-between gap-4 rounded-xl border p-5 transition-all {isDisabled ? 'border-white/5 bg-white/[0.01] opacity-60' : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'}">
-                <div class="flex min-w-0 items-start gap-4">
-                  <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/40 {isDisabled ? 'text-white/20' : 'text-violet-400/50'}">
-                    <Puzzle size={20} />
+              <div class="item-row group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3" class:item-row--disabled={isDisabled}>
+                <div class="flex min-w-0 items-start gap-3">
+                  <div class="item-icon mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center">
+                    <Puzzle size={14} />
                   </div>
-                  <div class="min-w-0">
+                  <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
-                      <h3 class="text-sm font-medium {isDisabled ? 'text-white/40' : 'text-white'}">{plugin.name}</h3>
-                      <span class="text-[9px] text-white/20">v{plugin.version}</span>
+                      <span class="item-name min-w-0 truncate text-[12px]">{plugin.name}</span>
+                      <span class="item-meta text-[9px]">v{plugin.version}</span>
                       {#if isDisabled}
-                        <span class="rounded-full bg-white/5 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/25">Disabled</span>
+                        <span class="badge-disabled text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5">Disabled</span>
                       {/if}
                     </div>
-                    <div class="mt-1.5 flex flex-wrap gap-1">
+                    <div class="mt-1 flex flex-wrap gap-1">
                       {#each plugin.permissions as perm}
-                        <span class="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
+                        <span class="perm-badge px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
                           {perm}
                         </span>
                       {/each}
                     </div>
                     {#if plugin.commands.length > 0}
-                      <p class="mt-1.5 text-[9px] text-white/20">Commands: {plugin.commands.join(', ')}</p>
+                      <p class="item-meta mt-1 text-[9px]">Commands: {plugin.commands.join(', ')}</p>
                     {/if}
                   </div>
                 </div>
-                <!-- Enable / Disable toggle -->
-                <div class="mt-1 shrink-0">
+                <div class="mt-0.5 shrink-0">
                   {#if togglingPlugin === plugin.name}
-                    <Loader2 size={16} class="animate-spin text-violet-500" />
+                    <Loader2 size={13} class="animate-spin item-meta" />
                   {:else if isDisabled}
-                    <button
-                      onclick={() => togglePlugin(plugin)}
-                      class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/30 transition-all hover:bg-emerald-500/20 hover:text-emerald-400"
-                      title="Enable plugin"
-                    >
-                      <Power size={12} />
+                    <button onclick={() => togglePlugin(plugin)} class="action-btn action-btn--enable flex items-center gap-1.5 px-3 py-1" title="Enable plugin">
+                      <Power size={11} />
                       Enable
                     </button>
                   {:else}
-                    <button
-                      onclick={() => togglePlugin(plugin)}
-                      class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/40 transition-all hover:bg-rose-500/20 hover:text-rose-400"
-                      title="Disable plugin"
-                    >
-                      <PowerOff size={12} />
+                    <button onclick={() => togglePlugin(plugin)} class="action-btn action-btn--disable flex items-center gap-1.5 px-3 py-1" title="Disable plugin">
+                      <PowerOff size={11} />
                       Disable
                     </button>
                   {/if}
@@ -407,87 +386,72 @@
       <!-- ── Themes Tab ───────────────────────────────────────────────────── -->
       {:else if activeTab === "themes"}
         {#if isPluginsLoading}
-          <div class="flex h-full items-center justify-center">
-            <Loader2 size={32} class="animate-spin text-violet-500/30" />
+          <div class="empty-state flex h-full items-center justify-center">
+            <Loader2 size={20} class="animate-spin" />
           </div>
         {:else if filteredThemes.length === 0}
-          <div class="flex h-full flex-col items-center justify-center gap-3 text-white/20">
-            <Palette size={32} />
-            <p class="text-xs uppercase tracking-widest">No themes loaded</p>
-            <p class="text-[10px] text-white/15">Themes are declarative Lua files — no code execution.</p>
+          <div class="empty-state flex h-full flex-col items-center justify-center gap-2">
+            <Palette size={24} strokeWidth={1} />
+            <p class="text-[10px] uppercase tracking-widest">No themes loaded</p>
           </div>
         {:else}
-          <p class="mb-4 flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] text-white/20">
-            <span class="h-px flex-1 bg-white/5"></span>
+          <div class="section-label flex items-center gap-2 px-4 py-2 text-[9px] uppercase tracking-[0.2em]">
+            <span class="divider-line flex-1"></span>
             Lua Themes — declarative color palettes
-            <span class="h-px flex-1 bg-white/5"></span>
-          </p>
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <span class="divider-line flex-1"></span>
+          </div>
+          <div class="flex flex-col">
             {#each filteredThemes as theme (theme.name)}
               {@const isActive = currentTheme?.name === theme.name}
-              <div class="group relative flex flex-col gap-4 rounded-xl border p-5 transition-all {isActive ? 'border-violet-500/40 bg-violet-500/5' : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'}">
-
-                <!-- Top row -->
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex items-start gap-3">
-                    <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/40 {isActive ? 'text-violet-400' : 'text-white/20'}">
-                      <Palette size={20} />
-                    </div>
-                    <div>
-                      <div class="flex items-center gap-2">
-                        <h3 class="text-sm font-medium text-white">{theme.name}</h3>
-                        {#if isActive}
-                          <span class="flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-300">
-                            <Sparkles size={8} />
-                            Active
-                          </span>
-                        {/if}
-                      </div>
-                      <p class="mt-0.5 text-[9px] text-white/20">v{theme.version}</p>
-                    </div>
+              <div class="item-row group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3" class:item-row--active={isActive}>
+                <div class="flex min-w-0 items-start gap-3">
+                  <div class="item-icon mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center" class:item-icon--active={isActive}>
+                    <Palette size={14} />
                   </div>
-
-                  <!-- Action -->
-                  <div class="shrink-0">
-                    {#if isActive}
-                      <button
-                        onclick={() => deactivateTheme(theme.name)}
-                        class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-violet-300/60 transition-all hover:bg-rose-500/20 hover:text-rose-400"
-                      >
-                        <PowerOff size={12} />
-                        Deactivate
-                      </button>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="item-name min-w-0 truncate text-[12px]">{theme.name}</span>
+                      <span class="item-meta text-[9px]">v{theme.version}</span>
+                      {#if isActive}
+                        <span class="badge-active flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                          <Sparkles size={7} />
+                          Active
+                        </span>
+                      {/if}
+                    </div>
+                    {#if isActive && currentTheme}
+                      <div class="mt-1.5 flex flex-wrap gap-1">
+                        {#each Object.entries({ bg: currentTheme.colors?.bg, fg: currentTheme.colors?.fg, keyword: currentTheme.syntax?.keyword, string: currentTheme.syntax?.string, comment: currentTheme.syntax?.comment, function: currentTheme.syntax?.function_name }).filter(([,v]) => !!v) as [label, color]}
+                          <div class="swatch flex items-center gap-1 px-1.5 py-0.5 text-[8px]" style="background: {color}18; border: 1px solid {color}30; color: {color}">
+                            <div class="h-1.5 w-1.5" style="background: {color}"></div>
+                            {label}
+                          </div>
+                        {/each}
+                      </div>
                     {:else}
-                      <button
-                        onclick={() => activateTheme(theme)}
-                        class="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white/50 transition-all hover:bg-violet-500 hover:text-white"
-                      >
-                        <Power size={12} />
-                        Activate
-                      </button>
+                      <div class="mt-1 flex flex-wrap gap-1">
+                        {#each theme.permissions as perm}
+                          <span class="perm-badge px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
+                            {perm}
+                          </span>
+                        {/each}
+                      </div>
                     {/if}
                   </div>
                 </div>
-
-                <!-- Color swatches from active theme + syntax preview -->
-                {#if isActive && currentTheme}
-                  <div class="flex flex-wrap gap-1">
-                    {#each Object.entries({ bg: currentTheme.colors?.bg, fg: currentTheme.colors?.fg, keyword: currentTheme.syntax?.keyword, string: currentTheme.syntax?.string, comment: currentTheme.syntax?.comment, function: currentTheme.syntax?.function_name }).filter(([,v]) => !!v) as [label, color]}
-                      <div class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[8px] text-white/40" style="background: {color}18; border: 1px solid {color}30">
-                        <div class="h-2 w-2 rounded-full" style="background: {color}"></div>
-                        {label}
-                      </div>
-                    {/each}
-                  </div>
-                {:else}
-                  <div class="flex gap-1.5">
-                    {#each theme.permissions as perm}
-                      <span class="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
-                        {perm}
-                      </span>
-                    {/each}
-                  </div>
-                {/if}
+                <div class="mt-0.5 shrink-0">
+                  {#if isActive}
+                    <button onclick={() => deactivateTheme(theme.name)} class="action-btn action-btn--disable flex items-center gap-1.5 px-3 py-1">
+                      <PowerOff size={11} />
+                      Deactivate
+                    </button>
+                  {:else}
+                    <button onclick={() => activateTheme(theme)} class="action-btn action-btn--enable flex items-center gap-1.5 px-3 py-1">
+                      <Power size={11} />
+                      Activate
+                    </button>
+                  {/if}
+                </div>
               </div>
             {/each}
           </div>
@@ -496,71 +460,68 @@
       <!-- ── LSP Tab ──────────────────────────────────────────────────────── -->
       {:else if activeTab === "lsp"}
         {#if isLoadingLsp}
-          <div class="flex h-full items-center justify-center">
-            <Loader2 size={32} class="animate-spin text-violet-500/30" />
+          <div class="empty-state flex h-full items-center justify-center">
+            <Loader2 size={20} class="animate-spin" />
           </div>
         {:else if filteredServers.length === 0}
-          <div class="flex h-full flex-col items-center justify-center gap-3 text-white/20">
-            <Server size={32} />
-            <p class="text-xs uppercase tracking-widest">No servers match your search</p>
+          <div class="empty-state flex h-full flex-col items-center justify-center gap-2">
+            <Server size={24} strokeWidth={1} />
+            <p class="text-[10px] uppercase tracking-widest">No servers match</p>
           </div>
         {:else}
-          <p class="mb-4 flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] text-white/20">
-            <span class="h-px flex-1 bg-white/5"></span>
+          <div class="section-label flex items-center gap-2 px-4 py-2 text-[9px] uppercase tracking-[0.2em]">
+            <span class="divider-line flex-1"></span>
             Language Servers — install on demand
-            <span class="h-px flex-1 bg-white/5"></span>
-          </p>
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <span class="divider-line flex-1"></span>
+          </div>
+          <div class="flex flex-col">
             {#each filteredServers as server (server.id)}
               {@const badge = methodBadge(server.method)}
-              <div class="group relative flex items-start justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.02] p-5 transition-all hover:border-white/10 hover:bg-white/[0.04]">
-                <div class="flex min-w-0 items-start gap-4">
-                  <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-black/40 text-white/30 transition-colors group-hover:text-violet-400">
-                    <Server size={20} />
+              <div class="item-row group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3">
+                <div class="flex min-w-0 items-start gap-3">
+                  <div class="item-icon mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center">
+                    <Server size={14} />
                   </div>
-                  <div class="min-w-0">
+                  <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
-                      <h3 class="truncate text-sm font-medium text-white">{server.name}</h3>
-                      <span class={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badge.cls}`}>
+                      <span class="item-name min-w-0 truncate text-[12px]">{server.name}</span>
+                      <span class={`method-badge shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badge.cls}`}>
                         {badge.label}
                       </span>
                     </div>
-                    <p class="mt-0.5 text-[10px] uppercase tracking-widest text-white/25">{server.language}</p>
-                    <p class="mt-1.5 text-[11px] leading-relaxed text-white/40">{server.description}</p>
+                    <p class="item-lang mt-0.5 text-[10px] uppercase tracking-widest">{server.language}</p>
+                    <p class="item-desc mt-1 text-[11px] leading-relaxed">{server.description}</p>
                     {#if server.version}
-                      <p class="mt-1 text-[9px] text-violet-400/50">{server.version}</p>
+                      <p class="item-version mt-0.5 text-[9px]">{server.version}</p>
                     {/if}
                   </div>
                 </div>
-                <div class="mt-1 shrink-0">
+                <div class="mt-0.5 shrink-0">
                   {#if server.installed}
-                    <div class="flex items-center gap-1.5 text-emerald-400/70">
-                      <CheckCircle2 size={15} />
-                      <span class="text-[10px] font-bold uppercase tracking-wider">Installed</span>
+                    <div class="installed-badge flex items-center gap-1.5">
+                      <CheckCircle2 size={13} />
+                      <span class="text-[9px] font-bold uppercase tracking-wider">Installed</span>
                     </div>
                   {:else if installing === server.id}
                     <div class="flex flex-col items-end gap-1">
-                      <Loader2 size={16} class="animate-spin text-violet-500" />
-                      <span class="max-w-32 text-right text-[9px] text-violet-400/70">
+                      <Loader2 size={13} class="animate-spin item-meta" />
+                      <span class="item-meta max-w-32 text-right text-[9px]">
                         {statusMessage[server.id] || 'Installing…'}
                       </span>
                     </div>
                   {:else if server.method === 'manual'}
-                    <div class="flex items-center gap-1.5 text-white/20">
-                      <ExternalLink size={14} />
-                      <span class="text-[10px] uppercase tracking-wider">Manual</span>
+                    <div class="manual-badge flex items-center gap-1.5">
+                      <ExternalLink size={12} />
+                      <span class="text-[9px] uppercase tracking-wider">Manual</span>
                     </div>
                   {:else}
                     <div class="flex flex-col items-end gap-1">
-                      <button
-                        onclick={() => install(server.id)}
-                        class="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-violet-500 hover:text-white"
-                      >
-                        <Download size={13} />
+                      <button onclick={() => install(server.id)} class="action-btn action-btn--install flex items-center gap-1.5 px-3 py-1">
+                        <Download size={11} />
                         Install
                       </button>
                       {#if statusMessage[server.id]}
-                        <span class={`max-w-36 text-right text-[9px] ${statusMessage[server.id].startsWith('Error:') ? 'text-rose-400/80' : 'text-white/35'}`}>
+                        <span class="max-w-36 text-right text-[9px] {statusMessage[server.id].startsWith('Error:') ? 'text-rose-400/80' : 'item-meta'}">
                           {statusMessage[server.id]}
                         </span>
                       {/if}
@@ -576,24 +537,26 @@
     </div>
 
     <!-- Footer -->
-    <div class="flex items-center justify-between border-t border-white/5 bg-white/[0.01] px-8 py-4 text-[9px] uppercase tracking-[0.2em] text-white/20">
-      <div class="flex gap-6">
+    <div class="footer-row flex items-center justify-between px-4 py-1.5 text-[9px] uppercase tracking-[0.12em]">
+      <div class="flex items-center gap-1.5">
         {#if activeTab === "plugins"}
-          <span class="flex items-center gap-2"><Puzzle size={10} />Lua sandbox — isolated VM per plugin</span>
+          <Puzzle size={9} /><span>Lua sandbox — isolated VM per plugin</span>
         {:else if activeTab === "themes"}
-          <span class="flex items-center gap-2"><Palette size={10} />Declarative — no code execution</span>
+          <Palette size={9} /><span>Declarative — no code execution</span>
         {:else}
-          <span class="flex items-center gap-2"><AlertCircle size={10} />Manual installs require system tools</span>
+          <AlertCircle size={9} /><span>Manual installs require system tools</span>
         {/if}
       </div>
-      {#if activeTab === "plugins"}
-        {@const activeCount = plugins.filter(p => !disabled.has(p.name)).length}
-        <span>{activeCount} active · {plugins.length - activeCount} disabled</span>
-      {:else if activeTab === "themes"}
-        <span>{themes.length} theme{themes.length !== 1 ? 's' : ''} · {currentTheme ? currentTheme.name : 'none'} active</span>
-      {:else}
-        <span>{servers.filter(s => s.installed).length} installed · {servers.length} available</span>
-      {/if}
+      <span class="match-count">
+        {#if activeTab === "plugins"}
+          {@const ac = plugins.filter(p => !disabled.has(p.name)).length}
+          {ac} active · {plugins.length - ac} disabled
+        {:else if activeTab === "themes"}
+          {themes.length} theme{themes.length !== 1 ? 's' : ''} · {currentTheme ? currentTheme.name : 'none'} active
+        {:else}
+          {servers.filter(s => s.installed).length} installed · {servers.length} available
+        {/if}
+      </span>
     </div>
 
   </div>
@@ -609,8 +572,164 @@
 {/if}
 
 <style>
-  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .ext-shell {
+    background: var(--forja-ui-picker-bg, #0e0e11);
+    /* border removed for cleaner look */
+    box-shadow: 0 24px 64px rgba(0,0,0,0.90), 0 8px 24px rgba(0,0,0,0.70);
+  }
+
+  .header-row {
+    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+
+  .mode-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--forja-ui-gradient-from, #34d399);
+    white-space: nowrap;
+  }
+
+  .sep-v {
+    width: 1px;
+    height: 12px;
+    flex-shrink: 0;
+    background: var(--forja-ui-btn-border, #27272a);
+  }
+
+  .search-input {
+    color: var(--forja-ui-text-primary, #f4f4f5);
+  }
+  .search-input::placeholder { color: var(--forja-ui-text-secondary, #dedee2); }
+
+  .close-btn { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .close-btn:hover { color: var(--forja-ui-text-primary, #f4f4f5); }
+
+  /* Tabs */
+  .tabs-row {
+    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+  .tab-btn {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    border-bottom: 1px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.1s;
+  }
+  .tab-btn:hover { color: var(--forja-ui-text-secondary, #dedee2); }
+  .tab-btn--active {
+    color: var(--forja-ui-gradient-from, #34d399);
+    border-bottom-color: var(--forja-ui-gradient-from, #34d399);
+  }
+  .tab-count {
+    font-size: 9px;
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+    padding: 0 4px;
+  }
+
+  /* Content */
+
+  .section-label {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+  }
+  .divider-line {
+    height: 1px;
+    background: var(--forja-ui-btn-border, #27272a);
+    display: block;
+  }
+
+  /* Items */
+  .item-row {
+    /* remove full-width separators to allow inset hover */
+    border-bottom: none;
+    border-radius: 8px;
+    transition: background 0.12s;
+  }
+  .item-row + .item-row { margin-top: 6px; }
+  .item-row:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); }
+  .item-row--active { background: color-mix(in srgb, var(--forja-ui-picker-active, rgba(52,211,153,0.08)) 60%, transparent); }
+  .item-row--disabled { opacity: 0.5; }
+
+  .item-icon {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+  .item-icon--active { color: var(--forja-ui-gradient-from, #34d399); }
+
+  .item-name { color: var(--forja-ui-text-primary, #f4f4f5); }
+  .item-meta { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .item-lang { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .item-desc { color: var(--forja-ui-text-secondary, #dedee2); }
+  .item-version { color: var(--forja-ui-gradient-from, #34d399); opacity: 0.6; }
+
+  /* Badges */
+  .badge-disabled {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+  }
+  .badge-active {
+    color: var(--forja-ui-gradient-from, #34d399);
+    background: rgba(52,211,153,0.10);
+    border: 1px solid rgba(52,211,153,0.20);
+  }
+  .installed-badge { color: var(--forja-ui-gradient-from, #34d399); opacity: 0.7; }
+  .manual-badge { color: var(--forja-ui-text-muted, #b4b4c0); }
+
+  /* Action buttons */
+  .action-btn {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--forja-ui-text-muted, #b4b4c0);
+    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
+    border: 1px solid var(--forja-ui-btn-border, #27272a);
+    transition: color 0.1s, background 0.1s, border-color 0.1s;
+  }
+  .action-btn--enable:hover {
+    color: var(--forja-ui-gradient-from, #34d399);
+    border-color: rgba(52,211,153,0.30);
+    background: rgba(52,211,153,0.08);
+  }
+  .action-btn--disable:hover {
+    color: #f87171;
+    border-color: rgba(248,113,113,0.25);
+    background: rgba(248,113,113,0.06);
+  }
+  .action-btn--install:hover {
+    color: var(--forja-ui-gradient-from, #34d399);
+    border-color: rgba(52,211,153,0.30);
+    background: rgba(52,211,153,0.08);
+  }
+
+  /* Empty state */
+  .empty-state {
+    color: var(--forja-ui-text-secondary, #dedee2);
+    opacity: 0.5;
+    min-height: 200px;
+  }
+
+  /* Footer */
+  .footer-row {
+    border-top: 1px solid var(--forja-ui-btn-border, #27272a);
+    color: var(--forja-ui-text-muted, #b4b4c0);
+  }
+  .match-count { color: var(--forja-ui-text-muted, #b4b4c0); }
+
+  /* Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar { width: 3px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
-  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--forja-ui-explorer-scrollbar, #1e1e1e);
+  }
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: var(--forja-ui-explorer-scrollbar-hover, #2e2e2e);
+  }
 </style>

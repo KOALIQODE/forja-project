@@ -1,44 +1,29 @@
 <script lang="ts">
-  import { untrack } from "svelte";
   import WelcomeScreen from "$lib/components/WelcomeScreen.svelte";
-  import Explorer from "$lib/components/explorer/Explorer.svelte";
-  import TodoSidebar from "$lib/components/TodoSidebar.svelte";
-  import EditorBuffer from "$lib/components/editor/EditorBuffer.svelte";
-  import { activeBuffer, activeBufferId, openBuffer } from "$lib/stores/bufferStore";
+  import { activeBuffer } from "$lib/stores/bufferStore";
   import { currentProject } from "$lib/stores/projectStore";
+  import { SIDEBAR_IDS, isSidebarOpen, sidebarState } from "$lib/stores/sidebarStore";
 
   // Determinar si mostrar la pantalla de bienvenida o el editor basado en el proyecto
   let showWelcome = $derived(!$currentProject);
-  let showExplorer = $derived(!!$currentProject);
-
-  // Auto-abrir README.md cuando se abre un proyecto (solo si no hay buffers abiertos)
-  $effect(() => {
-    const project = $currentProject;
-    if (project) {
-      untrack(() => {
-        // Solo auto-abrir si no hay un buffer activo ya
-        if (!$activeBufferId) {
-          const openDefaultFile = async () => {
-            try {
-              const readmePath = project + ( project.endsWith('/') || project.endsWith('\\') ? '' : '/' ) + 'README.md';
-              openBuffer(readmePath);
-            } catch (error) {
-              console.log("No se pudo auto-abrir README.md o no existe:", error);
-            }
-          };
-          openDefaultFile();
-        }
-      });
-    }
-  });
+  let showExplorer = $derived(isSidebarOpen(SIDEBAR_IDS.EXPLORER, $sidebarState) && !!$currentProject);
 </script>
 
-<main class="flex w-full h-full overflow-hidden">
-  <!-- El Explorador solo aparece si hay un proyecto abierto -->
-  {#if showExplorer}
-    <aside class="shrink-0 z-20 h-full">
-      <Explorer />
-    </aside>
+<section class="flex w-full h-full overflow-hidden">
+  {#if $currentProject}
+    <!-- Sidebar docked area (Explorer) -->
+    {#if showExplorer}
+      <aside class="shrink-0 z-20 h-full">
+        {#await import("$lib/components/sidebars/SidebarManager.svelte") then module}
+          <module.default exclude={[SIDEBAR_IDS.TODO, SIDEBAR_IDS.DEPS]} />
+        {/await}
+      </aside>
+    {/if}
+
+    <!-- Overlay sidebars (Todo, Deps, etc.) are rendered here but use fixed positioning -->
+    {#await import("$lib/components/sidebars/SidebarManager.svelte") then module}
+      <module.default exclude={[SIDEBAR_IDS.EXPLORER]} />
+    {/await}
   {/if}
 
   <!-- El área principal -->
@@ -46,9 +31,13 @@
     {#if showWelcome}
       <WelcomeScreen />
     {:else if $activeBuffer}
-      <EditorBuffer filePath={$activeBuffer.filePath} bufferId={$activeBuffer.id} language={$activeBuffer.language ?? 'unknown'} />
+      {#await import("$lib/components/editor/EditorBuffer.svelte") then module}
+        <module.default
+          filePath={$activeBuffer.filePath}
+          bufferId={$activeBuffer.id}
+          language={$activeBuffer.language ?? "unknown"}
+        />
+      {/await}
     {/if}
   </section>
-
-  <TodoSidebar />
-</main>
+</section>

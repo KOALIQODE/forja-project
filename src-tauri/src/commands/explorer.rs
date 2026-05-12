@@ -105,7 +105,6 @@ pub async fn search_files(path: String, query: String) -> Result<Vec<FileEntry>,
 
     let walker = WalkBuilder::new(&target_path)
         .standard_filters(true)
-        .hidden(false)
         .build();
 
     let mut results = Vec::new();
@@ -159,10 +158,14 @@ pub async fn explore_directory(path: String) -> Result<Vec<FileEntry>, String> {
         .build();
 
     let mut entries = Vec::new();
+    let mut seen_paths = std::collections::HashSet::new();
+
+    // First: add entries from WalkBuilder (tracked and standard filters)
     for result in walker.skip(1) {
         if let Ok(entry) = result {
             let p = entry.path();
             let normalized_p = simplify_path(p);
+            seen_paths.insert(normalized_p.clone());
             entries.push(FileEntry {
                 name: entry.file_name().to_string_lossy().to_string(),
                 path: normalized_p.clone(),
@@ -174,6 +177,7 @@ pub async fn explore_directory(path: String) -> Result<Vec<FileEntry>, String> {
         }
     }
 
+    // Second: add any remaining untracked files from filesystem that weren't in walker
     let dir_reader =
         fs::read_dir(&target_path).map_err(|e| format!("Error leyendo directorio: {}", e))?;
     for entry_result in dir_reader {
@@ -182,14 +186,17 @@ pub async fn explore_directory(path: String) -> Result<Vec<FileEntry>, String> {
             let name = entry.file_name().to_string_lossy().to_string();
             let normalized_p = simplify_path(&p);
 
-            if !entries.iter().any(|e| e.name == name) {
+            if !seen_paths.contains(&normalized_p) {
+                let git_status = git_statuses.get(&normalized_p).cloned();
+                let is_ignored = !git_status.is_some();
+                
                 entries.push(FileEntry {
                     name,
                     path: normalized_p,
                     is_dir: p.is_dir(),
-                    is_ignored: true,
+                    is_ignored,
                     extension: p.extension().map(|e| e.to_string_lossy().to_string()),
-                    git_status: None,
+                    git_status,
                 });
             }
         }
@@ -222,7 +229,6 @@ pub async fn search_in_files(
     let target_path = PathBuf::from(&path);
     let walker = WalkBuilder::new(&target_path)
         .standard_filters(true)
-        .hidden(false)
         .build();
 
     let mut results = Vec::new();
@@ -443,4 +449,31 @@ pub async fn list_directory_from_path(path: String) -> Result<Vec<FileEntry>, St
     });
 
     Ok(result)
+}
+
+/// Returns the git status (modified/added/deleted/renamed/untracked) for the given file paths.
+/// `project_path` should be any path inside the git repo (used to discover the repo root).
+#[tauri::command]
+pub fn get_files_git_status(
+    project_path: String,
+    file_paths: Vec<String>,
+) -> HashMap<String, String> {
+    let base = PathBuf::from(&project_path);
+    let all_statuses = get_git_statuses(&base);
+
+    file_paths
+        .into_iter()
+        .filter_map(|p| {
+            let normalized = simplify_path(&PathBuf::from(&p));
+            all_statuses.get(&normalized).map(|s| (p, s.clone()))
+        })
+        .collect()
+}
+
+/// Returns ALL git statuses for all modified files in a project.
+/// Used by the frontend to keep git status cache synchronized.
+#[tauri::command]
+pub fn get_git_statuses_map(path: String) -> HashMap<String, String> {
+    let base = PathBuf::from(&path);
+    get_git_statuses(&base)
 }

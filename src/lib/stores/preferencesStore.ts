@@ -1,9 +1,5 @@
 import { writable } from 'svelte/store';
-
-const STORAGE_KEYS = {
-  PROGRAM: 'forja-preferences-program',
-  BUFFER: 'forja-preferences-buffer',
-} as const;
+import { STORAGE_KEYS } from '$lib/utils/constants';
 
 export const PROGRAM_FONT_OPTIONS = [
   {
@@ -50,8 +46,10 @@ export const BUFFER_FONT_OPTIONS = [
 export interface ProgramPreferences {
   fontFamily: string;
   fontSize: number;
+  fontWeight: string;
   explorerWidth: number;
   reduceMotion: boolean;
+  keyboardShortcuts: Record<string, string>;
 }
 
 export interface BufferPreferences {
@@ -67,8 +65,19 @@ export interface BufferPreferences {
 export const DEFAULT_PROGRAM_PREFERENCES: ProgramPreferences = {
   fontFamily: PROGRAM_FONT_OPTIONS[0].value,
   fontSize: 12,
+  fontWeight: 'normal',
   explorerWidth: 260,
   reduceMotion: false,
+  keyboardShortcuts: {
+    'open-recent': 'Ctrl+R',
+    'open-themes': 'Ctrl+K T',
+    'search-files': 'Tab Tab',
+    'live-grep': 'Shift+?',
+    'open-buffers': 'Ctrl+B',
+    'open-grammar': 'Ctrl+G',
+    'open-preferences': 'Ctrl+,',
+    'close-dialog': 'Escape',
+  }
 };
 
 export const DEFAULT_BUFFER_PREFERENCES: BufferPreferences = {
@@ -105,20 +114,26 @@ function loadStoredPreferences<T>(key: string, defaults: T, sanitize: (value: Pa
 
 function sanitizeProgramPreferences(value: Partial<ProgramPreferences>): ProgramPreferences {
   return {
+    ...DEFAULT_PROGRAM_PREFERENCES,
+    ...value,
     fontFamily:
       typeof value.fontFamily === 'string' && value.fontFamily.trim()
         ? value.fontFamily
         : DEFAULT_PROGRAM_PREFERENCES.fontFamily,
+    fontWeight:
+      typeof value.fontWeight === 'string' && value.fontWeight.trim()
+        ? value.fontWeight
+        : DEFAULT_PROGRAM_PREFERENCES.fontWeight,
     fontSize: clamp(Number(value.fontSize ?? DEFAULT_PROGRAM_PREFERENCES.fontSize), 10, 18),
     explorerWidth: clamp(
       Number(value.explorerWidth ?? DEFAULT_PROGRAM_PREFERENCES.explorerWidth),
       220,
       420,
     ),
-    reduceMotion:
-      typeof value.reduceMotion === 'boolean'
-        ? value.reduceMotion
-        : DEFAULT_PROGRAM_PREFERENCES.reduceMotion,
+    keyboardShortcuts: {
+      ...DEFAULT_PROGRAM_PREFERENCES.keyboardShortcuts,
+      ...(value.keyboardShortcuts || {}),
+    },
   };
 }
 
@@ -157,10 +172,10 @@ function applyProgramPreferences(preferences: ProgramPreferences) {
   const root = document.documentElement;
   root.style.setProperty('--forja-program-font-family', preferences.fontFamily);
   root.style.setProperty('--forja-program-font-size', `${preferences.fontSize}px`);
-  root.style.setProperty(
-    '--forja-program-ui-scale',
-    (preferences.fontSize / DEFAULT_PROGRAM_PREFERENCES.fontSize).toFixed(3),
-  );
+  // root.style.setProperty(
+  //   '--forja-program-ui-scale',
+  //   (preferences.fontSize / DEFAULT_PROGRAM_PREFERENCES.fontSize).toFixed(3),
+  // );
   root.style.setProperty('--forja-explorer-width', `${preferences.explorerWidth}px`);
   root.dataset.reduceMotion = preferences.reduceMotion ? 'true' : 'false';
 }
@@ -177,13 +192,13 @@ function applyBufferPreferences(preferences: BufferPreferences) {
 }
 
 const initialProgramPreferences = loadStoredPreferences(
-  STORAGE_KEYS.PROGRAM,
+  STORAGE_KEYS.PREFERENCES_PROGRAM,
   DEFAULT_PROGRAM_PREFERENCES,
   sanitizeProgramPreferences,
 );
 
 const initialBufferPreferences = loadStoredPreferences(
-  STORAGE_KEYS.BUFFER,
+  STORAGE_KEYS.PREFERENCES_BUFFER,
   DEFAULT_BUFFER_PREFERENCES,
   sanitizeBufferPreferences,
 );
@@ -194,13 +209,13 @@ export const bufferPreferences = writable<BufferPreferences>(initialBufferPrefer
 if (typeof localStorage !== 'undefined') {
   programPreferences.subscribe((value) => {
     const sanitized = sanitizeProgramPreferences(value);
-    localStorage.setItem(STORAGE_KEYS.PROGRAM, JSON.stringify(sanitized));
+    localStorage.setItem(STORAGE_KEYS.PREFERENCES_PROGRAM, JSON.stringify(sanitized));
     applyProgramPreferences(sanitized);
   });
 
   bufferPreferences.subscribe((value) => {
     const sanitized = sanitizeBufferPreferences(value);
-    localStorage.setItem(STORAGE_KEYS.BUFFER, JSON.stringify(sanitized));
+    localStorage.setItem(STORAGE_KEYS.PREFERENCES_BUFFER, JSON.stringify(sanitized));
     applyBufferPreferences(sanitized);
   });
 } else {

@@ -12,12 +12,11 @@
 import { writable, derived } from 'svelte/store';
 import { THEMES, DEFAULT_THEME_ID, type UITheme } from '$lib/themes/index';
 import { pluginGetThemes, type ThemeDefinition } from '$lib/utils/pluginClient';
-
-const STORAGE_KEY = 'forja:ui-theme';
+import { STORAGE_KEYS } from '$lib/utils/constants';
 
 function loadStoredThemeId(): string {
   if (typeof localStorage === 'undefined') return DEFAULT_THEME_ID;
-  return localStorage.getItem(STORAGE_KEY) ?? DEFAULT_THEME_ID;
+  return localStorage.getItem(STORAGE_KEYS.UI_THEME) ?? DEFAULT_THEME_ID;
 }
 
 /** All available UI themes. Initialized with static fallbacks, updated from backend. */
@@ -34,7 +33,7 @@ export const activeUITheme = derived(
 export function setUITheme(id: string): void {
   activeUIThemeId.set(id);
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, id);
+    localStorage.setItem(STORAGE_KEYS.UI_THEME, id);
   }
 }
 

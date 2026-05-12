@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { currentProject } from './projectStore';
+import { STORAGE_KEYS, LANG_MAP } from '$lib/utils/constants';
 
 // Simple extname implementation for browser
 function extname(path: string): string {
@@ -17,8 +18,8 @@ export interface Buffer {
 }
 
 // Keys for localStorage
-const SAVED_BUFFERS_PREFIX = "forja-buffers-";
-const ACTIVE_BUFFER_PREFIX = "forja-active-";
+const SAVED_BUFFERS_PREFIX = STORAGE_KEYS.BUFFERS_PREFIX;
+const ACTIVE_BUFFER_PREFIX = STORAGE_KEYS.ACTIVE_BUFFER_PREFIX;
 
 export const openBuffers = writable<Map<string, Buffer>>(new Map());
 export const activeBufferId = writable<string | null>(null);
@@ -112,45 +113,7 @@ activeBufferId.subscribe(id => {
  */
 export function openBuffer(filePath: string) {
   const extension = extname(filePath).toLowerCase();
-
-  // Complete extension → language map (mirrors backend detect_language)
-  const langMap: Record<string, string> = {
-    '.rs':       'rust',
-    '.js':       'javascript',
-    '.mjs':      'javascript',
-    '.cjs':      'javascript',
-    '.jsx':      'jsx',
-    '.ts':       'typescript',
-    '.tsx':      'tsx',
-    '.svelte':   'svelte',
-    '.py':       'python',
-    '.pyw':      'python',
-    '.json':     'json',
-    '.jsonc':    'json',
-    '.md':       'markdown',
-    '.mdx':      'markdown',
-    '.markdown': 'markdown',
-    '.css':      'css',
-    '.html':     'html',
-    '.htm':      'html',
-    '.go':       'go',
-    '.cpp':      'cpp',
-    '.cc':       'cpp',
-    '.cxx':      'cpp',
-    '.c':        'c',
-    '.h':        'cpp',
-    '.hpp':      'cpp',
-    '.java':     'java',
-    '.rb':       'ruby',
-    '.php':      'php',
-    '.toml':     'toml',
-    '.yaml':     'yaml',
-    '.yml':      'yaml',
-    '.sh':       'bash',
-    '.bash':     'bash',
-    '.lua':      'lua',
-  };
-  const language: string = langMap[extension] ?? 'unknown';
+  const language: string = LANG_MAP[extension] ?? 'unknown';
 
   const buffer: Buffer = {
     id: filePath,

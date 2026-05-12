@@ -114,11 +114,11 @@
 
 {#if showToast}
   <div class="fixed bottom-12 right-6 z-[100] w-72 animate-in fade-in slide-in-from-right-4 duration-300">
-    <div class="bg-[#121212]/90 backdrop-blur-2xl border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+    <div class="bg-[#121212]/90 border border-white/10 shadow-2xl overflow-hidden">
       {#if installingParser}
         <div class="p-4">
           <div class="flex items-center gap-3 mb-3">
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+            <div class="flex h-8 w-8 items-center justify-center bg-emerald-500/10 text-emerald-500">
               {#if installProgress === 100}
                 <CheckCircle2 size={18} />
               {:else}
@@ -132,7 +132,7 @@
               <p class="text-[10px] text-zinc-500">{installMessage}</p>
             </div>
           </div>
-          <div class="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+          <div class="w-full h-1 bg-white/5 overflow-hidden">
             <div 
               class="h-full bg-emerald-500 transition-all duration-300" 
               style={`width: ${installProgress}%`}
@@ -142,7 +142,7 @@
       {:else if recommendation}
         <div class="p-4">
           <div class="flex items-start gap-3">
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
+            <div class="flex h-8 w-8 items-center justify-center bg-emerald-500/10 text-emerald-500 shrink-0">
               <Sparkles size={18} />
             </div>
             <div class="flex-1">
@@ -163,13 +163,13 @@
               <div class="mt-4 flex gap-2">
                 <button 
                   onclick={() => installParser(recommendation!)}
-                  class="flex-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-black text-[11px] font-bold rounded-md transition-all cursor-pointer shadow-lg shadow-emerald-500/10"
+                  class="flex-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-black text-[11px] font-bold transition-all cursor-pointer shadow-lg shadow-emerald-500/10"
                 >
                   {installError ? 'Retry install' : 'Install Now'}
                 </button>
                 <button 
                   onclick={dismiss}
-                  class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-zinc-300 text-[11px] font-medium rounded-md transition-all cursor-pointer"
+                  class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-zinc-300 text-[11px] font-medium transition-all cursor-pointer"
                 >
                   Later
                 </button>

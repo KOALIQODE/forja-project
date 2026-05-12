@@ -37,6 +37,8 @@ export interface ThemeColors {
     gutter_bg?: string;
     border?: string;
     active_line?: string;
+    /** Cursor blink interval in ms. 0 = no blink. Default: 500 */
+    cursor_blink_ms?: number;
 }
 
 export interface ThemeSyntax {

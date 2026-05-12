@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { STORAGE_KEYS } from '$lib/utils/constants';
 
 export interface FileEntry {
   name: string;
@@ -11,7 +12,6 @@ export interface FileEntry {
   depth?: number;
 }
 
-const PINNED_PATH_KEY = "forja-explorer-pinned-path";
 
 /**
  * Store para mantener el estado de expansión de las carpetas.
@@ -40,17 +40,17 @@ function createExpandedStore() {
  * Store para el camino anclado (Focus Mode).
  */
 function createPinnedStore() {
-  const initial = typeof localStorage !== 'undefined' ? localStorage.getItem(PINNED_PATH_KEY) : null;
+  const initial = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.EXPLORER_PINNED_PATH) : null;
   const { subscribe, set } = writable<string | null>(initial);
 
   return {
     subscribe,
     pin: (path: string) => {
-      if (typeof localStorage !== 'undefined') localStorage.setItem(PINNED_PATH_KEY, path);
+      if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEYS.EXPLORER_PINNED_PATH, path);
       set(path);
     },
     unpin: () => {
-      if (typeof localStorage !== 'undefined') localStorage.removeItem(PINNED_PATH_KEY);
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(STORAGE_KEYS.EXPLORER_PINNED_PATH);
       set(null);
     }
   };
