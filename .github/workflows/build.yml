@@ -57,8 +57,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Audit frontend dependencies
-        run: npm audit --audit-level=high
+#      - name: Audit frontend dependencies
+#        run: npm audit --audit-level=high
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0

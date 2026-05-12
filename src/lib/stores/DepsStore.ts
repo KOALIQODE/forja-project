@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { derived, get, writable } from 'svelte/store'
+import { sidebarState, SIDEBAR_IDS, openSidebar, closeSidebar } from './sidebarStore'
 
 export interface Vulnerability {
   id: string
@@ -51,6 +52,14 @@ export const isDepsSidebarOpen = writable(false)
 export const activeProjectRoot = writable<string | null>(null)
 export const selectedManifestPath = writable<string | null>(null)
 
+// Sync with sidebarStore
+sidebarState.subscribe(state => {
+  const isOpen = state.openSidebars.has(SIDEBAR_IDS.DEPS);
+  if (get(isDepsSidebarOpen) !== isOpen) {
+    isDepsSidebarOpen.set(isOpen);
+  }
+});
+
 let watcherRoot: string | null = null
 let depsChangedUnlisten: (() => void) | null = null
 let scanRequestId = 0
@@ -90,11 +99,16 @@ async function ensureDepsChangedListener() {
 }
 
 export function toggleDepsSidebar() {
-  isDepsSidebarOpen.update((open) => !open)
+  const isOpen = get(isDepsSidebarOpen);
+  if (isOpen) {
+    closeSidebar(SIDEBAR_IDS.DEPS);
+  } else {
+    openSidebar(SIDEBAR_IDS.DEPS);
+  }
 }
 
 export function closeDepsSidebar() {
-  isDepsSidebarOpen.set(false)
+  closeSidebar(SIDEBAR_IDS.DEPS);
 }
 
 export function selectManifest(manifestPath: string | null) {

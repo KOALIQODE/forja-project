@@ -42,7 +42,9 @@ vi.mock('$lib/stores/projectStore', () => ({
   currentProject: currentProjectStore,
 }));
 vi.mock('$lib/stores/dialogStore', () => ({
-  openTelescope: vi.fn(),
+  openFileSearch: vi.fn(),
+  openLiveGrep: vi.fn(),
+  openBufferSearch: vi.fn(),
   openGrammarHub: vi.fn(),
   openPreferencesDialog: vi.fn(),
   openThemePicker: vi.fn(),
@@ -51,6 +53,7 @@ vi.mock('$lib/stores/dialogStore', () => ({
   closeDialog: mockCloseDialog,
   dialogState: dialogStateStore,
 }));
+
 vi.mock('$lib/stores/pluginStore', () => ({
   initPlugins: mockInitPlugins,
 }));

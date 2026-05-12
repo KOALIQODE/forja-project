@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { todoList, isTodoSidebarOpen, isScanningTodos, scanTodos } from "$lib/stores/todoStore";
+    import { todoList, isTodoSidebarOpen, isScanningTodos, scanTodos, toggleTodoSidebar } from "$lib/stores/todoStore";
     import { openBuffer } from "$lib/stores/bufferStore";
     import { activeUITheme } from "$lib/stores/uiThemeStore";
     import { X, RefreshCw } from "@lucide/svelte";
@@ -10,7 +10,7 @@
     );
 
     function closeSidebar() {
-        isTodoSidebarOpen.set(false);
+        toggleTodoSidebar();
     }
 
     function goToTodo(todo: any) {

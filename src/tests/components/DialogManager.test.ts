@@ -68,85 +68,106 @@ describe('DialogManager', () => {
     expect(container.querySelector('[data-program-ui]')).toBeNull();
   });
 
-  it('renders Telescope when the telescope dialog is active', () => {
-    openDialog({ id: DIALOG_IDS.TELESCOPE, component: 'Telescope', props: { mode: 'files' } });
+  it('renders FileSearch when the file search dialog is active', async () => {
+    openDialog(DIALOG_IDS.FILE_SEARCH);
     render(DialogManager);
-    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Search...')).toBeInTheDocument();
   });
 
-  it('renders BufferDeleteDialog when the buffer delete dialog is active', () => {
-    openDialog({ id: DIALOG_IDS.BUFFER_DELETE, component: 'BufferDeleteDialog' });
+  it('renders LiveGrep when the live grep dialog is active', async () => {
+    openDialog(DIALOG_IDS.LIVE_GREP);
     render(DialogManager);
-    expect(screen.getByPlaceholderText('Find buffer...')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Search...')).toBeInTheDocument();
   });
 
-  it('renders PreferencesDialog when the preferences dialog is active', () => {
-    openDialog({ id: DIALOG_IDS.PREFERENCES, component: 'PreferencesDialog' });
+  it('renders BufferSearch when the buffer search dialog is active', async () => {
+    openDialog(DIALOG_IDS.BUFFER_SEARCH);
     render(DialogManager);
-    expect(screen.getByText('PREFERENCES')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Search...')).toBeInTheDocument();
   });
 
-  it('renders CloneRepositoryDialog when the clone dialog is active', () => {
-    openDialog({ id: DIALOG_IDS.CLONE_REPOSITORY, component: 'CloneRepositoryDialog' });
+  it('renders BufferDeleteDialog when the buffer delete dialog is active', async () => {
+    openDialog(DIALOG_IDS.BUFFER_DELETE);
+    render(DialogManager);
+    expect(await screen.findByPlaceholderText('Find buffer...')).toBeInTheDocument();
+  });
+
+  it('renders PreferencesDialog when the preferences dialog is active', async () => {
+    openDialog(DIALOG_IDS.PREFERENCES);
+    render(DialogManager);
+    expect(await screen.findByText('PREFERENCES')).toBeInTheDocument();
+  });
+
+  it('renders CloneRepositoryDialog when the clone dialog is active', async () => {
+    openDialog(DIALOG_IDS.CLONE_REPOSITORY);
     const { container } = render(DialogManager);
+    // Use findBy to wait for lazy load
+    await screen.findByTestId('clone-repo-dialog'); 
     expect(container.querySelector('[data-program-ui]')).not.toBeNull();
   });
 
   describe('dialog shell — border and shadow', () => {
-    it('Telescope shell has a border class', () => {
-      openDialog({ id: DIALOG_IDS.TELESCOPE, component: 'Telescope', props: { mode: 'files' } });
+    it('FileSearch shell has a border class', async () => {
+      openDialog(DIALOG_IDS.FILE_SEARCH);
       const { container } = render(DialogManager);
+      await screen.findByPlaceholderText('Search...');
       const shell = getDialogShell(container);
-      expect(shell, 'Telescope shell must exist').not.toBeNull();
+      expect(shell, 'FileSearch shell must exist').not.toBeNull();
       // shell CSS contains border declaration
       const style = shell!.getAttribute('style') ?? '';
       const cls = shell!.className ?? '';
       expect(cls.length > 0 || style.length > 0, 'shell must have styles').toBe(true);
     });
 
-    it('Telescope shell has box-shadow applied via stylesheet', () => {
-      openDialog({ id: DIALOG_IDS.TELESCOPE, component: 'Telescope', props: { mode: 'files' } });
+    it('FileSearch shell has box-shadow applied via stylesheet', async () => {
+      openDialog(DIALOG_IDS.FILE_SEARCH);
       const { container } = render(DialogManager);
+      await screen.findByPlaceholderText('Search...');
       const shell = getDialogShell(container);
       expect(shell).not.toBeNull();
-      // The scoped CSS sets box-shadow on .telescope-shell — verify the class is present
-      expect(shell!.className).toMatch(/telescope-shell/);
+      // The scoped CSS sets box-shadow on .search-shell — verify the class is present
+      expect(shell!.className).toMatch(/search-shell/);
     });
 
-    it('BufferDeleteDialog shell has dialog-shell class with box-shadow', () => {
-      openDialog({ id: DIALOG_IDS.BUFFER_DELETE, component: 'BufferDeleteDialog' });
+    it('BufferDeleteDialog shell has dialog-shell class with box-shadow', async () => {
+      openDialog(DIALOG_IDS.BUFFER_DELETE);
       const { container } = render(DialogManager);
+      await screen.findByPlaceholderText('Find buffer...');
       const shell = getDialogShell(container);
       expect(shell).not.toBeNull();
       expect(shell!.className).toMatch(/dialog-shell/);
     });
 
-    it('PreferencesDialog shell has pref-shell class with box-shadow', () => {
-      openDialog({ id: DIALOG_IDS.PREFERENCES, component: 'PreferencesDialog' });
+    it('PreferencesDialog shell has pref-shell class with box-shadow', async () => {
+      openDialog(DIALOG_IDS.PREFERENCES);
       const { container } = render(DialogManager);
+      await screen.findByText('PREFERENCES');
       const shell = getDialogShell(container);
       expect(shell).not.toBeNull();
       expect(shell!.className).toMatch(/pref-shell/);
     });
 
-    it('every open dialog exposes a [data-dialog-shell] element', () => {
+    it('every open dialog exposes a [data-dialog-shell] element', async () => {
       // Stub Element.animate for jsdom (Svelte transitions use it)
       if (!Element.prototype.animate) {
         Element.prototype.animate = () => ({ onfinish: null, cancel: () => {} } as unknown as Animation);
       }
 
-      const dialogs = [
-        { id: DIALOG_IDS.TELESCOPE, component: 'Telescope', props: { mode: 'files' as const } },
-        { id: DIALOG_IDS.BUFFER_DELETE, component: 'BufferDeleteDialog' },
-        { id: DIALOG_IDS.PREFERENCES, component: 'PreferencesDialog' },
+      const testCases = [
+        { id: DIALOG_IDS.FILE_SEARCH, findText: 'Search...' },
+        { id: DIALOG_IDS.LIVE_GREP, findText: 'Search...' },
+        { id: DIALOG_IDS.BUFFER_SEARCH, findText: 'Search...' },
+        { id: DIALOG_IDS.BUFFER_DELETE, findText: 'Find buffer...' },
+        { id: DIALOG_IDS.PREFERENCES, findText: 'PREFERENCES' },
       ];
 
-      for (const dialog of dialogs) {
+      for (const testCase of testCases) {
         closeDialog();
-        openDialog(dialog);
+        openDialog(testCase.id);
         const { container } = render(DialogManager);
+        await screen.findByText(new RegExp(testCase.findText, 'i'));
         const shell = getDialogShell(container);
-        expect(shell, `${dialog.id} must render a [data-dialog-shell] element`).not.toBeNull();
+        expect(shell, `${testCase.id} must render a [data-dialog-shell] element`).not.toBeNull();
         closeDialog();
       }
     });

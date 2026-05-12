@@ -49,6 +49,7 @@ export interface ProgramPreferences {
   fontWeight: string;
   explorerWidth: number;
   reduceMotion: boolean;
+  keyboardShortcuts: Record<string, string>;
 }
 
 export interface BufferPreferences {
@@ -67,6 +68,16 @@ export const DEFAULT_PROGRAM_PREFERENCES: ProgramPreferences = {
   fontWeight: 'normal',
   explorerWidth: 260,
   reduceMotion: false,
+  keyboardShortcuts: {
+    'open-recent': 'Ctrl+R',
+    'open-themes': 'Ctrl+K T',
+    'search-files': 'Tab Tab',
+    'live-grep': 'Shift+?',
+    'open-buffers': 'Ctrl+B',
+    'open-grammar': 'Ctrl+G',
+    'open-preferences': 'Ctrl+,',
+    'close-dialog': 'Escape',
+  }
 };
 
 export const DEFAULT_BUFFER_PREFERENCES: BufferPreferences = {
@@ -103,6 +114,8 @@ function loadStoredPreferences<T>(key: string, defaults: T, sanitize: (value: Pa
 
 function sanitizeProgramPreferences(value: Partial<ProgramPreferences>): ProgramPreferences {
   return {
+    ...DEFAULT_PROGRAM_PREFERENCES,
+    ...value,
     fontFamily:
       typeof value.fontFamily === 'string' && value.fontFamily.trim()
         ? value.fontFamily
@@ -117,10 +130,10 @@ function sanitizeProgramPreferences(value: Partial<ProgramPreferences>): Program
       220,
       420,
     ),
-    reduceMotion:
-      typeof value.reduceMotion === 'boolean'
-        ? value.reduceMotion
-        : DEFAULT_PROGRAM_PREFERENCES.reduceMotion,
+    keyboardShortcuts: {
+      ...DEFAULT_PROGRAM_PREFERENCES.keyboardShortcuts,
+      ...(value.keyboardShortcuts || {}),
+    },
   };
 }
 

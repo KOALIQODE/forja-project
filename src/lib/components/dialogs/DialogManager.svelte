@@ -1,70 +1,37 @@
 <script lang="ts">
-  import RecentProjectsDialog from "./RecentProjectsDialog.svelte";
-  import BufferDeleteDialog from "./BufferDeleteDialog.svelte";
-  import Telescope from "./Telescope.svelte";
-  import ParserManager from "./ParserManager.svelte";
-  import PreferencesDialog from "./PreferencesDialog.svelte";
-  import ExtensionsManager from "./ExtensionsManager.svelte";
-  import ThemePicker from "./ThemePicker.svelte";
-  import CloneRepositoryDialog from "./CloneRepositoryDialog.svelte";
   import {
     dialogState,
     closeDialog,
-    DIALOG_IDS,
+    DIALOG_REGISTRY,
   } from "../../stores/dialogStore";
-
-  let currentDialog: any = null;
-
-  // Subscribe to dialog state
-  dialogState.subscribe((state) => {
-    if (state.activeDialog) {
-      currentDialog = state.activeDialog;
-    } else {
-      currentDialog = null;
-    }
-  });
 
   function handleClose() {
     closeDialog();
   }
 </script>
 
-{#if currentDialog}
-  {#if currentDialog.id === DIALOG_IDS.RECENT_PROJECTS}
+{#if $dialogState.activeDialog}
+  {#await DIALOG_REGISTRY[$dialogState.activeDialog.id]() then module}
+    {@const ActiveDialog = module.default}
     <div data-program-ui>
-      <RecentProjectsDialog
+      <ActiveDialog
         isOpen={true}
         onClose={handleClose}
-        {...currentDialog.props || {}}
+        {...$dialogState.activeDialog.props || {}}
       />
     </div>
-  {:else if currentDialog.id === DIALOG_IDS.BUFFER_DELETE}
-    <div data-program-ui>
-      <BufferDeleteDialog />
+  {:catch error}
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div class="bg-red-900/20 p-6 rounded-lg border border-red-500/50 text-red-200">
+        <h3 class="text-lg font-bold mb-2">Error loading dialog</h3>
+        <p>{error}</p>
+        <button 
+          class="mt-4 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 rounded border border-red-500/50 transition-colors"
+          onclick={handleClose}
+        >
+          Close
+        </button>
+      </div>
     </div>
-  {:else if currentDialog.id === DIALOG_IDS.TELESCOPE}
-    <div data-program-ui>
-      <Telescope {...currentDialog.props || {}} />
-    </div>
-  {:else if currentDialog.id === DIALOG_IDS.GRAMMAR_HUB}
-    <div data-program-ui>
-      <ParserManager />
-    </div>
-  {:else if currentDialog.id === DIALOG_IDS.PREFERENCES}
-    <div data-program-ui>
-      <PreferencesDialog {...currentDialog.props || {}} />
-    </div>
-  {:else if currentDialog.id === DIALOG_IDS.EXTENSIONS}
-    <div data-program-ui>
-      <ExtensionsManager />
-    </div>
-  {:else if currentDialog.id === DIALOG_IDS.THEME_PICKER}
-    <div data-program-ui>
-      <ThemePicker />
-    </div>
-  {:else if currentDialog.id === DIALOG_IDS.CLONE_REPOSITORY}
-    <div data-program-ui>
-      <CloneRepositoryDialog />
-    </div>
-  {/if}
+  {/await}
 {/if}

@@ -9,7 +9,9 @@ vi.mock('@tauri-apps/api/core', () => ({
 import {
   openDialog,
   closeDialog,
-  openTelescope,
+  openFileSearch,
+  openLiveGrep,
+  openBufferSearch,
   openGrammarHub,
   openPreferencesDialog,
   openRecentProjectsDialog,
@@ -29,7 +31,9 @@ describe('dialogStore', () => {
   describe('DIALOG_IDS', () => {
     it('has all expected dialog IDs', () => {
       expect(DIALOG_IDS.RECENT_PROJECTS).toBe('recent-projects');
-      expect(DIALOG_IDS.TELESCOPE).toBe('telescope');
+      expect(DIALOG_IDS.FILE_SEARCH).toBe('file-search');
+      expect(DIALOG_IDS.LIVE_GREP).toBe('live-grep');
+      expect(DIALOG_IDS.BUFFER_SEARCH).toBe('buffer-search');
       expect(DIALOG_IDS.GRAMMAR_HUB).toBe('grammar-hub');
       expect(DIALOG_IDS.PREFERENCES).toBe('preferences');
       expect(DIALOG_IDS.EXTENSIONS).toBe('extensions');
@@ -51,45 +55,44 @@ describe('dialogStore', () => {
     });
 
     it('openDialog sets the active dialog', () => {
-      openDialog({ id: 'test', component: 'TestComponent', props: { foo: 1 } });
+      openDialog(DIALOG_IDS.FILE_SEARCH, { foo: 1 });
       const state = get(dialogState);
-      expect(state.activeDialog?.id).toBe('test');
+      expect(state.activeDialog?.id).toBe(DIALOG_IDS.FILE_SEARCH);
       expect(state.activeDialog?.props?.foo).toBe(1);
     });
 
     it('closeDialog clears the active dialog', () => {
-      openDialog({ id: 'test', component: 'X' });
+      openDialog(DIALOG_IDS.GRAMMAR_HUB);
       closeDialog();
       const state = get(dialogState);
       expect(state.activeDialog).toBeNull();
     });
 
     it('openDialog replaces the current dialog', () => {
-      openDialog({ id: 'first', component: 'A' });
-      openDialog({ id: 'second', component: 'B' });
+      openDialog(DIALOG_IDS.RECENT_PROJECTS);
+      openDialog(DIALOG_IDS.PREFERENCES);
       const state = get(dialogState);
-      expect(state.activeDialog?.id).toBe('second');
+      expect(state.activeDialog?.id).toBe(DIALOG_IDS.PREFERENCES);
     });
   });
 
-  describe('openTelescope', () => {
-    it('opens Telescope with default mode files', () => {
-      openTelescope();
+  describe('Search openers', () => {
+    it('openFileSearch opens the file search dialog', () => {
+      openFileSearch();
       const state = get(dialogState);
-      expect(state.activeDialog?.id).toBe(DIALOG_IDS.TELESCOPE);
-      expect(state.activeDialog?.props?.mode).toBe('files');
+      expect(state.activeDialog?.id).toBe(DIALOG_IDS.FILE_SEARCH);
     });
 
-    it('opens Telescope with grep mode', () => {
-      openTelescope('grep');
+    it('openLiveGrep opens the live grep dialog', () => {
+      openLiveGrep();
       const state = get(dialogState);
-      expect(state.activeDialog?.props?.mode).toBe('grep');
+      expect(state.activeDialog?.id).toBe(DIALOG_IDS.LIVE_GREP);
     });
 
-    it('opens Telescope with buffers mode', () => {
-      openTelescope('buffers');
+    it('openBufferSearch opens the buffer search dialog', () => {
+      openBufferSearch();
       const state = get(dialogState);
-      expect(state.activeDialog?.props?.mode).toBe('buffers');
+      expect(state.activeDialog?.id).toBe(DIALOG_IDS.BUFFER_SEARCH);
     });
   });
 

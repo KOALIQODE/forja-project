@@ -1,5 +1,5 @@
 import { derived, writable } from 'svelte/store';
-import { activeProjectRoot, scanResults, type ScanResult, type Dependency } from '$lib/DepsStore';
+import { activeProjectRoot, scanResults, type ScanResult, type Dependency } from '$lib/stores/DepsStore';
 
 // ── Types (legacy support for SecurityAlert and Tests) ─────────────────────────
 
