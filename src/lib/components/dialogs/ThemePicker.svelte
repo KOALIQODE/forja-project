@@ -17,7 +17,7 @@
   let pickerEl: HTMLElement;
 
   function focus(el: HTMLInputElement) {
-    el.focus();
+    requestAnimationFrame(() => el.focus());
   }
 
   let searchQuery = $state("");
@@ -46,7 +46,6 @@
   });
 
   onMount(() => {
-    pickerEl?.focus();
     return () => {
       previewUIThemeId.set(null);
     };
