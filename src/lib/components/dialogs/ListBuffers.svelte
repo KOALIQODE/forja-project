@@ -1,18 +1,26 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { invoke } from "@tauri-apps/api/core";
+  import { onMount } from "svelte";
   import { Search, X, FileCode, Trash2 } from "@lucide/svelte";
-  import { openBuffers, activeBufferId, closeBuffer, openBuffer } from "../../stores/bufferStore";
+  import {
+    openBuffers,
+    activeBufferId,
+    closeBuffer,
+    openBuffer,
+  } from "../../stores/bufferStore";
   import { closeDialog } from "../../stores/dialogStore";
   import { activeUITheme } from "../../stores/uiThemeStore";
   import { getFileIcon } from "../../utils/fileIcons";
-  import { currentProject } from "../../stores/projectStore";
   import { GIT_STATUS_LABELS } from "../../utils/explorerHelpers";
-  import { gitFileStatuses, getFileGitStatus } from "../../stores/gitStatusStore";
-  import { fade, scale } from 'svelte/transition';
+  import {
+    gitFileStatuses,
+    getFileGitStatus,
+  } from "../../stores/gitStatusStore";
+  import { fade, scale } from "svelte/transition";
 
   let themeStyle = $derived(
-    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+    Object.entries($activeUITheme.vars)
+      .map(([k, v]) => `${k}:${v}`)
+      .join(";"),
   );
 
   let searchQuery = $state("");
@@ -21,12 +29,18 @@
 
   function gitStatusStyle(status: string | undefined): string {
     switch (status) {
-      case 'modified':  return 'var(--forja-ui-git-modified, #fb923c)';
-      case 'added':     return 'var(--forja-ui-git-added, #4ade80)';
-      case 'deleted':   return 'var(--forja-ui-git-deleted, #f87171)';
-      case 'renamed':   return 'var(--forja-ui-git-renamed, #60a5fa)';
-      case 'untracked': return 'var(--forja-ui-git-untracked, #9a9aaa)';
-      default:          return '';
+      case "modified":
+        return "var(--forja-ui-git-modified, #fb923c)";
+      case "added":
+        return "var(--forja-ui-git-added, #4ade80)";
+      case "deleted":
+        return "var(--forja-ui-git-deleted, #f87171)";
+      case "renamed":
+        return "var(--forja-ui-git-renamed, #60a5fa)";
+      case "untracked":
+        return "var(--forja-ui-git-untracked, #9a9aaa)";
+      default:
+        return "";
     }
   }
 
@@ -34,11 +48,12 @@
   let filteredBuffers = $derived.by(() => {
     const buffers = Array.from($openBuffers.values());
     if (!searchQuery.trim()) return buffers;
-    
+
     const query = searchQuery.toLowerCase();
-    return buffers.filter(b => 
-      b.filePath.toLowerCase().includes(query) || 
-      (b.language && b.language.toLowerCase().includes(query))
+    return buffers.filter(
+      (b) =>
+        b.filePath.toLowerCase().includes(query) ||
+        (b.language && b.language.toLowerCase().includes(query)),
     );
   });
 
@@ -50,21 +65,22 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'ArrowDown') {
+    if (e.key === "ArrowDown") {
       e.preventDefault();
       selectedIndex = (selectedIndex + 1) % filteredBuffers.length;
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      selectedIndex = (selectedIndex - 1 + filteredBuffers.length) % filteredBuffers.length;
-    } else if (e.key === 'Enter') {
+      selectedIndex =
+        (selectedIndex - 1 + filteredBuffers.length) % filteredBuffers.length;
+    } else if (e.key === "Enter") {
       e.preventDefault();
       if (filteredBuffers[selectedIndex]) {
         selectBuffer(filteredBuffers[selectedIndex].id);
       }
-    } else if (e.key === 'Escape') {
+    } else if (e.key === "Escape") {
       e.preventDefault();
       closeDialog();
-    } else if (e.key === 'd' && (e.ctrlKey || e.altKey)) {
+    } else if (e.key === "d" && (e.ctrlKey || e.altKey)) {
       // Shortcut to delete buffer
       e.preventDefault();
       if (filteredBuffers[selectedIndex]) {
@@ -92,7 +108,7 @@
   function getDirectory(path: string) {
     const parts = path.split(/[\/\\]/);
     parts.pop();
-    return parts.join('/') || '.';
+    return parts.join("/") || ".";
   }
 
   onMount(() => {
@@ -117,7 +133,10 @@
   >
     <!-- Search Input -->
     <div class="input-row flex items-center gap-3 px-4 py-3">
-      <Search size={16} style="color: var(--forja-ui-text-secondary, #dedee2); flex-shrink: 0;" />
+      <Search
+        size={16}
+        style="color: var(--forja-ui-text-secondary, #dedee2); flex-shrink: 0;"
+      />
       <input
         bind:this={inputElement}
         bind:value={searchQuery}
@@ -137,8 +156,12 @@
     <!-- Buffers List -->
     <div class="custom-scrollbar max-h-[400px] overflow-y-auto p-2">
       {#if filteredBuffers.length === 0}
-        <div class="flex flex-col items-center justify-center py-12 text-center">
-          <p class="empty-label text-xs font-medium">No open buffers matching search</p>
+        <div
+          class="flex flex-col items-center justify-center py-12 text-center"
+        >
+          <p class="empty-label text-xs font-medium">
+            No open buffers matching search
+          </p>
         </div>
       {:else}
         <div class="flex flex-col gap-0.5">
@@ -151,11 +174,16 @@
               class="buffer-item group relative flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left transition-all duration-75"
               class:buffer-item--selected={isSelected}
               onclick={() => selectBuffer(buffer.id)}
-              onmouseenter={() => selectedIndex = index}
+              onmouseenter={() => (selectedIndex = index)}
             >
-              <div class="file-icon-wrap flex h-8 w-8 shrink-0 items-center justify-center transition-colors">
+              <div
+                class="file-icon-wrap flex h-8 w-8 shrink-0 items-center justify-center transition-colors"
+              >
                 {#if fileIconData}
-                  <fileIconData.icon size={16} style="color: {fileIconData.color}" />
+                  <fileIconData.icon
+                    size={16}
+                    style="color: {fileIconData.color}"
+                  />
                 {:else}
                   <FileCode size={16} />
                 {/if}
@@ -163,20 +191,33 @@
 
               <div class="flex flex-1 flex-col min-w-0">
                 <div class="flex items-center gap-2">
-                  <span class="item-name min-w-0 truncate text-[13px] font-medium" class:item-name--highlight={isSelected || isActive}>
+                  <span
+                    class="item-name min-w-0 truncate text-[13px] font-medium"
+                    class:item-name--highlight={isSelected || isActive}
+                  >
                     {getFileName(buffer.filePath)}
                   </span>
                   {#if isActive}
-                    <span class="active-badge px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-tighter">active</span>
+                    <span
+                      class="active-badge px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-tighter"
+                      >active</span
+                    >
                   {/if}
                   {#if gitFileStatuses[buffer.filePath]}
                     <span
                       class="ml-auto shrink-0 font-mono text-[9px] font-bold"
-                      style="color: {gitStatusStyle(gitFileStatuses[buffer.filePath])}"
-                    >{GIT_STATUS_LABELS[gitFileStatuses[buffer.filePath]] ?? '?'}</span>
+                      style="color: {gitStatusStyle(
+                        gitFileStatuses[buffer.filePath],
+                      )}"
+                      >{GIT_STATUS_LABELS[gitFileStatuses[buffer.filePath]] ??
+                        "?"}</span
+                    >
                   {/if}
                 </div>
-                <span class="item-dir truncate font-mono text-[10px] tracking-tight">{getDirectory(buffer.filePath)}</span>
+                <span
+                  class="item-dir truncate font-mono text-[10px] tracking-tight"
+                  >{getDirectory(buffer.filePath)}</span
+                >
               </div>
 
               <!-- Close Action -->
@@ -185,7 +226,10 @@
                 class="close-item-btn flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center transition-all"
                 class:opacity-100={isSelected}
                 class:opacity-0={!isSelected}
-                onclick={(e) => { e.stopPropagation(); handleCloseBuffer(buffer.id); }}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  handleCloseBuffer(buffer.id);
+                }}
                 title="Close buffer"
               >
                 <Trash2 size={13} />
@@ -209,7 +253,7 @@
         </div>
       </div>
       <div class="count-label text-[10px] font-mono">
-        {filteredBuffers.length} buffer{filteredBuffers.length === 1 ? '' : 's'}
+        {filteredBuffers.length} buffer{filteredBuffers.length === 1 ? "" : "s"}
       </div>
     </footer>
   </div>
@@ -219,7 +263,9 @@
   .dialog-shell {
     background: var(--forja-ui-picker-bg, #0e0e11);
     /* border removed for cleaner look */
-    box-shadow: 0 24px 64px rgba(0,0,0,0.90), 0 8px 24px rgba(0,0,0,0.70);
+    box-shadow:
+      0 24px 64px rgba(0, 0, 0, 0.9),
+      0 8px 24px rgba(0, 0, 0, 0.7);
   }
 
   .input-row {
@@ -238,48 +284,68 @@
     color: var(--forja-ui-text-muted, #b4b4c0);
   }
   .close-btn:hover {
-    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.06));
+    background: var(--forja-ui-btn-hover-bg, rgba(255, 255, 255, 0.06));
     color: var(--forja-ui-text-primary, #f4f4f5);
   }
 
-  .empty-label { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .empty-label {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+  }
 
   .buffer-item {
     color: var(--forja-ui-text-secondary, #dedee2);
   }
   .buffer-item:hover {
-    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04));
+    background: var(--forja-ui-btn-hover-bg, rgba(255, 255, 255, 0.04));
   }
   .buffer-item--selected {
-    background: var(--forja-ui-picker-active, rgba(52,211,153,0.10));
+    background: var(--forja-ui-picker-active, rgba(52, 211, 153, 0.1));
   }
 
-  .file-icon-wrap { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .file-icon-wrap {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+  }
 
-  .item-name { color: var(--forja-ui-text-secondary, #dedee2); }
-  .item-name--highlight { color: var(--forja-ui-text-primary, #f4f4f5); }
+  .item-name {
+    color: var(--forja-ui-text-secondary, #dedee2);
+  }
+  .item-name--highlight {
+    color: var(--forja-ui-text-primary, #f4f4f5);
+  }
 
   .active-badge {
-    background: color-mix(in srgb, var(--forja-ui-gradient-from, #34d399) 12%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--forja-ui-gradient-from, #34d399) 12%,
+      transparent
+    );
     color: var(--forja-ui-gradient-from, #34d399);
   }
 
-  .item-dir { color: var(--forja-ui-text-secondary, #dedee2); }
+  .item-dir {
+    color: var(--forja-ui-text-secondary, #dedee2);
+  }
 
   .close-item-btn {
     color: var(--forja-ui-text-muted, #b4b4c0);
   }
   .close-item-btn:hover {
-    background: rgba(239,68,68,0.10);
+    background: rgba(239, 68, 68, 0.1);
     color: #f87171;
   }
 
   .footer-row {
     border-top: 1px solid var(--forja-ui-btn-border, #27272a);
-    background: color-mix(in srgb, var(--forja-ui-btn-bg, #09090b) 50%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--forja-ui-btn-bg, #09090b) 50%,
+      transparent
+    );
   }
 
-  .kbd-hint { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .kbd-hint {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+  }
 
   .kbd {
     border: 1px solid var(--forja-ui-btn-border, #27272a);
@@ -288,10 +354,16 @@
     font-size: 9px;
   }
 
-  .count-label { color: var(--forja-ui-text-muted, #b4b4c0); }
+  .count-label {
+    color: var(--forja-ui-text-muted, #b4b4c0);
+  }
 
-  .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
   .custom-scrollbar::-webkit-scrollbar-thumb {
     background: var(--forja-ui-explorer-scrollbar, #1e1e1e);
     border-radius: 10px;

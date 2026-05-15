@@ -24,6 +24,8 @@ interface ShortcutDef {
 const GLOBAL_SHORTCUTS: ShortcutDef[] = [
   { key: 'r', ctrl: true, action: 'open-recent' },
   { key: ',', ctrl: true, action: 'open-preferences' },
+  { key: 'e', ctrl: true, action: 'open-extensions' },
+  { key: 'c', ctrl: true, shift: true, action: 'open-clone' },
   { key: 'g', ctrl: true, action: 'open-grammar' },
 ];
 

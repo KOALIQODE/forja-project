@@ -10,7 +10,6 @@ export const DIALOG_IDS = {
   COMMAND_PALETTE: 'command-palette',
   BUFFER_SEARCH: 'buffer-search',
   BUFFER_DELETE: 'buffer-delete',
-  GRAMMAR_HUB: 'grammar-hub',
   PREFERENCES: 'preferences',
   EXTENSIONS: 'extensions',
   THEME_PICKER: 'theme-picker',
@@ -32,13 +31,12 @@ export const dialogState = writable<DialogState>({
  * Registry of dialog components with lazy loading
  */
 export const DIALOG_REGISTRY: Record<DialogId, () => Promise<{ default: Component<any> }>> = {
-  [DIALOG_IDS.RECENT_PROJECTS]: () => import('../components/dialogs/RecentProjectsDialog.svelte'),
-  [DIALOG_IDS.BUFFER_DELETE]: () => import('../components/dialogs/BufferDeleteDialog.svelte'),
+  [DIALOG_IDS.RECENT_PROJECTS]: () => import('../components/dialogs/RecentProjects.svelte'),
+  [DIALOG_IDS.BUFFER_DELETE]: () => import('../components/dialogs/ListBuffers.svelte'),
   [DIALOG_IDS.BUFFER_SEARCH]: () => import('../components/dialogs/BufferSearch.svelte'),
   [DIALOG_IDS.FILE_SEARCH]: () => import('../components/dialogs/FileSearch.svelte'),
   [DIALOG_IDS.LIVE_GREP]: () => import('../components/dialogs/LiveGrep.svelte'),
-  [DIALOG_IDS.GRAMMAR_HUB]: () => import('../components/dialogs/ParserManager.svelte'),
-  [DIALOG_IDS.PREFERENCES]: () => import('../components/dialogs/PreferencesDialog.svelte'),
+  [DIALOG_IDS.PREFERENCES]: () => import('../components/dialogs/Preferences.svelte'),
   [DIALOG_IDS.EXTENSIONS]: () => import('../components/dialogs/ExtensionsManager.svelte'),
   [DIALOG_IDS.THEME_PICKER]: () => import('../components/dialogs/ThemePicker.svelte'),
   [DIALOG_IDS.CLONE_REPOSITORY]: () => import('../components/dialogs/CloneRepositoryDialog.svelte'),
@@ -73,7 +71,7 @@ export function openBufferSearch() {
 }
 
 export function openGrammarHub() {
-  openDialog(DIALOG_IDS.GRAMMAR_HUB);
+  openDialog(DIALOG_IDS.EXTENSIONS, { activeTab: 'parsers' });
 }
 
 export function openPreferencesDialog(initialSection: 'program' | 'buffer' = 'program') {

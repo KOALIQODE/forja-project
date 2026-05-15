@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 import { STORAGE_KEYS } from '$lib/utils/constants';
 
-export const PROGRAM_FONT_OPTIONS = [
+export const PROGRAM_FONT_OPTIONS: { label: string; value: string }[] = [
   {
     label: 'Montserrat',
     value: '"Montserrat Variable", "Segoe UI", system-ui, sans-serif',
@@ -18,9 +18,9 @@ export const PROGRAM_FONT_OPTIONS = [
     label: 'Verdana',
     value: 'Verdana, Geneva, sans-serif',
   },
-] as const;
+];
 
-export const BUFFER_FONT_OPTIONS = [
+export const BUFFER_FONT_OPTIONS: { label: string; value: string }[] = [
   {
     label: 'JetBrains Mono',
     value: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
@@ -41,7 +41,7 @@ export const BUFFER_FONT_OPTIONS = [
     label: 'Monaco',
     value: 'Monaco, Menlo, monospace',
   },
-] as const;
+];
 
 export interface ProgramPreferences {
   fontFamily: string;

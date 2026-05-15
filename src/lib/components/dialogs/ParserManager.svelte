@@ -1,4 +1,4 @@
-<script lang="ts">
+<!-- <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
@@ -119,7 +119,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_no_static_element_interactions
 <div
   class="fixed inset-0 z-[100] flex items-center justify-center p-8"
   onclick={(e) => e.target === e.currentTarget && closeDialog()}
@@ -130,7 +130,7 @@
     class="grammar-shell flex h-full w-full max-w-4xl flex-col overflow-hidden"
     onkeydown={(e) => e.key === 'Escape' && closeDialog()}
   >
-    <!-- Header -->
+    <!-- Header
     <div class="header-row flex items-center gap-3 px-4 py-2.5">
       <span class="mode-label">GRAMMAR HUB</span>
       <div class="sep-v"></div>
@@ -153,7 +153,7 @@
       </div>
     </div>
 
-    <!-- Content -->
+    <!-- Content
     <div class="custom-scrollbar flex-1 overflow-y-auto p-3">
       {#if isLoading}
         <div class="empty-state flex h-full items-center justify-center">
@@ -172,7 +172,7 @@
         </div>
         {#each filteredParsers as parser}
           <div class="item-row group relative cursor-pointer flex items-center justify-between gap-4 px-4 py-2.5">
-            <!-- Left -->
+            <!-- Left
             <div class="flex items-center gap-3 min-w-0">
               <div class="item-icon flex h-7 w-7 shrink-0 items-center justify-center">
                 <Package size={14} />
@@ -183,7 +183,7 @@
               </div>
             </div>
 
-            <!-- Right: action -->
+            <!-- Right: action
             <div class="flex shrink-0 flex-col items-end gap-1">
               {#if parser.installed}
                 <div class="flex items-center gap-2">
@@ -235,7 +235,7 @@
       {/if}
     </div>
 
-    <!-- Footer -->
+    <!-- Footer
     <div class="footer-row flex items-center justify-between px-4 py-1.5 text-[9px] uppercase tracking-[0.12em]">
       <div class="flex items-center gap-1.5">
         <Globe size={9} />
@@ -373,4 +373,4 @@
   .custom-scrollbar:hover::-webkit-scrollbar-thumb {
     background: var(--forja-ui-explorer-scrollbar-hover, #2e2e2e);
   }
-</style>
+</style> -->

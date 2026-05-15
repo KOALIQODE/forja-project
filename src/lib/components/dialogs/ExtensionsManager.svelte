@@ -16,9 +16,12 @@
     Power,
     PowerOff,
     Sparkles,
+    Package,
+    Wrench,
+    Globe,
   } from "@lucide/svelte";
   import { closeDialog } from "../../stores/dialogStore";
-  import { activeUITheme } from "../../stores/uiThemeStore";
+  import { theme } from "../../stores/uiThemeStore";
   import {
     loadedPlugins,
     knownPlugins,
@@ -47,9 +50,35 @@
     version: string | null;
   }
 
+  interface ParserInfo {
+    name: string;
+    language: string;
+    version: string;
+    installed: boolean;
+    source_url: string;
+  }
+
+  interface DownloadProgress {
+    parser: string;
+    downloaded: number;
+    total: number;
+    percentage: number;
+    status: string;
+  }
+
   // ── Tabs ───────────────────────────────────────────────────────────────────
 
-  let activeTab = $state<"lsp" | "plugins" | "themes">("lsp");
+  interface Props {
+    activeTab?: "lsp" | "parsers" | "plugins" | "themes";
+  }
+
+  let { activeTab: initialTab = "lsp" }: Props = $props();
+
+  let activeTab = $state<"lsp" | "parsers" | "plugins" | "themes">("lsp");
+
+  $effect(() => {
+    activeTab = initialTab;
+  });
 
   // ── LSP State ──────────────────────────────────────────────────────────────
 
@@ -57,6 +86,15 @@
   let isLoadingLsp = $state(true);
   let installing = $state<string | null>(null);
   let statusMessage = $state<Record<string, string>>({});
+
+  // ── Parser State ───────────────────────────────────────────────────────────
+
+  let parsers = $state<ParserInfo[]>([]);
+  let isLoadingParsers = $state(true);
+  let installingParser = $state<string | null>(null);
+  let repairingParser = $state<string | null>(null);
+  let parserProgress = $state<Record<string, number>>({});
+  let parserStatusMsg = $state<Record<string, string>>({});
 
   // ── Plugin/Theme State ─────────────────────────────────────────────────────
 
@@ -119,6 +157,12 @@
       s.language.toLowerCase().includes(searchQuery.toLowerCase())
     )
   );
+  let filteredParsers = $derived(
+    parsers.filter(p =>
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.language.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  );
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -171,6 +215,48 @@
       statusMessage[id] = `Error: ${formatError(e)}`;
     } finally {
       installing = null;
+    }
+  }
+
+  // ── Parser Data ────────────────────────────────────────────────────────────
+
+  async function loadParsers() {
+    isLoadingParsers = true;
+    try {
+      parsers = await invoke<ParserInfo[]>('pm_list_parsers');
+    } catch (e) {
+      console.error('pm_list_parsers:', e);
+    } finally {
+      isLoadingParsers = false;
+    }
+  }
+
+  async function installParser(lang: string) {
+    installingParser = lang;
+    parserProgress[lang] = 0;
+    parserStatusMsg[lang] = 'Compiling from source…';
+    try {
+      await invoke('pm_download_or_compile_parser', { parserName: lang });
+      parserStatusMsg[lang] = 'Installed ✓';
+      parserProgress[lang] = 100;
+      await loadParsers();
+    } catch (e) {
+      parserStatusMsg[lang] = `Error: ${formatError(e)}`;
+    } finally {
+      installingParser = null;
+    }
+  }
+
+  async function repairQueries(lang: string) {
+    repairingParser = lang;
+    parserStatusMsg[lang] = 'Repairing queries…';
+    try {
+      await invoke('repair_parser_queries', { language: lang });
+      parserStatusMsg[lang] = 'Queries fixed ✓';
+    } catch (e) {
+      parserStatusMsg[lang] = `Error: ${formatError(e)}`;
+    } finally {
+      repairingParser = null;
     }
   }
 
@@ -234,14 +320,11 @@
     await disablePlugin(name);
   }
 
-  let themeStyle = $derived(
-    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
-  );
-
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   onMount(() => {
     loadServers();
+    loadParsers();
     // Ensure plugin store is up to date when modal opens
     refreshPlugins();
 
@@ -256,9 +339,24 @@
       loadServers();
     });
 
+    const unlistenParserProgress = listen<DownloadProgress>('download-progress', (e) => {
+      const { parser, percentage, status } = e.payload;
+      parserProgress[parser] = percentage;
+      parserStatusMsg[parser] = status;
+    });
+
+    const unlistenParserReady = listen<string>('parser-ready', (e) => {
+      const lang = e.payload;
+      parserStatusMsg[lang] = 'Installed ✓';
+      parserProgress[lang] = 100;
+      loadParsers();
+    });
+
     return () => {
       unlistenStatus.then(f => f());
       unlistenReady.then(f => f());
+      unlistenParserProgress.then(f => f());
+      unlistenParserReady.then(f => f());
     };
   });
 </script>
@@ -269,110 +367,137 @@
 <div
   class="fixed inset-0 z-[100] flex items-center justify-center p-8"
   onclick={(e) => e.target === e.currentTarget && closeDialog()}
-  style={themeStyle}
-  data-program-ui
+  use:theme
 >
   <div
-    class="ext-shell flex h-full w-full max-w-4xl flex-col overflow-hidden"
+    class="flex h-full max-h-[680px] w-full max-w-4xl flex-col overflow-hidden
+           bg-(--color-surface-base)
+           border border-(--color-border)"
     onkeydown={(e) => e.key === 'Escape' && closeDialog()}
   >
-    <!-- Header -->
-    <div class="header-row flex items-center gap-3 px-4 py-2.5">
-      <span class="mode-label">EXTENSIONS</span>
-      <div class="sep-v"></div>
-      <div class="relative flex flex-1 items-center">
-        <Search size={13} style="color: var(--forja-ui-text-secondary, #dedee2); position: absolute; left: 0;" />
+    <!-- Unified Header -->
+    <header class="flex items-center gap-3 px-4 py-2.5 border-b border-(--color-border)">
+      <div class="flex w-[172px] shrink-0 items-center">
+        <span class="text-(--color-accent) font-bold tracking-[0.18em] uppercase">Extensions</span>
+      </div>
+      <div class="w-[1px] h-3 bg-(--color-border) shrink-0"></div>
+
+      <div class="relative flex flex-1 items-center px-1">
+        <Search size={13} class="absolute left-1 text-(--color-text-secondary)" />
         <input
           type="text"
           bind:value={searchQuery}
-          placeholder="Search…"
-          class="search-input w-full bg-transparent pl-5 text-[13px] outline-none"
+          placeholder="Search in {activeTab.toUpperCase()}…"
+          class="w-full bg-transparent pl-6 outline-none text-(--color-text-primary) placeholder:text-(--color-text-secondary)"
         />
       </div>
-      <button onclick={closeDialog} class="close-btn flex h-6 w-6 items-center justify-center">
+
+      <button onclick={closeDialog} class="flex h-6 w-6 items-center justify-center text-(--color-text-muted) hover:text-(--color-text-primary) transition-colors">
         <X size={14} />
       </button>
-    </div>
+    </header>
 
-    <!-- Tabs -->
-    <div class="tabs-row flex">
-      {#each [
-        { id: 'lsp',     label: 'LSP',     icon: Server,  count: servers.filter(s => s.installed).length },
-        { id: 'plugins', label: 'Plugins', icon: Puzzle,  count: plugins.filter(p => !disabled.has(p.name)).length },
-        { id: 'themes',  label: 'Themes',  icon: Palette, count: themes.length },
-      ] as tab}
-        <button
-          onclick={() => activeTab = tab.id as any}
-          class="tab-btn flex items-center gap-1.5 px-4 py-2"
-          class:tab-btn--active={activeTab === tab.id}
-        >
-          <tab.icon size={11} />
-          <span>{tab.label}</span>
-          {#if tab.count > 0}
-            <span class="tab-count">{tab.count}</span>
-          {/if}
-        </button>
-      {/each}
-    </div>
+    <div class="flex flex-1 overflow-hidden">
+      <!-- Sidebar -->
+      <aside class="flex w-[200px] shrink-0 flex-col bg-(--color-surface-base) border-r border-(--color-border)">
+        <nav class="flex flex-col px-2 py-1.5">
+          {#each [
+            { id: 'lsp',     label: 'LSP',     icon: Server,  desc: 'Language Servers', count: servers.filter(s => s.installed).length },
+            { id: 'parsers', label: 'Grammars', icon: Package, desc: 'Tree-sitter Parsers', count: parsers.filter(p => p.installed).length },
+            { id: 'plugins', label: 'Plugins', icon: Puzzle,  desc: 'Lua Plugins',      count: plugins.filter(p => !disabled.has(p.name)).length },
+            { id: 'themes',  label: 'Themes',  icon: Palette, desc: 'UI Themes',       count: themes.length },
+          ] as tab}
+            <button
+              type="button"
+              onclick={() => activeTab = tab.id as any}
+              class="flex items-center gap-2.5 px-2 py-2.5 text-left transition-colors
+                     {activeTab === tab.id 
+                       ? 'text-(--color-text-primary) bg-(--color-accent-fill)' 
+                       : 'text-(--color-text-muted) hover:bg-(--color-hover-bg-subtle)'}"
+            >
+              <tab.icon size={13} class="shrink-0" />
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between">
+                  <div class="font-bold uppercase tracking-[0.14em]">{tab.label}</div>
+                  {#if tab.count > 0}
+                    <span class="text-[10px] opacity-60 bg-(--color-hover-bg-subtle) px-1 rounded-sm">{tab.count}</span>
+                  {/if}
+                </div>
+                <div class="mt-0.5 leading-tight opacity-80 text-[11px] truncate">{tab.desc}</div>
+              </div>
+            </button>
+          {/each}
+        </nav>
+      </aside>
 
-    <!-- Content -->
-    <div class="content-area flex-1 overflow-y-auto custom-scrollbar p-3">
-
+      <!-- Main Panel -->
+      <section class="flex min-w-0 flex-1 flex-col">
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto p-3 [scrollbar-width:thin] scrollbar-thumb-(--color-scrollbar) hover:scrollbar-thumb-(--color-scrollbar-hover)">
       <!-- ── Plugins Tab ──────────────────────────────────────────────────── -->
       {#if activeTab === "plugins"}
         {#if isPluginsLoading}
-          <div class="empty-state flex h-full items-center justify-center">
+          <div class="flex h-[200px] items-center justify-center text-(--color-text-secondary) opacity-50">
             <Loader2 size={20} class="animate-spin" />
           </div>
         {:else if filteredPlugins.length === 0}
-          <div class="empty-state flex h-full flex-col items-center justify-center gap-2">
+          <div class="flex h-[200px] flex-col items-center justify-center gap-2 text-(--color-text-secondary) opacity-50">
             <Puzzle size={24} strokeWidth={1} />
-            <p class="text-[10px] uppercase tracking-widest">No plugins loaded</p>
+            <p class="uppercase tracking-widest">No plugins loaded</p>
           </div>
         {:else}
-          <div class="section-label flex items-center gap-2 px-4 py-2 text-[9px] uppercase tracking-[0.2em]">
-            <span class="divider-line flex-1"></span>
+          <div class="flex items-center gap-2 px-4 py-2 uppercase tracking-[0.2em] text-(--color-text-muted)">
+            <span class="flex-1 h-[1px] bg-(--color-border)"></span>
             Lua Plugins — active at runtime
-            <span class="divider-line flex-1"></span>
+            <span class="flex-1 h-[1px] bg-(--color-border)"></span>
           </div>
           <div class="flex flex-col">
             {#each filteredPlugins as plugin (plugin.name)}
               {@const isDisabled = disabled.has(plugin.name)}
-              <div class="item-row group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3" class:item-row--disabled={isDisabled}>
+              <div class="group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3 rounded-lg transition-colors mt-[6px]
+                          {isDisabled ? 'opacity-50' : 'hover:bg-(--color-hover-bg-subtle)'}">
                 <div class="flex min-w-0 items-start gap-3">
-                  <div class="item-icon mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center">
+                  <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center text-(--color-text-muted) bg-(--color-hover-bg-subtle) border border-(--color-border)">
                     <Puzzle size={14} />
                   </div>
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="item-name min-w-0 truncate text-[12px]">{plugin.name}</span>
-                      <span class="item-meta text-[9px]">v{plugin.version}</span>
+                      <span class="min-w-0 truncate text-(--color-text-primary)">{plugin.name}</span>
+                      <span class="text-(--color-text-muted)">v{plugin.version}</span>
                       {#if isDisabled}
-                        <span class="badge-disabled text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5">Disabled</span>
+                        <span class="font-bold uppercase tracking-wider px-1.5 py-0.5 text-(--color-text-muted) bg-(--color-hover-bg-subtle) border border-(--color-border)">Disabled</span>
                       {/if}
                     </div>
                     <div class="mt-1 flex flex-wrap gap-1">
                       {#each plugin.permissions as perm}
-                        <span class="perm-badge px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
+                        <span class="px-1.5 py-0.5 font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
                           {perm}
                         </span>
                       {/each}
                     </div>
                     {#if plugin.commands.length > 0}
-                      <p class="item-meta mt-1 text-[9px]">Commands: {plugin.commands.join(', ')}</p>
+                      <p class="mt-1 text-(--color-text-muted)">Commands: {plugin.commands.join(', ')}</p>
                     {/if}
                   </div>
                 </div>
                 <div class="mt-0.5 shrink-0">
                   {#if togglingPlugin === plugin.name}
-                    <Loader2 size={13} class="animate-spin item-meta" />
+                    <Loader2 size={13} class="animate-spin text-(--color-text-muted)" />
                   {:else if isDisabled}
-                    <button onclick={() => togglePlugin(plugin)} class="action-btn action-btn--enable flex items-center gap-1.5 px-3 py-1" title="Enable plugin">
+                    <button onclick={() => togglePlugin(plugin)} 
+                            class="flex items-center gap-1.5 px-3 py-1 font-bold uppercase tracking-widest border transition-colors 
+                                   text-(--color-text-muted) bg-(--color-hover-bg-subtle) border-(--color-border)
+                                   hover:text-(--color-accent) hover:border-(--color-accent-border) hover:bg-(--color-accent-fill)" 
+                            title="Enable plugin">
                       <Power size={11} />
                       Enable
                     </button>
                   {:else}
-                    <button onclick={() => togglePlugin(plugin)} class="action-btn action-btn--disable flex items-center gap-1.5 px-3 py-1" title="Disable plugin">
+                    <button onclick={() => togglePlugin(plugin)} 
+                            class="flex items-center gap-1.5 px-3 py-1 font-bold uppercase tracking-widest border transition-colors
+                                   text-(--color-text-muted) bg-(--color-hover-bg-subtle) border-(--color-border)
+                                   hover:text-rose-400 hover:border-rose-400/25 hover:bg-rose-400/10" 
+                            title="Disable plugin">
                       <PowerOff size={11} />
                       Disable
                     </button>
@@ -386,34 +511,38 @@
       <!-- ── Themes Tab ───────────────────────────────────────────────────── -->
       {:else if activeTab === "themes"}
         {#if isPluginsLoading}
-          <div class="empty-state flex h-full items-center justify-center">
+          <div class="flex h-[200px] items-center justify-center text-(--color-text-secondary) opacity-50">
             <Loader2 size={20} class="animate-spin" />
           </div>
         {:else if filteredThemes.length === 0}
-          <div class="empty-state flex h-full flex-col items-center justify-center gap-2">
+          <div class="flex h-[200px] flex-col items-center justify-center gap-2 text-(--color-text-secondary) opacity-50">
             <Palette size={24} strokeWidth={1} />
-            <p class="text-[10px] uppercase tracking-widest">No themes loaded</p>
+            <p class="uppercase tracking-widest">No themes loaded</p>
           </div>
         {:else}
-          <div class="section-label flex items-center gap-2 px-4 py-2 text-[9px] uppercase tracking-[0.2em]">
-            <span class="divider-line flex-1"></span>
+          <div class="flex items-center gap-2 px-4 py-2 uppercase tracking-[0.2em] text-(--color-text-muted)">
+            <span class="flex-1 h-[1px] bg-(--color-border)"></span>
             Lua Themes — declarative color palettes
-            <span class="divider-line flex-1"></span>
+            <span class="flex-1 h-[1px] bg-(--color-border)"></span>
           </div>
           <div class="flex flex-col">
             {#each filteredThemes as theme (theme.name)}
               {@const isActive = currentTheme?.name === theme.name}
-              <div class="item-row group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3" class:item-row--active={isActive}>
+              <div class="group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3 rounded-lg transition-colors mt-[6px]
+                          {isActive ? 'bg-(--color-accent-fill)' : 'hover:bg-(--color-hover-bg-subtle)'}">
                 <div class="flex min-w-0 items-start gap-3">
-                  <div class="item-icon mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center" class:item-icon--active={isActive}>
+                  <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center border transition-colors
+                              {isActive 
+                                ? 'text-(--color-accent) bg-(--color-accent-fill) border-(--color-accent-border)' 
+                                : 'text-(--color-text-muted) bg-(--color-hover-bg-subtle) border-(--color-border)'}">
                     <Palette size={14} />
                   </div>
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="item-name min-w-0 truncate text-[12px]">{theme.name}</span>
-                      <span class="item-meta text-[9px]">v{theme.version}</span>
+                      <span class="min-w-0 truncate text-(--color-text-primary)">{theme.name}</span>
+                      <span class="text-(--color-text-muted)">v{theme.version}</span>
                       {#if isActive}
-                        <span class="badge-active flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                        <span class="flex items-center gap-1 px-1.5 py-0.5 font-bold uppercase tracking-wider text-(--color-accent) bg-(--color-accent-fill) border border-(--color-accent-border)">
                           <Sparkles size={7} />
                           Active
                         </span>
@@ -422,16 +551,16 @@
                     {#if isActive && currentTheme}
                       <div class="mt-1.5 flex flex-wrap gap-1">
                         {#each Object.entries({ bg: currentTheme.colors?.bg, fg: currentTheme.colors?.fg, keyword: currentTheme.syntax?.keyword, string: currentTheme.syntax?.string, comment: currentTheme.syntax?.comment, function: currentTheme.syntax?.function_name }).filter(([,v]) => !!v) as [label, color]}
-                          <div class="swatch flex items-center gap-1 px-1.5 py-0.5 text-[8px]" style="background: {color}18; border: 1px solid {color}30; color: {color}">
+                          <div class="flex items-center gap-1 px-1.5 py-0.5" style="background: {color}18; border: 1px solid {color}30; color: {color}">
                             <div class="h-1.5 w-1.5" style="background: {color}"></div>
-                            {label}
+                            <span class="uppercase font-bold">{label}</span>
                           </div>
                         {/each}
                       </div>
                     {:else}
                       <div class="mt-1 flex flex-wrap gap-1">
                         {#each theme.permissions as perm}
-                          <span class="perm-badge px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
+                          <span class="px-1.5 py-0.5 font-bold uppercase tracking-wider {permissionBadgeClass(perm)}">
                             {perm}
                           </span>
                         {/each}
@@ -441,12 +570,18 @@
                 </div>
                 <div class="mt-0.5 shrink-0">
                   {#if isActive}
-                    <button onclick={() => deactivateTheme(theme.name)} class="action-btn action-btn--disable flex items-center gap-1.5 px-3 py-1">
+                    <button onclick={() => deactivateTheme(theme.name)} 
+                            class="flex items-center gap-1.5 px-3 py-1 font-bold uppercase tracking-widest border transition-colors
+                                   text-(--color-text-muted) bg-(--color-hover-bg-subtle) border-(--color-border)
+                                   hover:text-rose-400 hover:border-rose-400/25 hover:bg-rose-400/10">
                       <PowerOff size={11} />
                       Deactivate
                     </button>
                   {:else}
-                    <button onclick={() => activateTheme(theme)} class="action-btn action-btn--enable flex items-center gap-1.5 px-3 py-1">
+                    <button onclick={() => activateTheme(theme)} 
+                            class="flex items-center gap-1.5 px-3 py-1 font-bold uppercase tracking-widest border transition-colors 
+                                   text-(--color-text-muted) bg-(--color-hover-bg-subtle) border-(--color-border)
+                                   hover:text-(--color-accent) hover:border-(--color-accent-border) hover:bg-(--color-accent-fill)">
                       <Power size={11} />
                       Activate
                     </button>
@@ -460,68 +595,71 @@
       <!-- ── LSP Tab ──────────────────────────────────────────────────────── -->
       {:else if activeTab === "lsp"}
         {#if isLoadingLsp}
-          <div class="empty-state flex h-full items-center justify-center">
+          <div class="flex h-[200px] items-center justify-center text-(--color-text-secondary) opacity-50">
             <Loader2 size={20} class="animate-spin" />
           </div>
         {:else if filteredServers.length === 0}
-          <div class="empty-state flex h-full flex-col items-center justify-center gap-2">
+          <div class="flex h-[200px] flex-col items-center justify-center gap-2 text-(--color-text-secondary) opacity-50">
             <Server size={24} strokeWidth={1} />
-            <p class="text-[10px] uppercase tracking-widest">No servers match</p>
+            <p class="uppercase tracking-widest">No servers match</p>
           </div>
         {:else}
-          <div class="section-label flex items-center gap-2 px-4 py-2 text-[9px] uppercase tracking-[0.2em]">
-            <span class="divider-line flex-1"></span>
+          <div class="flex items-center gap-2 px-4 py-2 uppercase tracking-[0.2em] text-(--color-text-muted)">
+            <span class="flex-1 h-[1px] bg-(--color-border)"></span>
             Language Servers — install on demand
-            <span class="divider-line flex-1"></span>
+            <span class="flex-1 h-[1px] bg-(--color-border)"></span>
           </div>
           <div class="flex flex-col">
             {#each filteredServers as server (server.id)}
               {@const badge = methodBadge(server.method)}
-              <div class="item-row group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3">
+              <div class="group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3 rounded-lg transition-colors mt-[6px] hover:bg-(--color-hover-bg-subtle)">
                 <div class="flex min-w-0 items-start gap-3">
-                  <div class="item-icon mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center">
+                  <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center text-(--color-text-muted) bg-(--color-hover-bg-subtle) border border-(--color-border)">
                     <Server size={14} />
                   </div>
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
-                      <span class="item-name min-w-0 truncate text-[12px]">{server.name}</span>
-                      <span class={`method-badge shrink-0 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badge.cls}`}>
+                      <span class="min-w-0 truncate text-(--color-text-primary)">{server.name}</span>
+                      <span class={`shrink-0 px-1.5 py-0.5 font-bold uppercase tracking-wider ${badge.cls}`}>
                         {badge.label}
                       </span>
                     </div>
-                    <p class="item-lang mt-0.5 text-[10px] uppercase tracking-widest">{server.language}</p>
-                    <p class="item-desc mt-1 text-[11px] leading-relaxed">{server.description}</p>
+                    <p class="mt-0.5 uppercase tracking-widest text-(--color-text-muted)">{server.language}</p>
+                    <p class="mt-1 leading-relaxed text-(--color-text-secondary)">{server.description}</p>
                     {#if server.version}
-                      <p class="item-version mt-0.5 text-[9px]">{server.version}</p>
+                      <p class="mt-0.5 text-(--color-accent) opacity-60">{server.version}</p>
                     {/if}
                   </div>
                 </div>
                 <div class="mt-0.5 shrink-0">
                   {#if server.installed}
-                    <div class="installed-badge flex items-center gap-1.5">
+                    <div class="flex items-center gap-1.5 text-(--color-accent) opacity-70">
                       <CheckCircle2 size={13} />
-                      <span class="text-[9px] font-bold uppercase tracking-wider">Installed</span>
+                      <span class="font-bold uppercase tracking-wider">Installed</span>
                     </div>
                   {:else if installing === server.id}
                     <div class="flex flex-col items-end gap-1">
-                      <Loader2 size={13} class="animate-spin item-meta" />
-                      <span class="item-meta max-w-32 text-right text-[9px]">
+                      <Loader2 size={13} class="animate-spin text-(--color-text-muted)" />
+                      <span class="max-w-32 text-right text-(--color-text-muted)">
                         {statusMessage[server.id] || 'Installing…'}
                       </span>
                     </div>
                   {:else if server.method === 'manual'}
-                    <div class="manual-badge flex items-center gap-1.5">
+                    <div class="flex items-center gap-1.5 text-(--color-text-muted)">
                       <ExternalLink size={12} />
-                      <span class="text-[9px] uppercase tracking-wider">Manual</span>
+                      <span class="uppercase tracking-wider">Manual</span>
                     </div>
                   {:else}
                     <div class="flex flex-col items-end gap-1">
-                      <button onclick={() => install(server.id)} class="action-btn action-btn--install flex items-center gap-1.5 px-3 py-1">
+                      <button onclick={() => install(server.id)} 
+                              class="flex items-center gap-1.5 px-3 py-1 font-bold uppercase tracking-widest border transition-colors 
+                                     text-(--color-text-muted) bg-(--color-hover-bg-subtle) border-(--color-border)
+                                     hover:text-(--color-accent) hover:border-(--color-accent-border) hover:bg-(--color-accent-fill)">
                         <Download size={11} />
                         Install
                       </button>
                       {#if statusMessage[server.id]}
-                        <span class="max-w-36 text-right text-[9px] {statusMessage[server.id].startsWith('Error:') ? 'text-rose-400/80' : 'item-meta'}">
+                        <span class="max-w-36 text-right {statusMessage[server.id].startsWith('Error:') ? 'text-rose-400/80' : 'text-(--color-text-muted)'}">
                           {statusMessage[server.id]}
                         </span>
                       {/if}
@@ -534,29 +672,119 @@
         {/if}
       {/if}
 
+      <!-- ── Parsers Tab ──────────────────────────────────────────────────── -->
+      {#if activeTab === "parsers"}
+        {#if isLoadingParsers}
+          <div class="flex h-[200px] items-center justify-center text-(--color-text-secondary) opacity-50">
+            <Loader2 size={20} class="animate-spin" />
+          </div>
+        {:else if filteredParsers.length === 0}
+          <div class="flex h-[200px] flex-col items-center justify-center gap-2 text-(--color-text-secondary) opacity-50">
+            <Package size={24} strokeWidth={1} />
+            <p class="uppercase tracking-widest">No parsers match</p>
+          </div>
+        {:else}
+          <div class="flex items-center gap-2 px-4 py-2 uppercase tracking-[0.2em] text-(--color-text-muted)">
+            <span class="flex-1 h-[1px] bg-(--color-border)"></span>
+            Tree-sitter Grammars — semantic highlighting
+            <span class="flex-1 h-[1px] bg-(--color-border)"></span>
+          </div>
+          <div class="flex flex-col">
+            {#each filteredParsers as parser (parser.language)}
+              <div class="group relative cursor-pointer flex items-start justify-between gap-4 px-4 py-3 rounded-lg transition-colors mt-[6px] hover:bg-(--color-hover-bg-subtle)">
+                <div class="flex min-w-0 items-start gap-3">
+                  <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center text-(--color-text-muted) bg-(--color-hover-bg-subtle) border border-(--color-border)">
+                    <Package size={14} />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                      <span class="min-w-0 truncate text-(--color-text-primary)">{parser.language}</span>
+                      <span class="text-(--color-text-muted) font-mono text-[10px] uppercase tracking-widest">{parser.name}</span>
+                    </div>
+                    <p class="mt-1 leading-relaxed text-(--color-text-secondary) text-[11px] truncate">{parser.source_url}</p>
+                  </div>
+                </div>
+                <div class="mt-0.5 shrink-0">
+                  {#if parser.installed}
+                    <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-1.5 text-(--color-accent) opacity-70">
+                        <CheckCircle2 size={13} />
+                        <span class="font-bold uppercase tracking-wider">Installed</span>
+                      </div>
+                      {#if repairingParser === parser.language}
+                        <Loader2 size={13} class="animate-spin text-(--color-text-muted)" />
+                      {:else}
+                        <button onclick={() => repairQueries(parser.language)} 
+                                class="flex items-center gap-1.5 px-2 py-1 font-bold uppercase tracking-widest border transition-colors 
+                                       text-(--color-text-muted) bg-(--color-hover-bg-subtle) border-(--color-border)
+                                       hover:text-amber-400 hover:border-amber-400/25 hover:bg-amber-400/10" 
+                                title="Fix highlighting queries">
+                          <Wrench size={11} />
+                          Fix
+                        </button>
+                      {/if}
+                    </div>
+                  {:else if installingParser === parser.language}
+                    <div class="flex flex-col items-end gap-1">
+                      <div class="flex items-center gap-2">
+                        <Loader2 size={13} class="animate-spin text-(--color-text-muted)" />
+                        <span class="text-[10px] text-(--color-text-muted)">{parserProgress[parser.language]?.toFixed(0) ?? 0}%</span>
+                      </div>
+                      <div class="w-24 h-1 bg-(--color-hover-bg-subtle) overflow-hidden rounded-full">
+                        <div class="h-full bg-(--color-accent) transition-all duration-300" style="width: {parserProgress[parser.language] ?? 0}%"></div>
+                      </div>
+                    </div>
+                  {:else}
+                    <button onclick={() => installParser(parser.language)} 
+                            class="flex items-center gap-1.5 px-3 py-1 font-bold uppercase tracking-widest border transition-colors 
+                                   text-(--color-text-muted) bg-(--color-hover-bg-subtle) border-(--color-border)
+                                   hover:text-(--color-accent) hover:border-(--color-accent-border) hover:bg-(--color-accent-fill)">
+                      <Download size={11} />
+                      Install
+                    </button>
+                  {/if}
+                  {#if parserStatusMsg[parser.language]}
+                    <p class="mt-1 max-w-32 text-right text-[9px] {parserStatusMsg[parser.language].startsWith('Error:') ? 'text-rose-400/80' : 'text-(--color-text-muted)'}">
+                      {parserStatusMsg[parser.language]}
+                    </p>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+
     </div>
 
     <!-- Footer -->
-    <div class="footer-row flex items-center justify-between px-4 py-1.5 text-[9px] uppercase tracking-[0.12em]">
+    <div class="flex items-center justify-between px-4 py-1.5 uppercase tracking-[0.12em] border-t border-(--color-border) text-(--color-text-muted)">
       <div class="flex items-center gap-1.5">
         {#if activeTab === "plugins"}
           <Puzzle size={9} /><span>Lua sandbox — isolated VM per plugin</span>
         {:else if activeTab === "themes"}
           <Palette size={9} /><span>Declarative — no code execution</span>
+        {:else if activeTab === "parsers"}
+          <Globe size={9} /><span>Prebuilt binaries — no local compiler needed</span>
         {:else}
           <AlertCircle size={9} /><span>Manual installs require system tools</span>
         {/if}
       </div>
-      <span class="match-count">
+      <span class="text-[10px] font-bold">
         {#if activeTab === "plugins"}
           {@const ac = plugins.filter(p => !disabled.has(p.name)).length}
           {ac} active · {plugins.length - ac} disabled
         {:else if activeTab === "themes"}
           {themes.length} theme{themes.length !== 1 ? 's' : ''} · {currentTheme ? currentTheme.name : 'none'} active
+        {:else if activeTab === "parsers"}
+          {parsers.filter(p => p.installed).length} / {parsers.length} grammars installed
         {:else}
           {servers.filter(s => s.installed).length} installed · {servers.length} available
         {/if}
       </span>
+    </div>
+
+      </section>
     </div>
 
   </div>
@@ -571,165 +799,3 @@
   />
 {/if}
 
-<style>
-  .ext-shell {
-    background: var(--forja-ui-picker-bg, #0e0e11);
-    /* border removed for cleaner look */
-    box-shadow: 0 24px 64px rgba(0,0,0,0.90), 0 8px 24px rgba(0,0,0,0.70);
-  }
-
-  .header-row {
-    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
-  }
-
-  .mode-label {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--forja-ui-gradient-from, #34d399);
-    white-space: nowrap;
-  }
-
-  .sep-v {
-    width: 1px;
-    height: 12px;
-    flex-shrink: 0;
-    background: var(--forja-ui-btn-border, #27272a);
-  }
-
-  .search-input {
-    color: var(--forja-ui-text-primary, #f4f4f5);
-  }
-  .search-input::placeholder { color: var(--forja-ui-text-secondary, #dedee2); }
-
-  .close-btn { color: var(--forja-ui-text-muted, #b4b4c0); }
-  .close-btn:hover { color: var(--forja-ui-text-primary, #f4f4f5); }
-
-  /* Tabs */
-  .tabs-row {
-    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
-  }
-  .tab-btn {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--forja-ui-text-muted, #b4b4c0);
-    border-bottom: 1px solid transparent;
-    margin-bottom: -1px;
-    transition: color 0.1s;
-  }
-  .tab-btn:hover { color: var(--forja-ui-text-secondary, #dedee2); }
-  .tab-btn--active {
-    color: var(--forja-ui-gradient-from, #34d399);
-    border-bottom-color: var(--forja-ui-gradient-from, #34d399);
-  }
-  .tab-count {
-    font-size: 9px;
-    color: var(--forja-ui-text-muted, #b4b4c0);
-    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
-    padding: 0 4px;
-  }
-
-  /* Content */
-
-  .section-label {
-    color: var(--forja-ui-text-muted, #b4b4c0);
-  }
-  .divider-line {
-    height: 1px;
-    background: var(--forja-ui-btn-border, #27272a);
-    display: block;
-  }
-
-  /* Items */
-  .item-row {
-    /* remove full-width separators to allow inset hover */
-    border-bottom: none;
-    border-radius: 8px;
-    transition: background 0.12s;
-  }
-  .item-row + .item-row { margin-top: 6px; }
-  .item-row:hover { background: color-mix(in srgb, var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.04)) 60%, transparent); }
-  .item-row--active { background: color-mix(in srgb, var(--forja-ui-picker-active, rgba(52,211,153,0.08)) 60%, transparent); }
-  .item-row--disabled { opacity: 0.5; }
-
-  .item-icon {
-    color: var(--forja-ui-text-muted, #b4b4c0);
-    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
-    border: 1px solid var(--forja-ui-btn-border, #27272a);
-  }
-  .item-icon--active { color: var(--forja-ui-gradient-from, #34d399); }
-
-  .item-name { color: var(--forja-ui-text-primary, #f4f4f5); }
-  .item-meta { color: var(--forja-ui-text-muted, #b4b4c0); }
-  .item-lang { color: var(--forja-ui-text-muted, #b4b4c0); }
-  .item-desc { color: var(--forja-ui-text-secondary, #dedee2); }
-  .item-version { color: var(--forja-ui-gradient-from, #34d399); opacity: 0.6; }
-
-  /* Badges */
-  .badge-disabled {
-    color: var(--forja-ui-text-muted, #b4b4c0);
-    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
-    border: 1px solid var(--forja-ui-btn-border, #27272a);
-  }
-  .badge-active {
-    color: var(--forja-ui-gradient-from, #34d399);
-    background: rgba(52,211,153,0.10);
-    border: 1px solid rgba(52,211,153,0.20);
-  }
-  .installed-badge { color: var(--forja-ui-gradient-from, #34d399); opacity: 0.7; }
-  .manual-badge { color: var(--forja-ui-text-muted, #b4b4c0); }
-
-  /* Action buttons */
-  .action-btn {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--forja-ui-text-muted, #b4b4c0);
-    background: var(--forja-ui-btn-hover-bg, rgba(255,255,255,0.03));
-    border: 1px solid var(--forja-ui-btn-border, #27272a);
-    transition: color 0.1s, background 0.1s, border-color 0.1s;
-  }
-  .action-btn--enable:hover {
-    color: var(--forja-ui-gradient-from, #34d399);
-    border-color: rgba(52,211,153,0.30);
-    background: rgba(52,211,153,0.08);
-  }
-  .action-btn--disable:hover {
-    color: #f87171;
-    border-color: rgba(248,113,113,0.25);
-    background: rgba(248,113,113,0.06);
-  }
-  .action-btn--install:hover {
-    color: var(--forja-ui-gradient-from, #34d399);
-    border-color: rgba(52,211,153,0.30);
-    background: rgba(52,211,153,0.08);
-  }
-
-  /* Empty state */
-  .empty-state {
-    color: var(--forja-ui-text-secondary, #dedee2);
-    opacity: 0.5;
-    min-height: 200px;
-  }
-
-  /* Footer */
-  .footer-row {
-    border-top: 1px solid var(--forja-ui-btn-border, #27272a);
-    color: var(--forja-ui-text-muted, #b4b4c0);
-  }
-  .match-count { color: var(--forja-ui-text-muted, #b4b4c0); }
-
-  /* Scrollbar */
-  .custom-scrollbar::-webkit-scrollbar { width: 3px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--forja-ui-explorer-scrollbar, #1e1e1e);
-  }
-  .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: var(--forja-ui-explorer-scrollbar-hover, #2e2e2e);
-  }
-</style>

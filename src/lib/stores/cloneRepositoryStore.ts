@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { derived, writable } from 'svelte/store';
+import { derived, get, writable } from 'svelte/store';
+import { closeDialog } from './dialogStore';
 
 import type { ScanResult } from '$lib/DepsStore';
 
@@ -209,4 +210,27 @@ export async function cleanupCloneSession(sessionId: string | null | undefined) 
   } finally {
     resetCloneRepositoryFlow();
   }
+}
+
+/**
+ * Centrally managed close for Clone Repository dialog.
+ * Handles active session cleanup and state reset before closing.
+ */
+export async function closeCloneRepository() {
+  const cloning = get(isCloning);
+  const saving = get(isSaving);
+  const installing = get(isInstalling);
+
+  if (cloning || saving || installing) {
+    return;
+  }
+
+  const sessionId = get(activeCloneSessionId);
+  if (sessionId) {
+    await cleanupCloneSession(sessionId);
+  } else {
+    resetCloneRepositoryFlow();
+  }
+
+  closeDialog();
 }

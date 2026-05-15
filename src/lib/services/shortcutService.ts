@@ -7,6 +7,8 @@ import {
   openBufferDeleteDialog, 
   openGrammarHub, 
   openPreferencesDialog,
+  openExtensionsManager,
+  openCloneRepositoryDialog,
   closeDialog
 } from '../stores/dialogStore';
 
@@ -23,6 +25,8 @@ export const SHORTCUT_ACTIONS = {
   'open-buffers': () => openBufferDeleteDialog(),
   'open-grammar': () => openGrammarHub(),
   'open-preferences': () => openPreferencesDialog('program'),
+  'open-extensions': () => openExtensionsManager(),
+  'open-clone': () => openCloneRepositoryDialog(),
   'close-dialog': () => closeDialog(),
 } as const;
 

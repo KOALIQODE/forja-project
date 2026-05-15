@@ -9,7 +9,7 @@
   let showExplorer = $derived(isSidebarOpen(SIDEBAR_IDS.EXPLORER, $sidebarState) && !!$currentProject);
 </script>
 
-<section class="flex w-full h-full overflow-hidden">
+<section class="flex w-full h-full">
   {#if $currentProject}
     <!-- Sidebar docked area (Explorer) -->
     {#if showExplorer}
@@ -27,17 +27,17 @@
   {/if}
 
   <!-- El área principal -->
-  <section class="flex-1 relative overflow-hidden bg-transparent">
+  <section class="flex-1 bg-transparent">
     {#if showWelcome}
       <WelcomeScreen />
-    {:else if $activeBuffer}
+    <!-- {:else if $activeBuffer}
       {#await import("$lib/components/editor/EditorBuffer.svelte") then module}
         <module.default
           filePath={$activeBuffer.filePath}
           bufferId={$activeBuffer.id}
           language={$activeBuffer.language ?? "unknown"}
         />
-      {/await}
+      {/await} -->
     {/if}
   </section>
 </section>

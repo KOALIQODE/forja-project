@@ -1,6 +1,7 @@
 <script lang="ts">
   import { open } from '@tauri-apps/plugin-dialog';
   import {
+    Check,
     Download,
     FolderOpen,
     Loader2,
@@ -10,8 +11,7 @@
   } from '@lucide/svelte';
   import { onMount } from 'svelte';
 
-  import { activeUITheme } from '$lib/stores/uiThemeStore';
-  import { closeDialog } from '$lib/stores/dialogStore';
+  import { theme } from '$lib/stores/uiThemeStore';
   import { openProject } from '$lib/stores/projectStore';
   import {
     activeCloneSessionId,
@@ -27,6 +27,7 @@
     startCloneAndValidate,
     validationResult,
     installValidatedTargets,
+    closeCloneRepository,
     type CloneValidationResult,
     type InstallTarget,
   } from '$lib/stores/cloneRepositoryStore';
@@ -38,36 +39,20 @@
   let autofix = $state(false);
   let dialogEl: HTMLElement | null = $state(null);
 
-  let themeStyle = $derived(
-    Object.entries($activeUITheme.vars).map(([key, value]) => `${key}:${value}`).join(';')
-  );
-
+  const GIT_URL_REGEX = /^(?:https?:\/\/|git@|ssh:\/\/|git:\/\/)[^\s]+$/;
+  let isUrlValid = $derived(gitUrl.trim().length === 0 || GIT_URL_REGEX.test(gitUrl.trim()));
   let isBusy = $derived($isCloning || $isSaving || $isInstalling);
   let canReview = $derived(!!$validationResult);
-  let canStartClone = $derived(gitUrl.trim().length > 0 && !$isCloning);
+  let canStartClone = $derived(gitUrl.trim().length > 0 && isUrlValid && !$isCloning);
 
   onMount(() => {
     dialogEl?.focus();
   });
 
-  async function requestClose() {
-    if ($isCloning || $isSaving || $isInstalling) {
-      return;
-    }
-
-    if ($activeCloneSessionId) {
-      await cleanupCloneSession($activeCloneSessionId);
-    } else {
-      resetCloneRepositoryFlow();
-    }
-
-    closeDialog();
-  }
-
   function handleKeyDown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       event.preventDefault();
-      void requestClose();
+      void closeCloneRepository();
       return;
     }
 
@@ -152,7 +137,7 @@
 
       openProject(saveResult.final_path);
       await cleanupCloneSession(saveResult.session_id);
-      closeDialog();
+      void closeCloneRepository();
     } catch (value: unknown) {
       localError = value instanceof Error ? value.message : String(value);
     }
@@ -178,7 +163,7 @@
       const targets = buildInstallTargets($validationResult);
       if (targets.length === 0) {
         await cleanupCloneSession(saveResult.session_id);
-        closeDialog();
+        void closeCloneRepository();
         return;
       }
 
@@ -191,7 +176,7 @@
 
       if (results.every((result) => result.success)) {
         await cleanupCloneSession(saveResult.session_id);
-        closeDialog();
+        void closeCloneRepository();
       } else {
         localError = 'Safe install finished with one or more failures. Review the results below.';
       }
@@ -203,7 +188,7 @@
 
 <div
   class="fixed inset-0 z-[3000] flex items-start justify-center pt-12"
-  onclick={() => void requestClose()}
+  onclick={() => void closeCloneRepository()}
   onkeydown={handleKeyDown}
   role="presentation"
 >
@@ -215,21 +200,30 @@
     aria-labelledby="clone-repository-title"
     onclick={(event) => event.stopPropagation()}
     onkeydown={handleKeyDown}
-    style={themeStyle}
-    class="clone-dialog w-[680px] max-w-[calc(100vw-32px)] overflow-hidden bg-(--forja-ui-picker-bg,#0e0e11) text-(--forja-ui-picker-text,#a1a1aa) outline-none border border-(--forja-ui-picker-border,#2a2a2e) [box-shadow:0_24px_64px_rgba(0,0,0,0.90),0_8px_24px_rgba(0,0,0,0.70)] animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
-    data-dialog-shell
+    use:theme
+    class="w-[680px] font-semibold max-w-[calc(100vw-32px)] bg-(--color-surface-base) text-(--color-text-primary) outline-none border border-(--color-border) animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
   >
-    <header class="flex items-center gap-2 border-b border-(--forja-ui-picker-border,#2a2a2e) px-4 pt-3 pb-2.5">
-      <Download size="13" class="shrink-0 text-(--forja-ui-picker-active-text,#34d399)" />
-      <span id="clone-repository-title" class="flex-1 text-[10px] font-semibold uppercase tracking-[0.08em]">Clone Repository</span>
-      <button
-        type="button"
-        onclick={() => void requestClose()}
-        class="flex items-center justify-center p-1 text-white/30 hover:bg-white/5 hover:text-white/70 transition-colors disabled:opacity-40"
-        disabled={isBusy}
-        aria-label="Close"
-      >
-        <X size={12} />
+    <header class="flex items-center gap-3 px-4 py-2.5 border-b border-(--color-border)">
+      <div class="flex w-[172px] shrink-0 items-center">
+        <span id="clone-repository-title" class="text-(--color-text-primary)">Clone Repository</span>
+      </div>
+      <div class="w-[1px] h-3 bg-(--color-border) shrink-0"></div>
+      
+      <div class="flex flex-1 items-center gap-3 px-1">
+        {#if $isCloning}
+          <Loader2 size={13} class="text-(--color-accent) animate-spin shrink-0" />
+          <span class="text-(--color-text-primary) font-bold uppercase tracking-[0.14em]">Clonando...</span>
+        {:else if $validationResult}
+          <ShieldCheck size={13} class="text-emerald-400 shrink-0" />
+          <span class="text-(--color-text-primary) font-bold uppercase tracking-[0.14em]">Validación completada</span>
+        {:else}
+          <Download size={13} class="text-(--color-text-muted) shrink-0" />
+          <span class="text-(--color-text-primary) font-bold uppercase tracking-[0.14em]">Preparar clon</span>
+        {/if}
+      </div>
+
+      <button onclick={closeCloneRepository} class="flex h-6 w-6 items-center justify-center text-(--color-text-muted) hover:text-(--color-text-primary) transition-colors">
+        <X size={14} />
       </button>
     </header>
 
@@ -237,39 +231,69 @@
       {#if !canReview}
         <div class="space-y-4">
           <div class="space-y-1.5">
-            <label for="clone-url" class="text-[10px] font-semibold uppercase tracking-[0.08em] text-white/45">
+            <h5>
               Repository URL
-            </label>
+            </h5>
             <input
               id="clone-url"
               type="text"
               bind:value={gitUrl}
               placeholder="https://github.com/org/repo.git or git@github.com:org/repo.git"
               disabled={$isCloning}
-              class="w-full border border-white/10 bg-white/4 px-3 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+              class="w-full border px-1 py-1 text-(--color-text-primary) transition-all duration-200 focus:outline-none bg-(--color-surface-base) {!isUrlValid ? 'border-red-500/50 bg-red-500/5 focus:border-red-500' : 'border-(--color-border) focus:border-(--color-accent)'}"
             />
-            <p class="text-[11px] text-white/40">
+            {#if !isUrlValid}
+              <p class="mt-1 font-medium text-red-400">
+                Please enter a valid Git URL (HTTPS, SSH, or git://)
+              </p>
+            {/if}
+            <p class="mt-1.5 text-(--color-text-muted)">
               Paste an HTTPS or SSH repository URL. The clone is validated in a temporary sandbox before anything is saved.
             </p>
-            <div class="mt-2 flex items-center gap-2">
-              <input id="autofix" type="checkbox" bind:checked={autofix} disabled={$isCloning} class="w-4 h-4" />
-              <label for="autofix" class="text-[11px] text-white/55">Autofix: remove '^' and '~' and pin exact versions (npm/cargo)</label>
+            <div class="mt-4">
+              <label
+                class="group relative flex cursor-pointer flex-col gap-1 border border-(--color-border) bg-(--color-surface-base) p-3.5 transition-all duration-200 hover:bg-(--color-hover-bg-subtle) {autofix ? 'border-(--color-accent-border) bg-(--color-accent-fill)' : ''}"
+              >
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <div class="relative flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all duration-200 {autofix ? 'border-(--color-border) bg-(--color-accent)' : 'border-(--color-border) bg-(--color-surface-base) group-hover:border-(--color-accent-border)'}">
+                      <input
+                        id="autofix"
+                        type="checkbox"
+                        bind:checked={autofix}
+                        disabled={$isCloning}
+                        class="peer absolute h-full w-full cursor-pointer opacity-0"
+                      />
+                      {#if autofix}
+                        <Check size="14" strokeWidth={3} class="text-(--color-surface-base)" />
+                      {/if}
+                    </div>
+                    <span class="text-(--color-text-primary)">Autofix Manifests</span>
+                  </div>
+                  {#if autofix}
+                    <span class="uppercase text-(--color-accent) opacity-80">Enabled</span>
+                  {/if}
+                </div>
+                <p class="pl-[30px] text-(--color-text-muted) transition-colors group-hover:text-(--color-text-secondary)">
+                  Automatically remove '^' and '~' prefixes and pin exact versions in npm and cargo manifests for reproducible clones.
+                </p>
+              </label>
             </div>
           </div>
 
           {#if $cloneProgress && $isCloning}
-            <div class="space-y-2 border border-white/8 bg-white/[0.03] px-3 py-3">
-              <div class="flex items-center justify-between text-[11px]">
-                <span class="font-semibold uppercase tracking-[0.08em] text-emerald-300">{$cloneProgress.status}</span>
-                <span class="text-white/50">{$cloneProgress.progress}%</span>
+            <div class="space-y-2 border border-(--color-border) bg-(--color-surface-base) px-3 py-3">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold uppercase text-(--color-accent)">{$cloneProgress.status}</span>
+                <span class="text-(--color-text-muted)">{$cloneProgress.progress}%</span>
               </div>
-              <div class="h-1.5 overflow-hidden bg-white/7">
+              <div class="h-1.5 overflow-hidden bg-(--color-hover-bg-subtle)">
                 <div
-                  class="h-full bg-linear-to-r from-emerald-400 to-cyan-400 transition-all duration-300"
+                  class="h-full bg-(--color-accent) transition-all duration-300"
                   style="width: {$cloneProgress.progress}%"
                 ></div>
               </div>
-              <p class="text-[11px] text-white/55">{$cloneProgress.message}</p>
+              <p class="text-(--color-text-muted)">{$cloneProgress.message}</p>
             </div>
           {/if}
         </div>
@@ -283,14 +307,14 @@
             {/if}
 
             <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold text-white">{$validationResult.message}</p>
-              <p class="mt-1 text-[11px] text-white/55">
-                Project: <span class="font-mono text-white/80">{$validationResult.project_name}</span>
+              <p class="font-semibold text-(--color-text-primary)">{$validationResult.message}</p>
+              <p class="mt-1 text-(--color-text-muted)">
+                Project: <span class="font-mono text-(--color-text-secondary)">{$validationResult.project_name}</span>
                 · Confidence:
-                <span class="font-mono uppercase text-white/80">{$validationResult.confidence}</span>
+                <span class="font-mono uppercase text-(--color-text-secondary)">{$validationResult.confidence}</span>
               </p>
-              <div class="mt-2 flex flex-wrap gap-2 text-[10px]">
-                <span class="bg-white/6 px-2 py-1 text-white/65">{$validationResult.scans.length} manifests</span>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <span class="bg-(--color-hover-bg-subtle) px-2 py-1 text-(--color-text-secondary)">{$validationResult.scans.length} manifests</span>
                 <span class="bg-red-500/14 px-2 py-1 text-red-300">{$validationResult.critical_vulns} critical</span>
                 <span class="bg-orange-500/14 px-2 py-1 text-orange-300">{$validationResult.high_vulns} high</span>
                 <span class="bg-sky-500/14 px-2 py-1 text-sky-300">{$validationResult.total_vulnerabilities} total findings</span>
@@ -300,7 +324,7 @@
 
           <div class="space-y-2">
             <div class="space-y-1.5">
-              <label for="clone-destination-root" class="text-[10px] font-semibold uppercase tracking-[0.08em] text-white/45">
+              <label for="clone-destination-root" class="text-[10px] font-semibold uppercase text-(--color-text-muted)">
                 Save Location
               </label>
               <div class="flex gap-2">
@@ -310,12 +334,12 @@
                   bind:value={destinationRoot}
                   readonly
                   placeholder="Choose a destination folder"
-                  class="min-w-0 flex-1 border border-white/10 bg-white/4 px-3 py-2 text-sm text-white/80 focus:outline-none"
+                  class="min-w-0 flex-1 border border-(--color-border) bg-(--color-surface-base) px-3 py-2 text-(--color-text-secondary) focus:outline-none"
                 />
                 <button
                   type="button"
                   onclick={pickDestinationRoot}
-                  class="flex items-center gap-2 border border-white/10 bg-white/5 px-3 py-2 text-[12px] font-medium text-white/70 transition-colors hover:bg-white/8 hover:text-white"
+                  class="flex items-center gap-2 border border-(--color-border) bg-(--color-hover-bg-subtle) px-3 py-2 font-medium text-(--color-text-secondary) transition-colors hover:bg-(--color-accent-fill) hover:text-(--color-text-primary)"
                 >
                   <FolderOpen size="13" />
                   Browse
@@ -326,34 +350,34 @@
 
           <div class="space-y-2">
             {#if $validationResult.scans.length === 0}
-              <div class="border border-white/8 bg-white/[0.03] px-3 py-3 text-[12px] text-white/55">
+              <div class="border border-(--color-border) bg-(--color-surface-base) px-3 py-3 text-(--color-text-muted)">
                 This repository does not expose any supported dependency manifests. You can still save it.
               </div>
             {:else}
               {#each $validationResult.scans as scan}
-                <div class="border border-white/8 bg-white/[0.03]">
+                <div class="border border-(--color-border) bg-(--color-surface-base)">
                   <button
                     type="button"
                     onclick={() => expandedManifest = expandedManifest === scan.manifest_path ? null : scan.manifest_path}
-                    class="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.03]"
+                    class="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-(--color-hover-bg-subtle)"
                   >
-                    <span class="w-14 shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/75">
+                    <span class="w-14 shrink-0 font-semibold uppercase text-(--color-text-secondary)">
                       {scan.ecosystem}
                     </span>
-                    <span class="min-w-0 flex-1 truncate text-[11px] text-white/45">
+                    <span class="min-w-0 flex-1 truncate text-(--color-text-muted)">
                       {manifestRelativePath($validationResult, scan.manifest_path)}
                     </span>
-                    <span class="shrink-0 bg-white/6 px-2 py-1 text-[10px] text-white/55">{scan.summary.total} deps</span>
-                    <span class="shrink-0 bg-red-500/14 px-2 py-1 text-[10px] text-red-300">{scan.summary.critical} C</span>
-                    <span class="shrink-0 bg-orange-500/14 px-2 py-1 text-[10px] text-orange-300">{scan.summary.high} H</span>
+                    <span class="shrink-0 bg-(--color-hover-bg-subtle) px-2 py-1 text-(--color-text-muted)">{scan.summary.total} deps</span>
+                    <span class="shrink-0 bg-red-500/14 px-2 py-1 text-red-300">{scan.summary.critical} C</span>
+                    <span class="shrink-0 bg-orange-500/14 px-2 py-1 text-orange-300">{scan.summary.high} H</span>
                   </button>
 
                   {#if expandedManifest === scan.manifest_path}
-                    <div class="space-y-2 border-t border-white/8 px-3 py-3">
+                    <div class="space-y-2 border-t border-(--color-border) px-3 py-3">
                       {#if scan.errors.length > 0}
                         <div class="space-y-1">
                           {#each scan.errors as error}
-                            <p class="text-[11px] text-amber-300/80">{error}</p>
+                            <p class="text-amber-300/80">{error}</p>
                           {/each}
                         </div>
                       {/if}
@@ -361,19 +385,19 @@
                       {#if scan.dependencies.some((dep) => dep.vulnerabilities.length > 0)}
                         <div class="space-y-2">
                           {#each scan.dependencies.filter((dep) => dep.vulnerabilities.length > 0) as dep}
-                            <div class="border border-white/6 bg-black/20 px-3 py-2">
+                            <div class="border border-(--color-border) bg-(--color-hover-bg-subtle) px-3 py-2">
                               <div class="flex flex-wrap items-center gap-2">
-                                <span class="text-[12px] font-semibold text-white">{dep.name}</span>
-                                <span class="font-mono text-[10px] text-white/45">{dep.version}</span>
+                                <span class="font-semibold text-(--color-text-primary)">{dep.name}</span>
+                                <span class="font-mono text-(--color-text-muted)">{dep.version}</span>
                                 {#if dep.latest}
-                                  <span class="text-[10px] text-sky-300">latest {dep.latest}</span>
+                                  <span class=" text-sky-300">latest {dep.latest}</span>
                                 {/if}
                               </div>
                               <div class="mt-2 space-y-1.5">
                                 {#each dep.vulnerabilities as vulnerability}
-                                  <div class="border-l-2 border-red-400/40 bg-white/[0.02] px-2 py-1.5 text-[11px] text-white/70">
+                                  <div class="border-l-2 border-red-400/40 bg-(--color-surface-base) px-2 py-1.5 text-(--color-text-secondary)">
                                     <span class="font-semibold uppercase text-red-300">{vulnerability.severity}</span>
-                                    <span class="ml-2 text-white/80">{vulnerability.title}</span>
+                                    <span class="ml-2 text-(--color-text-primary)">{vulnerability.title}</span>
                                     {#if vulnerability.patched_versions}
                                       <span class="ml-2 text-emerald-300/80">fix {vulnerability.patched_versions}</span>
                                     {/if}
@@ -384,7 +408,7 @@
                           {/each}
                         </div>
                       {:else}
-                        <p class="text-[11px] text-white/50">No vulnerability entries were produced for this manifest.</p>
+                        <p class="text-(--color-text-muted)">No vulnerability entries were produced for this manifest.</p>
                       {/if}
                     </div>
                   {/if}
@@ -394,14 +418,14 @@
           </div>
 
           {#if $installResults.length > 0}
-            <div class="space-y-2 border border-white/8 bg-white/[0.03] px-3 py-3">
-              <p class="text-[10px] font-semibold uppercase tracking-[0.08em] text-white/45">Safe Install Results</p>
+            <div class="space-y-2 border border-(--color-border) bg-(--color-surface-base) px-3 py-3">
+              <p class="font-semibold uppercase text-(--color-text-muted)">Safe Install Results</p>
               {#each $installResults as result}
                 <div class="border-l-2 px-2 py-1.5 {result.success ? 'border-emerald-400/40' : 'border-red-400/40'}">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-[11px] font-semibold uppercase text-white/75">{result.ecosystem}</span>
-                    <span class="text-[11px] text-white/50">{result.manifest_rel_path}</span>
-                    <span class="text-[10px] {result.success ? 'text-emerald-300' : 'text-red-300'}">{result.message}</span>
+                    <span class="font-semibold uppercase text-(--color-text-secondary)">{result.ecosystem}</span>
+                    <span class=" text-(--color-text-muted)">{result.manifest_rel_path}</span>
+                    <span class="{result.success ? 'text-emerald-300' : 'text-red-300'}">{result.message}</span>
                   </div>
                 </div>
               {/each}
@@ -411,18 +435,18 @@
       {/if}
 
       {#if localError || $cloneError}
-        <div class="mt-4 border border-red-500/18 bg-red-500/8 px-3 py-2 text-[11px] text-red-300">
+        <div class="mt-4 border border-red-500/18 bg-red-500/8 px-3 py-2 text-red-300">
           {localError || $cloneError}
         </div>
       {/if}
     </div>
 
-    <footer class="flex gap-2 border-t border-(--forja-ui-picker-border,#2a2a2e) px-4 py-3">
+    <footer class="flex gap-2 border-t border-(--color-border) px-4 py-3 bg-(--color-surface-base)">
       {#if !canReview}
         <button
           type="button"
-          onclick={() => void requestClose()}
-          class="flex-1 border border-white/10 bg-white/4 px-3 py-2 text-[12px] font-medium text-white/55 transition-colors hover:bg-white/7 hover:text-white/75"
+          onclick={() => void closeCloneRepository()}
+          class="flex-1 border border-(--color-border) bg-(--color-surface-base) px-2 py-1.5 text-(--color-text-secondary) font-bold transition-all hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
           disabled={$isCloning}
         >
           Cancel
@@ -430,7 +454,7 @@
         <button
           type="button"
           onclick={() => void handleClone()}
-          class="flex flex-1 items-center justify-center gap-2 border border-emerald-500/24 bg-emerald-500/14 px-3 py-2 text-[12px] font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/20 disabled:opacity-45"
+          class="flex flex-1 items-center justify-center gap-2 border border-(--color-accent) bg-(--color-accent) px-2 py-1.5 text-(--color-surface-base) font-bold transition-all hover:opacity-90 disabled:opacity-45 disabled:grayscale"
           disabled={!canStartClone}
         >
           {#if $isCloning}
@@ -444,8 +468,8 @@
       {:else}
         <button
           type="button"
-          onclick={() => void requestClose()}
-          class="flex-1 border border-white/10 bg-white/4 px-3 py-2 text-[12px] font-medium text-white/55 transition-colors hover:bg-white/7 hover:text-white/75 disabled:opacity-45"
+          onclick={() => void closeCloneRepository()}
+          class="flex-1 border border-(--color-border) bg-(--color-surface-base) px-2 py-1.5 text-(--color-text-secondary) font-bold uppercase tracking-widest transition-all hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary) active:scale-[0.98] disabled:opacity-45"
           disabled={isBusy}
         >
           Close
@@ -453,7 +477,7 @@
         <button
           type="button"
           onclick={() => void handleSaveOnly()}
-          class="flex-1 border border-white/10 bg-white/6 px-3 py-2 text-[12px] font-medium text-white/80 transition-colors hover:bg-white/10 disabled:opacity-45"
+          class="flex-1 border border-(--color-border) bg-(--color-surface-base) px-2 py-1.5 text-(--color-text-primary) font-bold uppercase tracking-widest transition-all hover:bg-(--color-hover-bg-subtle) active:scale-[0.98] disabled:opacity-45"
           disabled={!$validationResult?.can_save || !destinationRoot.trim() || isBusy}
         >
           {#if $isSaving && !$isInstalling}
@@ -465,7 +489,7 @@
         <button
           type="button"
           onclick={() => void handleSaveAndInstall()}
-          class="flex-1 border border-emerald-500/24 bg-emerald-500/14 px-3 py-2 text-[12px] font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/20 disabled:opacity-45"
+          class="flex-1 border border-(--color-accent) bg-(--color-accent) px-2 py-1.5 text-(--color-surface-base) font-bold uppercase tracking-widest transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-45 disabled:grayscale"
           disabled={!$validationResult?.can_safe_install || !destinationRoot.trim() || isBusy}
         >
           {#if $isInstalling}

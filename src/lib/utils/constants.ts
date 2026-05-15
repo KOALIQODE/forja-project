@@ -30,11 +30,6 @@ export const STORAGE_KEYS = {
 
 // === UI Text Constants ===
 export const UI_TEXT = {
-  APP_TITLE: "Forja Studio",
-  APP_SUBTITLE: "Editor",
-  TAGLINE: "Forge your workflow",
-  DESCRIPTION: "A lightweight, modular editor that grows with your needs.",
-
   // Actions
   OPEN_PROJECT: "Open Project",
   NEW_EMPTY_PROJECT: "New Empty Project",

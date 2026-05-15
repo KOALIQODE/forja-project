@@ -23,7 +23,7 @@
   } from "@lucide/svelte";
   import { onMount, untrack } from "svelte";
 
-  import ContextMenu from "../ContextMenu.svelte";
+  import ContextMenu from "./ContextMenu.svelte";
   import FileDrillItem from "./FileDrillItem.svelte";
   import FileTreeItem from "./FileTreeItem.svelte";
   import DependencyValidator from "$lib/components/DependencyValidator.svelte";
@@ -47,18 +47,12 @@
     toggleDepsSidebar,
     validatableEcosystems,
   } from "$lib/stores/DepsStore";
-  import { activeUITheme } from "$lib/stores/uiThemeStore";
   import {
     gitFileStatuses,
     startGitStatusMonitoring,
     stopGitStatusMonitoring,
   } from "$lib/stores/gitStatusStore";
-
-  let themeStyle = $derived(
-    Object.entries($activeUITheme.vars)
-      .map(([k, v]) => `${k}:${v}`)
-      .join(";"),
-  );
+  import { theme } from "$lib/stores/uiThemeStore";
 
   const STORAGE_KEY_VIEW = "forja-explorer-view-mode";
   let viewMode = $state<"drill" | "tree">(
@@ -487,22 +481,22 @@
 </script>
 
 <div
-  class="relative flex shrink-0 flex-col bg-(--forja-ui-explorer-bg,#0a0a0a) text-(--forja-ui-text-secondary,#a1a1aa) select-none h-full transition-colors duration-300 font-sans"
-  data-program-ui
-  style="width: {sidebarWidth}px; {themeStyle}"
+  class="relative flex shrink-0 flex-col bg-(--color-surface-base) text-(--color-text-secondary) select-none h-full transition-colors duration-300 border border-(--color-border)"
+  use:theme
+  style="width: {sidebarWidth}px;"
   onauxclick={(e) => e.preventDefault()}
 >
-  <header class="shrink-0 bg-(--forja-ui-explorer-bg,#0a0a0a) p-3 pb-2">
+  <header class="shrink-0 bg-(--color-surface-base) p-3 pb-2">
     <div class="mb-2 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <h3
-          class="m-0 text-[10px] font-bold tracking-[0.12em] text-(--forja-ui-text-muted,#71717a) uppercase font-sans"
+        <span
+          class="m-0 font-bold text-(--color-text-muted) uppercase"
         >
           Explorer
-        </h3>
+        </span>
         {#if $pinnedPath}
           <span
-            class="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold text-(--forja-ui-text-muted,#52525b) uppercase tracking-tighter"
+            class="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold text-(--color-text-faint) uppercase tracking-tighter"
           >
             <Pin size="10" /> Focus
           </span>
@@ -516,7 +510,7 @@
               type="button"
               onclick={unpin}
               title="Volver a la raíz del proyecto"
-              class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
+              class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
             >
               <PinOff size="13" />
             </button>
@@ -530,8 +524,8 @@
               ? "Validate dependencies before install"
               : "No supported dependency manifests detected yet"}
             class="flex cursor-pointer items-center p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 {showValidator
-              ? 'bg-emerald-500/10 text-emerald-400'
-              : 'hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)'}"
+              ? 'bg-(--color-accent-fill) text-(--color-accent)'
+              : 'hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)'}"
           >
             <ShieldCheck size="13" />
           </button>
@@ -540,7 +534,7 @@
             type="button"
             onclick={toggleTodoSidebar}
             title="Lista de TODOs del proyecto"
-            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
+            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
           >
             <ListTodo size="13" />
           </button>
@@ -549,7 +543,7 @@
             type="button"
             onclick={toggleDepsSidebar}
             title="Project dependencies and security"
-            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
+            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
           >
             <Package size="13" />
           </button>
@@ -558,7 +552,7 @@
             type="button"
             onclick={toggleViewMode}
             title="Cambiar modo de vista"
-            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
+            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
           >
             {#if viewMode === "drill"}<ListTree size="13" />{:else}<LayoutList
                 size="13"
@@ -568,7 +562,7 @@
             type="button"
             onclick={goHome}
             title="Cerrar proyecto"
-            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) hover:text-(--forja-ui-text-primary,#f4f4f5)"
+            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
             ><LogOut size="13" /></button
           >
         </div>
@@ -580,7 +574,7 @@
         {#if viewMode === "drill" && canGoUp && !searchQuery}
           <button
             type="button"
-            class="flex cursor-pointer items-center p-0 text-(--forja-ui-text-muted,#71717a) transition-colors hover:text-(--forja-ui-text-primary,#f4f4f5)"
+            class="flex cursor-pointer items-center p-0 text-(--color-text-muted) transition-colors hover:text-(--color-text-primary)"
             onclick={goUp}
             title="Subir nivel"
           >
@@ -588,7 +582,7 @@
           </button>
         {/if}
         <span
-          class="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold tracking-tight text-(--forja-ui-text-secondary,#a1a1aa) w-full"
+          class="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold tracking-tight text-(--color-text-secondary) w-full"
           title={currentPath}
         >
           <span class="truncate shrink-0"
@@ -596,7 +590,7 @@
           >
           {#if gitBranch}
             <span
-              class="ml-auto flex shrink-0 items-center gap-1 bg-(--forja-ui-btn-hover-bg,rgba(255,255,255,0.05)) px-1.5 py-0.5 text-[10px] font-semibold text-(--forja-ui-text-primary,#f4f4f5)"
+              class="ml-auto flex shrink-0 items-center gap-1 bg-(--color-hover-bg-subtle) px-1.5 py-0.5 text-[10px] font-semibold text-(--color-text-primary)"
             >
               <GitBranch size="11" strokeWidth={2.25} />
               <span>{gitBranch}</span>

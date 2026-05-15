@@ -13,7 +13,7 @@
 {#if $dialogState.activeDialog}
   {#await DIALOG_REGISTRY[$dialogState.activeDialog.id]() then module}
     {@const ActiveDialog = module.default}
-    <div data-program-ui>
+    <div>
       <ActiveDialog
         isOpen={true}
         onClose={handleClose}

@@ -1,22 +1,30 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { Palette, Moon, Sun, Check } from '@lucide/svelte';
-  import { allUIThemes, activeUIThemeId, activeUITheme, setUITheme } from '$lib/stores/uiThemeStore';
-  import { activateThemeByName } from '$lib/stores/pluginStore';
-  import { closeDialog } from '$lib/stores/dialogStore';
+  import { onMount } from "svelte";
+  import { Moon, Sun, Search, X } from "@lucide/svelte";
+  import {
+    allUIThemes,
+    activeUIThemeId,
+    setUITheme,
+    previewUIThemeId,
+  } from "$lib/stores/uiThemeStore";
+  import { activateThemeByName } from "$lib/stores/pluginStore";
+  import { closeDialog } from "$lib/stores/dialogStore";
+  import { theme } from "$lib/stores/uiThemeStore";
 
   let { onClose = closeDialog }: { onClose?: () => void } = $props();
-
-  let themes = $derived($allUIThemes);
-
   let activeId = $derived($activeUIThemeId);
   let selectedIndex = $state(0);
-  $effect(() => {
-    selectedIndex = Math.max(0, $allUIThemes.findIndex((t) => t.id === $activeUIThemeId));
-  });
+  let pickerEl: HTMLElement;
 
-  let themeStyle = $derived(
-    Object.entries($activeUITheme.vars).map(([k, v]) => `${k}:${v}`).join(';')
+  function focus(el: HTMLInputElement) {
+    el.focus();
+  }
+
+  let searchQuery = $state("");
+  let themes = $derived(
+    $allUIThemes.filter((t) =>
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()),
+    ),
   );
 
   function selectTheme(id: string) {
@@ -25,77 +33,88 @@
     onClose();
   }
 
-  function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-      return;
+  $effect(() => {
+    // Reset selected index when searching
+    if (searchQuery) {
+      selectedIndex = 0;
+    } else {
+      selectedIndex = Math.max(
+        0,
+        $allUIThemes.findIndex((t) => t.id === $activeUIThemeId),
+      );
     }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      selectedIndex = (selectedIndex + 1) % themes.length;
-      return;
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      selectedIndex = (selectedIndex - 1 + themes.length) % themes.length;
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      selectTheme(themes[selectedIndex].id);
-      return;
-    }
-  }
-
-  let pickerEl: HTMLElement;
+  });
 
   onMount(() => {
     pickerEl?.focus();
+    return () => {
+      previewUIThemeId.set(null);
+    };
   });
 </script>
 
 <!-- Backdrop -->
 <div
-  class="fixed inset-0 z-[3000] flex justify-center items-start pt-12"
+  class="fixed inset-0 z-3000 flex justify-center items-start pt-12"
   onclick={() => onClose()}
-  onkeydown={handleKeyDown}
   role="presentation"
 >
   <!-- Picker card -->
   <div
-    style={themeStyle}
-    onclick={(e) => e.stopPropagation()}
-    onkeydown={handleKeyDown}
+    use:theme
     bind:this={pickerEl}
     tabindex="-1"
     role="listbox"
     aria-label="Select theme"
-    class="w-[380px] outline-none overflow-hidden
-           bg-(--forja-ui-picker-bg,#0e0e11)
-           border border-(--forja-ui-picker-border,#2a2a2e)
-           [box-shadow:0_24px_64px_rgba(0,0,0,0.90),0_8px_24px_rgba(0,0,0,0.70)]
+    class="w-100 outline-none overflow-hidden
+           bg-(--color-surface-base)
+           font-semibold
+           border border-(--color-border)
            animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
-    data-dialog-shell
   >
     <!-- Header -->
-    <header class="flex items-center gap-2 px-3.5 pt-3 pb-2.5
-                   border-b border-(--forja-ui-picker-border,#2a2a2e)">
-      <Palette size="13" class="shrink-0 text-(--forja-ui-picker-active-text,#34d399)" />
-      <span class="flex-1 text-[10px] font-semibold tracking-[0.08em] uppercase
-                   text-(--forja-ui-picker-text,#a1a1aa)">
-        Select Theme
-      </span>
-      <kbd class="text-[9px] font-mono px-1.5 py-0.5 opacity-50
-                  bg-white/6 border border-white/10
-                  text-(--forja-ui-picker-text,#a1a1aa)">
-        Ctrl K → T
-      </kbd>
+    <header
+      class="flex items-center gap-3 px-4 py-2.5 border-b border-(--color-border)"
+    >
+      <div
+        class="relative flex flex-1 items-center px-1"
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.stopPropagation();
+          }
+        }}
+      >
+        <Search
+          strokeWidth={2.5}
+          size="1.2em"
+          class="absolute left-1 text-(--color-text-secondary)"
+        />
+        <input
+          type="text"
+          use:focus
+          bind:value={searchQuery}
+          placeholder="Search themes…"
+          class="w-full bg-transparent pl-6 outline-none text-(--color-text-primary) placeholder:text-(--color-text-secondary)"
+          onclick={(e) => e.stopPropagation()}
+        />
+      </div>
+
+      <button
+        onclick={() => onClose()}
+        class="flex h-6 w-6 items-center justify-center text-(--color-text-muted) hover:text-(--color-text-primary) transition-colors"
+      >
+        <X size={14} />
+      </button>
     </header>
 
     <!-- Theme list -->
-    <ul class="list-none m-0 p-1.5 flex flex-col gap-0.5" role="presentation">
+    <ul
+      class="list-none m-0 flex flex-col"
+      role="presentation"
+      onmouseleave={() => previewUIThemeId.set(null)}
+    >
       {#each themes as theme, i}
         {@const isActive = theme.id === activeId}
         {@const isFocused = i === selectedIndex}
@@ -103,67 +122,70 @@
           <button
             type="button"
             onclick={() => selectTheme(theme.id)}
-            onmouseenter={() => { selectedIndex = i; }}
+            onmouseenter={() => {
+              selectedIndex = i;
+              previewUIThemeId.set(theme.id);
+            }}
             role="option"
             aria-selected={isActive}
-            style={isActive ? `border-color: color-mix(in srgb, var(--forja-ui-picker-active-text, #34d399) 30%, transparent)` : ''}
-            class="flex items-center gap-2.5 w-full px-2.5 py-[9px] cursor-pointer text-left
+            class="flex items-center gap-2.5 w-full px-2.5 py-2.25 cursor-pointer text-left
                    border border-transparent transition-[background,border-color] duration-100
-                   text-(--forja-ui-picker-text,#a1a1aa)
-                   {isFocused || isActive ? 'bg-(--forja-ui-picker-item-hover,rgba(255,255,255,0.05))' : 'bg-transparent'}
-                   {isActive ? 'bg-(--forja-ui-picker-active,rgba(52,211,153,0.12))' : ''}"
+                   {isFocused || isActive
+              ? 'text-(--color-text-primary) bg-(--color-accent-fill)'
+              : 'text-(--color-text-secondary) hover:bg-(--color-hover-bg-subtle)'}"
           >
             <!-- Color swatch -->
             <span
-              class="w-7 h-5 border-2 shrink-0 flex items-center justify-center"
+              class="w-4 h-3 border-2 shrink-0 flex items-center justify-center"
               style:background={theme.preview.bg}
               style:border-color={theme.preview.accent}
             >
-              <span class="w-1.5 h-1.5" style:background={theme.preview.accent}></span>
+              <span class="w-1.5 h-1.5" style:background={theme.preview.accent}
+              ></span>
             </span>
 
             <!-- Theme name -->
-            <span class="flex-1 text-xs font-medium transition-colors
+            <span
+              class="flex-1 transition-colors
                          {isActive || isFocused
-                           ? 'text-(--forja-ui-text-primary,#f4f4f5)'
-                           : 'text-(--forja-ui-picker-text,#a1a1aa)'}">
+                ? 'text-(--color-text-primary)'
+                : 'text-(--color-text-secondary)'}"
+            >
               {theme.name}
             </span>
 
             <!-- Kind badge -->
-            <span class="flex items-center gap-1 text-[9px] tracking-[0.06em] uppercase opacity-55
-                         text-(--forja-ui-picker-text,#a1a1aa)">
-              {#if theme.kind === 'dark'}
-                <Moon size="10" />
+            <h6
+              class="flex items-center gap-1 uppercase
+                         text-(--color-text-secondary)"
+            >
+              {#if theme.kind === "dark"}
+                <Moon strokeWidth={2.5} size="1.2em" />
               {:else}
-                <Sun size="10" />
+                <Sun strokeWidth={2.5} size="1.2em" />
               {/if}
               {theme.kind}
-            </span>
-
-            <!-- Active checkmark -->
-            {#if isActive}
-              <Check size="12" class="shrink-0 text-(--forja-ui-picker-active-text,#34d399)" />
-            {/if}
+            </h6>
           </button>
+        </li>
+      {:else}
+        <li class="px-4 py-5 text-center text-(--color-text-secondary)">
+          No themes found matching "{searchQuery}"
         </li>
       {/each}
     </ul>
-
-    <!-- Footer hints -->
-    <footer class="flex gap-4 px-3.5 py-2 border-t opacity-50
-                   border-(--forja-ui-picker-border,#2a2a2e)
-                   text-[9px] text-(--forja-ui-picker-text,#a1a1aa)">
-      <span>↑↓ navigate</span>
-      <span>↵ select</span>
-      <span>esc close</span>
-    </footer>
   </div>
 </div>
 
 <style>
   @keyframes picker-in {
-    from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-    to   { opacity: 1; transform: translateY(0)    scale(1);    }
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 </style>

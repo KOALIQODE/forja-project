@@ -171,6 +171,7 @@ pub fn run() {
             commands::explorer::search_files,
             commands::explorer::search_in_files,
             commands::explorer::get_files_git_status,
+            commands::explorer::get_git_statuses_map,
             commands::explorer::get_project_todos,
             commands::explorer::explore_directory,
             commands::explorer::watch_directory,
