@@ -174,7 +174,7 @@
         onclick={(e) => e.stopPropagation()}
       />
     {:else}
-      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium transition-colors group-hover:text-(--forja-ui-text-primary,#f4f4f5)"
+      <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-medium transition-colors group-hover:text-(--forja-ui-text-primary,#f4f4f5)"
             style={reactiveGitStatus === 'modified' ? 'color: var(--forja-ui-git-modified, #fb923c)' : reactiveGitStatus === 'added' ? 'color: var(--forja-ui-git-added, #4ade80)' : reactiveGitStatus === 'renamed' ? 'color: var(--forja-ui-git-renamed, #60a5fa)' : reactiveGitStatus === 'deleted' ? 'color: var(--forja-ui-git-deleted, #f87171)' : reactiveGitStatus === 'untracked' ? 'color: var(--forja-ui-text-muted, #71717a)' : $activeBufferId === entry.path ? 'color: var(--forja-ui-text-primary, #f4f4f5)' : 'color: var(--forja-ui-text-secondary, #a1a1aa)'}>
         {entry.name}
       </span>

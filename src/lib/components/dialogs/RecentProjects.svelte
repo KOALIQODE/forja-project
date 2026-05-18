@@ -80,7 +80,7 @@
             >
               <FolderOpen
                 strokeWidth={2.5}
-                size="1em"
+                size="1.2em"
                 class="shrink-0 text-(--color-text-primary)"
               />
 

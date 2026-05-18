@@ -1804,7 +1804,7 @@
 
 <div
     bind:this={editorContainer}
-    class="relative h-full w-full flex flex-col font-mono text-sm overflow-hidden"
+    class="relative h-full w-full flex flex-col font-mono text-sm overflow-hidden outline-none"
     data-buffer-ui
     data-vim-mode={vimMode}
     role="textbox"

@@ -201,29 +201,29 @@
     onclick={(event) => event.stopPropagation()}
     onkeydown={handleKeyDown}
     use:theme
-    class="w-[680px] font-semibold max-w-[calc(100vw-32px)] bg-(--color-surface-base) text-(--color-text-primary) outline-none border border-(--color-border) animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
+    class="w-170 font-semibold max-w-[calc(100vw-32px)] bg-(--color-surface-base) text-(--color-text-primary) outline-none border border-(--color-border) animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
   >
     <header class="flex items-center gap-3 px-4 py-2.5 border-b border-(--color-border)">
-      <div class="flex w-[172px] shrink-0 items-center">
+      <div class="flex shrink-0 items-center">
         <span id="clone-repository-title" class="text-(--color-text-primary)">Clone Repository</span>
       </div>
-      <div class="w-[1px] h-3 bg-(--color-border) shrink-0"></div>
+      <div class="w-px h-3 bg-(--color-border) shrink-0"></div>
       
       <div class="flex flex-1 items-center gap-3 px-1">
         {#if $isCloning}
-          <Loader2 size={13} class="text-(--color-accent) animate-spin shrink-0" />
-          <span class="text-(--color-text-primary) font-bold uppercase tracking-[0.14em]">Clonando...</span>
+          <Loader2 strokeWidth={2.5} size="1em" class="text-(--color-accent) animate-spin shrink-0" />
+          <span class="text-(--color-text-primary)">Clonando...</span>
         {:else if $validationResult}
-          <ShieldCheck size={13} class="text-emerald-400 shrink-0" />
-          <span class="text-(--color-text-primary) font-bold uppercase tracking-[0.14em]">Validación completada</span>
+          <ShieldCheck strokeWidth={2.5} size="1em" class="text-emerald-400 shrink-0" />
+          <span class="text-(--color-text-primary)">Validación completada</span>
         {:else}
-          <Download size={13} class="text-(--color-text-muted) shrink-0" />
-          <span class="text-(--color-text-primary) font-bold uppercase tracking-[0.14em]">Preparar clon</span>
+          <Download strokeWidth={2.5} size="1em" class="text-(--color-text-primary) shrink-0" />
+          <span class="text-(--color-text-primary)">Preparar clon</span>
         {/if}
       </div>
 
       <button onclick={closeCloneRepository} class="flex h-6 w-6 items-center justify-center text-(--color-text-muted) hover:text-(--color-text-primary) transition-colors">
-        <X size={14} />
+        <X strokeWidth={2.5} size="1.2em" />
       </button>
     </header>
 
