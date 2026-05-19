@@ -295,7 +295,9 @@
   function toggleViewMode() {
     if (!hasProject) return;
     viewMode = viewMode === "drill" ? "tree" : "drill";
-    if (viewMode === "tree" && effectiveRoot) {
+    
+    // Only reload if we are switching to tree mode and don't have the root cached
+    if (viewMode === "tree" && effectiveRoot && !directoryCache.get(effectiveRoot)) {
       loadDirectory(effectiveRoot);
     }
   }
@@ -482,15 +484,14 @@
 
 <div
   class="relative flex shrink-0 flex-col bg-(--color-surface-base) text-(--color-text-secondary) select-none h-full transition-colors duration-300 border border-(--color-border)"
-  use:theme
   style="width: {sidebarWidth}px;"
   onauxclick={(e) => e.preventDefault()}
 >
-  <header class="shrink-0 bg-(--color-surface-base) p-3 pb-2">
+  <header class="shrink-0 bg-(--color-surface-base) p-3 pb-2" use:theme>
     <div class="mb-2 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <span
-          class="m-0 font-bold text-(--color-text-muted) uppercase"
+          class="m-0 font-bold text-(--color-text-secondary) uppercase"
         >
           Explorer
         </span>
@@ -504,19 +505,19 @@
       </div>
 
       {#if hasProject}
-        <div class="flex items-center gap-0.5">
+        <div class="flex items-center gap-0.5 text-(--color-text-secondary)">
           {#if $pinnedPath}
             <button
               type="button"
               onclick={unpin}
               title="Volver a la raíz del proyecto"
-              class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
+              class="flex cursor-pointer items-center p-1.5 transition-colors hover:text-(--color-text-primary)"
             >
               <PinOff size="13" />
             </button>
           {/if}
 
-          <button
+          <!-- <button
             type="button"
             disabled={!canOpenDependencyValidator}
             onclick={() => (showValidator = !showValidator)}
@@ -524,35 +525,35 @@
               ? "Validate dependencies before install"
               : "No supported dependency manifests detected yet"}
             class="flex cursor-pointer items-center p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 {showValidator
-              ? 'bg-(--color-accent-fill) text-(--color-accent)'
-              : 'hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)'}"
+              ? 'text-(--color-accent)'
+              : 'hover:text-(--color-text-primary)'}"
           >
             <ShieldCheck size="13" />
-          </button>
+          </button> -->
 
           <button
             type="button"
             onclick={toggleTodoSidebar}
             title="Lista de TODOs del proyecto"
-            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
+            class="flex cursor-pointer items-center p-1.5 transition-colors hover:text-(--color-text-primary)"
           >
             <ListTodo size="13" />
           </button>
 
-          <button
+          <!-- <button
             type="button"
             onclick={toggleDepsSidebar}
             title="Project dependencies and security"
-            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
+            class="flex cursor-pointer items-center p-1.5 transition-colors hover:text-(--color-text-primary)"
           >
             <Package size="13" />
-          </button>
+          </button> -->
 
           <button
             type="button"
             onclick={toggleViewMode}
             title="Cambiar modo de vista"
-            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
+            class="flex cursor-pointer items-center p-1.5 transition-colors hover:text-(--color-text-primary)"
           >
             {#if viewMode === "drill"}<ListTree size="13" />{:else}<LayoutList
                 size="13"
@@ -562,7 +563,7 @@
             type="button"
             onclick={goHome}
             title="Cerrar proyecto"
-            class="flex cursor-pointer items-center p-1.5 transition-colors hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
+            class="flex cursor-pointer items-center p-1.5 transition-colors hover:text-(--color-text-primary)"
             ><LogOut size="13" /></button
           >
         </div>

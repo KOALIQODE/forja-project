@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { theme } from "$lib/stores/uiThemeStore";
 
   interface Option {
     label: string;
@@ -48,29 +49,29 @@
 
 <div
   bind:this={menuElement}
+  use:theme
   transition:fade={{ duration: 100 }}
-  class="fixed z-[999] min-w-[160px] overflow-hidden border border-zinc-800 bg-[#121212]/95 p-1 shadow-2xl"
+  class="font-semibold fixed z-999 min-w-50 overflow-hidden border border-(--color-border) bg-(--color-surface-base) shadow-2xl"
   style="left: {x}px; top: {y}px;"
 >
   {#each options as option}
     {#if option.separator}
-      <div class="my-1 h-[1px] bg-zinc-800/60"></div>
+      <div class="my-1 h-px bg-(--color-sep)"></div>
     {:else}
       <button
         type="button"
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] transition-colors
-               {option.danger ? 'text-red-400 hover:bg-red-500/10' : 'text-zinc-300 hover:bg-white/5 hover:text-zinc-100'}"
+        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors text-(--color-text-primary) hover:bg-(--color-hover-bg-subtle) hover:text-(--color-text-primary)"
         onclick={() => {
           option.onClick();
           close();
         }}
       >
-        {#if option.icon}
+        <!-- {#if option.icon}
           <span class="flex w-4 items-center justify-center opacity-70">
             <option.icon size="14" />
           </span>
-        {/if}
-        <span class="flex-1">{option.label}</span>
+        {/if} -->
+        <h6 class="flex-1">{option.label}</h6>
       </button>
     {/if}
   {/each}

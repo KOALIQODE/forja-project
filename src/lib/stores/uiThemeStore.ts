@@ -40,15 +40,13 @@ function loadStoredThemeId(): string {
 }
 
 export const theme: Action = (node) => {
-  function applyTheme() {
-    const current = get(activeUITheme);
-    if (!current) return; // todavía cargando
+  const unsubscribe = activeUITheme.subscribe((current) => {
+    if (!current) return;
     for (const [key, value] of Object.entries(current.vars)) {
       node.style.setProperty(key, value);
     }
-  }
-  applyTheme();
-  const unsubscribe = activeUITheme.subscribe(applyTheme);
+  });
+
   return {
     destroy() {
       unsubscribe();
