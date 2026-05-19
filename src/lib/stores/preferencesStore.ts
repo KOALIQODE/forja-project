@@ -55,9 +55,11 @@ export interface ProgramPreferences {
 export interface BufferPreferences {
   fontFamily: string;
   fontSize: number;
+  fontWeight: string;
   lineHeight: number;
   vimModeEnabled: boolean;
   showLineNumbers: boolean;
+  relativeLineNumbers: boolean;
   highlightActiveLine: boolean;
   softWrapEnabled: boolean;
 }
@@ -83,9 +85,11 @@ export const DEFAULT_PROGRAM_PREFERENCES: ProgramPreferences = {
 export const DEFAULT_BUFFER_PREFERENCES: BufferPreferences = {
   fontFamily: BUFFER_FONT_OPTIONS[0].value,
   fontSize: 13,
+  fontWeight: 'normal',
   lineHeight: 22,
   vimModeEnabled: false,
   showLineNumbers: true,
+  relativeLineNumbers: false,
   highlightActiveLine: true,
   softWrapEnabled: true,
 };
@@ -144,6 +148,10 @@ function sanitizeBufferPreferences(value: Partial<BufferPreferences>): BufferPre
         ? value.fontFamily
         : DEFAULT_BUFFER_PREFERENCES.fontFamily,
     fontSize: clamp(Number(value.fontSize ?? DEFAULT_BUFFER_PREFERENCES.fontSize), 11, 24),
+    fontWeight:
+      typeof value.fontWeight === 'string' && value.fontWeight.trim()
+        ? value.fontWeight
+        : DEFAULT_BUFFER_PREFERENCES.fontWeight,
     lineHeight: clamp(Number(value.lineHeight ?? DEFAULT_BUFFER_PREFERENCES.lineHeight), 18, 34),
     vimModeEnabled:
       typeof value.vimModeEnabled === 'boolean'
@@ -153,6 +161,10 @@ function sanitizeBufferPreferences(value: Partial<BufferPreferences>): BufferPre
       typeof value.showLineNumbers === 'boolean'
         ? value.showLineNumbers
         : DEFAULT_BUFFER_PREFERENCES.showLineNumbers,
+    relativeLineNumbers:
+      typeof value.relativeLineNumbers === 'boolean'
+        ? value.relativeLineNumbers
+        : DEFAULT_BUFFER_PREFERENCES.relativeLineNumbers,
     highlightActiveLine:
       typeof value.highlightActiveLine === 'boolean'
         ? value.highlightActiveLine
@@ -187,6 +199,7 @@ function applyBufferPreferences(preferences: BufferPreferences) {
 
   const root = document.documentElement;
   root.style.setProperty('--forja-buffer-font-family', preferences.fontFamily);
+  root.style.setProperty('--forja-buffer-font-weight', preferences.fontWeight);
   root.style.setProperty('--forja-buffer-font-size', `${preferences.fontSize}px`);
   root.style.setProperty('--forja-buffer-line-height', `${preferences.lineHeight}px`);
 }

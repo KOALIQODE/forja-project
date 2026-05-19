@@ -79,6 +79,22 @@
     let { filePath, bufferId, language }: Props = $props();
 
     const { CHUNK_SIZE } = EDITOR_CONFIG;
+    type VimNavigationKey = "h" | "j" | "k" | "l";
+
+    const INSERT_UNDO_GROUP_TIMEOUT_MS = 1200;
+    const EDIT_IDLE_ANALYSIS_DELAY_MS = 140;
+    const POST_EDIT_DECORATION_DELAY_MS = 220;
+
+    const VIM_NAVIGATION_KEY_BY_EVENT_KEY: Record<string, VimNavigationKey | undefined> = {
+        h: "h",
+        j: "j",
+        k: "k",
+        l: "l",
+        ArrowLeft: "h",
+        ArrowDown: "j",
+        ArrowUp: "k",
+        ArrowRight: "l",
+    };
 
     let canvas: HTMLCanvasElement | null = $state(null);
     let scrollContainer: HTMLElement | null = $state(null);
@@ -196,6 +212,7 @@
     }
 
     let lineCache = new Map<number, string>();
+    let documentRevision = $state(0);
 
     // ── Diff gutter state ────────────────────────────────────────────────────────
     let mouseX             = $state(0);
@@ -236,6 +253,7 @@
         docBridge,
         diffScheduler,
         onQueueRedraw: () => queueRedraw(),
+        onLineCacheChanged: () => { documentRevision += 1; },
         onSetWrapLayoutDirty: (v) => { wrapLayoutDirty = v; },
     });
 
@@ -249,11 +267,13 @@
 
     let editorFontFamily = $derived($bufferPreferences.fontFamily);
     let editorFontSize = $derived($bufferPreferences.fontSize);
+    let editorFontWeight = $derived($bufferPreferences.fontWeight);
     let editorLineHeight = $derived($bufferPreferences.lineHeight);
     let vimModeEnabled = $derived($bufferPreferences.vimModeEnabled);
     let showLineNumbers = $derived($bufferPreferences.showLineNumbers);
+    let relativeLineNumbers = $derived($bufferPreferences.relativeLineNumbers);
     let highlightActiveLine = $derived($bufferPreferences.highlightActiveLine);
-    let editorFont = $derived(`${editorFontSize}px ${editorFontFamily}`);
+    let editorFont = $derived(`${editorFontWeight} ${editorFontSize}px ${editorFontFamily}`);
     let lineNumberDigits = $derived(String(Math.max(totalLines, 1)).length);
     let gutterWidth = $derived(showLineNumbers ? Math.max(56, lineNumberDigits * 10 + 24) : 16);
     let lineNumberX = $derived(gutterWidth - 12);
@@ -269,6 +289,12 @@
 
     let undoStack: EditorSnapshot[] = [];
     let redoStack: EditorSnapshot[] = [];
+    let insertUndoGroupOpen = false;
+    let lastInsertUndoGroupEditAt = 0;
+    let deferredDiffTimer: ReturnType<typeof setTimeout> | null = null;
+    let deferredDiffRange: { start: number; end: number } | null = null;
+    let postEditDecorationTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastDocumentEditAt = 0;
 
     const DEFAULT_VIM_REGISTER: VimRegister = { text: "", linewise: false };
     const vimRegisters = new Map<string, VimRegister>([['"', { ...DEFAULT_VIM_REGISTER }]]);
@@ -299,8 +325,10 @@
     $effect(() => {
         editorFontFamily;
         editorFontSize;
+        editorFontWeight;
         editorLineHeight;
         showLineNumbers;
+        relativeLineNumbers;
         highlightActiveLine;
         // Phase 5: font changed → all cached measurements are stale
         metricsCache.invalidateAll();
@@ -390,8 +418,72 @@
         redoStack = [];
     }
 
+    function closeInsertUndoGroup() {
+        insertUndoGroupOpen = false;
+        lastInsertUndoGroupEditAt = 0;
+    }
+
+    function prepareUndoSnapshotForMutation(now = performance.now()) {
+        const isInsertMutation = vimMode === "insert";
+        if (!isInsertMutation) {
+            closeInsertUndoGroup();
+            pushUndoSnapshot();
+            return;
+        }
+
+        if (!insertUndoGroupOpen || now - lastInsertUndoGroupEditAt > INSERT_UNDO_GROUP_TIMEOUT_MS) {
+            pushUndoSnapshot();
+            insertUndoGroupOpen = true;
+        }
+        lastInsertUndoGroupEditAt = now;
+    }
+
+    function schedulePostEditDecorationRedraw() {
+        if (postEditDecorationTimer !== null) clearTimeout(postEditDecorationTimer);
+        postEditDecorationTimer = setTimeout(() => {
+            postEditDecorationTimer = null;
+            wrapLayoutDirty = true;
+            queueRedraw();
+        }, POST_EDIT_DECORATION_DELAY_MS);
+    }
+
+    function scheduleDiffNotification(startLine: number, endLine: number, defer: boolean) {
+        if (!defer) {
+            if (deferredDiffTimer !== null) clearTimeout(deferredDiffTimer);
+            deferredDiffTimer = null;
+            deferredDiffRange = null;
+            diffScheduler.notifyEdit(lineCache, totalLines, startLine, endLine);
+            return;
+        }
+
+        diffScheduler.updateCurrentContent(lineCache, totalLines);
+        deferredDiffRange = deferredDiffRange
+            ? {
+                start: Math.min(deferredDiffRange.start, startLine),
+                end: Math.max(deferredDiffRange.end, endLine),
+            }
+            : { start: startLine, end: endLine };
+
+        if (deferredDiffTimer !== null) clearTimeout(deferredDiffTimer);
+        deferredDiffTimer = setTimeout(() => {
+            deferredDiffTimer = null;
+            const range = deferredDiffRange;
+            deferredDiffRange = null;
+            if (range) diffScheduler.notifyEdit(lineCache, totalLines, range.start, range.end);
+        }, EDIT_IDLE_ANALYSIS_DELAY_MS);
+    }
+
+    function flushDeferredDiff() {
+        if (deferredDiffTimer !== null) clearTimeout(deferredDiffTimer);
+        deferredDiffTimer = null;
+        const range = deferredDiffRange;
+        deferredDiffRange = null;
+        if (range) diffScheduler.notifyEdit(lineCache, totalLines, range.start, range.end);
+    }
+
     function restoreSnapshot(snapshot: EditorSnapshot) {
         lineCache = new Map(snapshot.lineCache);
+        documentRevision += 1;
         totalLines = snapshot.totalLines;
         cursorLine = snapshot.cursorLine;
         cursorChar = snapshot.cursorChar;
@@ -444,6 +536,8 @@
     }
 
     function undo() {
+        closeInsertUndoGroup();
+        flushDeferredDiff();
         const snapshot = undoStack.pop();
         if (!snapshot) return;
 
@@ -454,6 +548,8 @@
     }
 
     function redo() {
+        closeInsertUndoGroup();
+        flushDeferredDiff();
         const snapshot = redoStack.pop();
         if (!snapshot) return;
         undoStack.push(cloneSnapshot());
@@ -484,6 +580,7 @@
     }
 
     function setCursor(line: number, char: number) {
+        if (vimMode === "insert") closeInsertUndoGroup();
         cursorLine = clampLine(line);
         cursorChar = clampChar(cursorLine, char);
         ensureCursorVisible();
@@ -524,6 +621,8 @@
     }
 
     function enterNormalMode(fromInsert = false) {
+        closeInsertUndoGroup();
+        flushDeferredDiff();
         vimMode = "normal";
         commandLine = "";
         visualAnchor = null;
@@ -536,16 +635,21 @@
         normalizeCursor();
         normalizeNormalCursor();
         syncVimStatus();
+        queueRedraw();
     }
 
     function enterInsertMode() {
+        closeInsertUndoGroup();
         vimMode = "insert";
         commandLine = "";
         clearPendingState();
         syncVimStatus();
+        queueRedraw();
     }
 
     function enterVisualMode() {
+        closeInsertUndoGroup();
+        flushDeferredDiff();
         vimMode = "visual";
         visualAnchor = currentPosition();
         clearPendingState();
@@ -554,6 +658,8 @@
     }
 
     function enterCommandMode(initial = "") {
+        closeInsertUndoGroup();
+        flushDeferredDiff();
         vimMode = "command";
         commandLine = initial;
         clearPendingState();
@@ -623,9 +729,12 @@
     }
 
     async function mutateDocument(mutation: () => void) {
-        pushUndoSnapshot();
+        const mutationStart = performance.now();
+        prepareUndoSnapshotForMutation(mutationStart);
         const preMutationLines = totalLines;
         mutation();
+        lastDocumentEditAt = mutationStart;
+        documentRevision += 1;
         normalizeCursor();
         if (vimModeEnabled && vimMode !== "insert") {
             normalizeNormalCursor();
@@ -641,18 +750,17 @@
         }
         // Trigger an immediate redraw so the edit appears in the next frame
         // (text is visible right away; highlighting follows after the debounce).
-        wrapLayoutDirty = true;
+        if (totalLines !== preMutationLines || vimMode !== "insert") {
+            wrapLayoutDirty = true;
+        }
         queueRedraw();
+        schedulePostEditDecorationRedraw();
         scheduleBracketUpdate();
         // Debounced: coalesces rapid keystrokes into a single highlight IPC call.
         highlightManager.scheduleHighlightRefresh(editChunk);
-        // Diff: notify incremental edit (±5 lines window around cursor)
-        diffScheduler.notifyEdit(
-            lineCache,
-            totalLines,
-            Math.max(0, cursorLine - 5),
-            Math.min(totalLines - 1, cursorLine + 5),
-        );
+        const diffStart = Math.max(0, cursorLine - 5);
+        const diffEnd = Math.min(totalLines - 1, cursorLine + 5);
+        scheduleDiffNotification(diffStart, diffEnd, vimMode === "insert");
     }
 
     function shiftLinesUp(startLine: number, amount: number) {
@@ -821,7 +929,6 @@
             const count = await invoke<number>("get_total_lines", {
                 path: filePath,
             });
-            console.log(`fetchTotalLines: ${count} lines for ${filePath}`);
             totalLines = count;
             scheduleBracketUpdate();
             return count;
@@ -866,9 +973,15 @@
         }
     });
 
+    let drawLoopId: number | null = null;
+
+    function scheduleDrawFrame() {
+        drawLoopId = requestAnimationFrame(draw);
+    }
+
     function draw() {
         if (!canvas || !scrollContainer) {
-            requestAnimationFrame(draw);
+            scheduleDrawFrame();
             return;
         }
 
@@ -880,6 +993,7 @@
             currentScrollTop,
             softWrapEnabled,
             lineCache,
+            documentRevision,
             totalLines,
             cursorLine,
             cursorChar,
@@ -888,6 +1002,7 @@
             mouseLine,
             highlightActiveLine,
             showLineNumbers,
+            relativeLineNumbers,
             cursorVisible,
             highlightEnabled: highlightManager.highlightEnabled,
             lastWrapCharWidth,
@@ -899,6 +1014,7 @@
             chunkRenderer,
             viewportDiffCache,
             diagByLine,
+            deferExpensiveDecorations: performance.now() - lastDocumentEditAt < POST_EDIT_DECORATION_DELAY_MS,
             editorFont,
             editorFontSize,
             editorFontFamily,
@@ -920,7 +1036,7 @@
             tokenCache: highlightManager.tokenCache,
             bracketColors,
             blameCache,
-            scheduleNextFrame: () => requestAnimationFrame(draw),
+            scheduleNextFrame: scheduleDrawFrame,
         };
 
         const mutations: DrawMutations = {
@@ -1413,10 +1529,42 @@
         ensureCursorVisible,
     };
 
+    const pressedVimNavigationKeys = new Set<VimNavigationKey>();
+
+    function normalizeVimNavigationKey(key: string): VimNavigationKey | null {
+        return VIM_NAVIGATION_KEY_BY_EVENT_KEY[key] ?? null;
+    }
+
+    function isPlainVimNavigationEvent(e: KeyboardEvent) {
+        return !e.ctrlKey && !e.metaKey && !e.altKey && normalizeVimNavigationKey(e.key) !== null;
+    }
+
+    function handleEditorKeyUp(e: KeyboardEvent) {
+        const key = normalizeVimNavigationKey(e.key);
+        if (key) pressedVimNavigationKeys.delete(key);
+    }
+
+    function clearPressedVimNavigationKeys() {
+        pressedVimNavigationKeys.clear();
+    }
+
+    function shouldIgnoreReleasedVimRepeat(e: KeyboardEvent) {
+        const key = normalizeVimNavigationKey(e.key);
+        return e.repeat && key !== null && !pressedVimNavigationKeys.has(key);
+    }
+
     async function handleEditorKeyDown(e: KeyboardEvent) {
-        let activeDlg = false;
-        dialogState.subscribe((s) => (activeDlg = !!s.activeDialog))();
-        if (activeDlg) return;
+        if ($dialogState.activeDialog) return;
+
+        if (vimModeEnabled && (vimMode === "normal" || vimMode === "visual") && isPlainVimNavigationEvent(e)) {
+            const key = normalizeVimNavigationKey(e.key);
+            if (key && !e.repeat) {
+                pressedVimNavigationKeys.add(key);
+            } else if (shouldIgnoreReleasedVimRepeat(e)) {
+                e.preventDefault();
+                return;
+            }
+        }
 
         cursorVisible = true;
 
@@ -1447,17 +1595,18 @@
                 const diffEnd   = diffStart + Math.ceil(scrollContainer.clientHeight / editorLineHeight) + 2;
                 viewportDiffCache.scroll(diffStart, diffEnd);
                 
-                console.log(`[scroll] scrollTop=${newScroll} startLine=${Math.floor(newScroll / editorLineHeight)}`);
                 prefetchNearbyChunks(); // ← agregar esto
             }
         }
     }
     
     let fetchLoopId: number;
+    let lastFetchLoopAt = 0;
     
     function startFetchLoop() {
-        const tick = () => {
-            if (canvas && scrollContainer && totalLines > 0) {
+        const tick = (now = performance.now()) => {
+            if (now - lastFetchLoopAt >= 120 && canvas && scrollContainer && totalLines > 0) {
+                lastFetchLoopAt = now;
                 const currentStart = Math.floor(currentScrollTop / editorLineHeight);
                 const visibleLines = Math.ceil(scrollContainer.clientHeight / editorLineHeight);
     
@@ -1609,8 +1758,14 @@
     });
     
     function resetAndLoad(path: string) {
-        console.trace("[EditorBuffer] resetAndLoad called for:", path);
+        closeInsertUndoGroup();
+        flushDeferredDiff();
+        if (postEditDecorationTimer !== null) {
+            clearTimeout(postEditDecorationTimer);
+            postEditDecorationTimer = null;
+        }
         lineCache.clear();
+        documentRevision += 1;
         highlightManager.reset();
         undoStack = [];
         redoStack = [];
@@ -1676,6 +1831,7 @@
                 allLines.forEach((line, i) => {
                     if (!lineCache.has(i)) lineCache.set(i, line);
                 });
+                documentRevision += 1;
             } else {
                 console.warn('[LSP] Could not open document:', contentResult.reason);
             }
@@ -1747,8 +1903,9 @@
         queueRedraw();
     }
 
-    onMount(async () => {
-        requestAnimationFrame(draw);
+    onMount(() => {
+        let mounted = true;
+        scheduleDrawFrame();
         startFetchLoop();
         // Only load here if the $effect below hasn't already loaded (order of
         // $effect vs onMount in Svelte 5 is not guaranteed on first render).
@@ -1780,20 +1937,32 @@
         let cleanupListeners: (() => void) | null = null;
         // Register listeners before starting backend watcher to avoid races where
         // the watcher emits events before the frontend has attached handlers.
-        cleanupListeners = await setupEventListeners();
-        try {
-            await invoke("watch_directory", {
-                path: filePath.substring(0, filePath.lastIndexOf("/")),
-            });
-        } catch (e) {
-            console.error("Failed to start directory watcher:", e);
-        }
+        void (async () => {
+            try {
+                const cleanup = await setupEventListeners();
+                if (!mounted) {
+                    cleanup();
+                    return;
+                }
+                cleanupListeners = cleanup;
+                await invoke("watch_directory", {
+                    path: filePath.substring(0, filePath.lastIndexOf("/")),
+                });
+            } catch (e) {
+                console.error("Failed to start directory watcher:", e);
+            }
+        })();
 
         return () => {
+            mounted = false;
+            if (drawLoopId !== null) cancelAnimationFrame(drawLoopId);
             cancelAnimationFrame(fetchLoopId);
+            if (deferredDiffTimer !== null) clearTimeout(deferredDiffTimer);
+            if (postEditDecorationTimer !== null) clearTimeout(postEditDecorationTimer);
             resizeObserver.disconnect();
             unsubDiff();
             diffScheduler.dispose();
+            clearPressedVimNavigationKeys();
             cleanupListeners?.();
             void docBridge.close();
             void lspCloseDocument(language, filePath);
@@ -1810,7 +1979,7 @@
     role="textbox"
     aria-label="Code editor"
     aria-multiline="true"
-    style="background: {editorBgColor}; font-family: {editorFontFamily}; --eb-bg: {editorBgColor}; --eb-scrollbar-thumb: {editorScrollbarThumb}; --eb-scrollbar-hover: {editorFgColor};"
+    style="background: {editorBgColor}; font-family: {$bufferPreferences.fontFamily}; font-weight: {$bufferPreferences.fontWeight}; font-size: {$bufferPreferences.fontSize}px; line-height: {$bufferPreferences.lineHeight}px; --eb-bg: {editorBgColor}; --eb-scrollbar-thumb: {editorScrollbarThumb}; --eb-scrollbar-hover: {editorFgColor};"
     onkeydown={(e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === "s") {
             e.preventDefault();
@@ -1819,6 +1988,8 @@
             void handleEditorKeyDown(e);
         }
     }}
+    onkeyup={handleEditorKeyUp}
+    onblur={clearPressedVimNavigationKeys}
     tabindex="0"
 >
     <!-- File Info (top-right) -->

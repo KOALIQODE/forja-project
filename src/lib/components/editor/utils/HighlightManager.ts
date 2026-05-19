@@ -7,7 +7,7 @@ import { DocumentBridge } from './documentBridge';
 import type { Token, SyntaxHighlight } from '$lib/components/editor/types';
 
 const { CHUNK_SIZE } = EDITOR_CONFIG;
-const HIGHLIGHT_DEBOUNCE_MS = 120;
+const HIGHLIGHT_DEBOUNCE_MS = 180;
 
 export interface HighlightManagerDeps {
     getLanguage: () => string;
@@ -21,6 +21,7 @@ export interface HighlightManagerDeps {
     docBridge: DocumentBridge;
     diffScheduler: DiffScheduler;
     onQueueRedraw: () => void;
+    onLineCacheChanged: () => void;
     onSetWrapLayoutDirty: (v: boolean) => void;
 }
 
@@ -109,11 +110,15 @@ export class HighlightManager {
                 startLine: start,
                 endLine: end,
             });
+            let changedLineCache = false;
             fetched.forEach((line, idx) => {
                 const lineNum = start + idx;
-                if (!lineCache.has(lineNum)) lineCache.set(lineNum, line);
+                if (!lineCache.has(lineNum)) {
+                    lineCache.set(lineNum, line);
+                    changedLineCache = true;
+                }
             });
-            console.log('chunk loaded', { chunkId, start, end, fetched: fetched.length });
+            if (changedLineCache) this.deps.onLineCacheChanged();
             if (this.highlightEnabled) {
                 const ok = await this.highlightChunk(fetched, start);
                 if (!ok) {

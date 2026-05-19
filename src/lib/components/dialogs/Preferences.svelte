@@ -1,5 +1,4 @@
 <script lang="ts">
-  // TODO: TRANSLATE TEXT IN ENGLISH
   import { closeDialog } from "../../stores/dialogStore";
   import DialogWrapper from "../dialogs/core/DialogWrapper.svelte";
   import Select from "../ui/Select.svelte";
@@ -82,7 +81,7 @@
             size="1em"
             class="text-(--color-accent) shrink-0"
           /><span class="text-(--color-text-primary) font-bold"
-            >Preferencias del programa</span
+            >Program Preferences</span
           >
         {:else}
           <FileCode2
@@ -90,7 +89,7 @@
             size="1em"
             class="text-(--color-accent) shrink-0"
           /><span class="text-(--color-text-primary) font-bold"
-            >Preferencias del buffer</span
+            >Buffer Preferences</span
           >
         {/if}
       </div>
@@ -116,8 +115,8 @@
           >
             <MonitorCog strokeWidth={2.5} size="1em" class="shrink-0" />
             <div class="min-w-0">
-              <div class="font-bold">Programa</div>
-              <div class="mt-0.5 text-[11px] opacity-80">UI, fuentes, explorer</div>
+              <div class="font-bold">Program</div>
+              <div class="mt-0.5 text-[11px] opacity-80">UI, fonts, explorer</div>
             </div>
           </button>
           <button
@@ -131,7 +130,7 @@
             <FileCode2 strokeWidth={2.5} size="1em" class="shrink-0" />
             <div class="min-w-0">
               <div class="font-bold">Buffer</div>
-              <div class="mt-0.5 text-[11px] opacity-80">Editor, vim, lectura</div>
+              <div class="mt-0.5 text-[11px] opacity-80">Editor, vim, reading</div>
             </div>
           </button>
         </nav>
@@ -147,7 +146,7 @@
               <div
                 class="flex items-center justify-between text-(--color-text-secondary)"
               >
-                <span>Fuente UI</span><span
+                <span>UI Font</span><span
                   class="text-(--color-text-secondary)"
                   >{programFontLabel($programPreferences.fontFamily)}</span
                 >
@@ -155,7 +154,7 @@
               <div
                 class="flex items-center justify-between text-(--color-text-secondary)"
               >
-                <span>Tamaño</span><span class="text-(--color-text-secondary)"
+                <span>Size</span><span class="text-(--color-text-secondary)"
                   >{$programPreferences.fontSize}px</span
                 >
               </div>
@@ -175,7 +174,7 @@
               <p class="mb-1.5 text-(--color-text-secondary)">Buffer Sample</p>
               <p
                 class="text-(--color-text-primary)"
-                style={`font-size: ${$bufferPreferences.fontSize}px; line-height: ${$bufferPreferences.lineHeight}px;`}
+                style={`font-size: ${$bufferPreferences.fontSize}px; line-height: ${$bufferPreferences.lineHeight}px; font-weight: {$bufferPreferences.fontWeight};`}
               >
                 const x = fn();
               </p>
@@ -189,7 +188,7 @@
           class="flex-1 overflow-y-auto [scrollbar-width:thin] scrollbar-thumb-(--color-scrollbar) hover:scrollbar-thumb-(--color-scrollbar-hover)"
         >
           {#if activeSection === "program"}
-            {@render sectionTitle("Tipografía de interfaz", Type)}
+            {@render sectionTitle("Interface Typography", Type)}
             {#snippet fontSelect()}
               <Select
                 value={$programPreferences.fontFamily}
@@ -198,8 +197,8 @@
               />
             {/snippet}
             {@render setting(
-              "Fuente",
-              "Define la voz visual del shell.",
+              "Font",
+              "Define the visual voice of the shell.",
               fontSelect,
             )}
 
@@ -218,8 +217,8 @@
               />
             {/snippet}
             {@render setting(
-              "Tamaño UI",
-              "Ajusta la escala general de la interfaz.",
+              "UI Size",
+              "Adjust the overall interface scale.",
               fontSizeInput,
             )}
 
@@ -240,12 +239,12 @@
               />
             {/snippet}
             {@render setting(
-              "Ancho inicial",
-              "Ancho predeterminado del explorador de archivos.",
+              "Initial Width",
+              "Default width of the file explorer.",
               explorerWidthInput,
             )}
 
-            {@render sectionTitle("Animaciones", Sparkles)}
+            {@render sectionTitle("Animations", Sparkles)}
 
             {#snippet reduceMotionToggle()}
               <button
@@ -267,11 +266,11 @@
             {/snippet}
             {@render setting(
               "Reduce motion",
-              "Desactiva transiciones y animaciones largas.",
+              "Disable long transitions and animations.",
               reduceMotionToggle,
             )}
           {:else}
-            {@render sectionTitle("Fuente del editor", Type)}
+            {@render sectionTitle("Editor Font", Type)}
 
             {#snippet bufferFontSelect()}
               <Select
@@ -281,11 +280,24 @@
               />
             {/snippet}
             {@render setting(
-              "Fuente",
-              "Aplica sobre el buffer y la lectura del código.",
+              "Font",
+              "Applies to the buffer and code reading.",
               bufferFontSelect,
             )}
-
+            
+            {#snippet fontWeightSelect()}
+               <Select
+                value={$bufferPreferences.fontWeight}
+                options={[
+                  { label: "Normal", value: "normal" },
+                  { label: "Medium", value: "500" },
+                  { label: "Semi Bold", value: "600" },
+                  { label: "Bold", value: "bold" },
+                ]}
+                onChange={(v) => setBufferPreference("fontWeight", v)}
+              />
+            {/snippet}
+            {@render setting("Font Weight", "CSS font-weight property.", fontWeightSelect)}
             {#snippet bufferFontSizeInput()}
               <input
                 type="number"
@@ -301,12 +313,12 @@
               />
             {/snippet}
             {@render setting(
-              "Tamaño",
-              "Tamaño de fuente del editor principal.",
+              "Size",
+              "Main editor font size.",
               bufferFontSizeInput,
             )}
 
-            {@render sectionTitle("Ritmo de lectura", Rows3)}
+            {@render sectionTitle("Reading Rhythm", Rows3)}
 
             {#snippet lineHeightInput()}
               <input
@@ -324,7 +336,7 @@
             {/snippet}
             {@render setting(
               "Line height",
-              "Espaciado vertical entre líneas de código.",
+              "Vertical spacing between lines of code.",
               lineHeightInput,
             )}
 
@@ -350,11 +362,11 @@
             {/snippet}
             {@render setting(
               "Vim mode",
-              "Navegación modal y comandos desde el buffer.",
+              "Modal navigation and commands from buffer.",
               vimToggle,
             )}
 
-            {@render sectionTitle("Lectura visual", Hash)}
+            {@render sectionTitle("Visual Reading", Hash)}
 
             {#snippet lineNumbersToggle()}
               <button
@@ -371,9 +383,29 @@
               >
             {/snippet}
             {@render setting(
-              "Números de línea",
-              "Mantén o limpia el gutter del buffer.",
+              "Line numbers",
+              "Keep or clean the buffer gutter.",
               lineNumbersToggle,
+            )}
+            
+            {#snippet relativeLineNumbersToggle()}
+              <button
+                aria-label="Toggle relative line numbers"
+                onclick={() =>
+                  setBufferPreference(
+                    "relativeLineNumbers",
+                    !$bufferPreferences.relativeLineNumbers,
+                  )}
+                class="font-bold uppercase px-2 py-0.5 border transition-colors min-w-9 text-center {$bufferPreferences.relativeLineNumbers
+                  ? 'text-(--color-accent) border-(--color-accent-border) bg-(--color-accent-fill)'
+                  : 'text-(--color-text-muted) border-(--color-border) bg-(--color-hover-bg-subtle)'}"
+                >{$bufferPreferences.relativeLineNumbers ? "ON" : "OFF"}</button
+              >
+            {/snippet}
+            {@render setting(
+              "Relative line numbers",
+              "Show line numbers relative to cursor.",
+              relativeLineNumbersToggle,
             )}
 
             {#snippet activeLineToggle()}
@@ -391,8 +423,8 @@
               >
             {/snippet}
             {@render setting(
-              "Línea activa",
-              "Resalta el cursor en archivos extensos.",
+              "Active line",
+              "Highlight cursor in long files.",
               activeLineToggle,
             )}
           {/if}
@@ -402,7 +434,7 @@
           class="flex items-center justify-between px-4 py-3 border-t border-(--color-border) bg-(--color-surface-base)"
         >
           <span class="text-(--color-text-muted)"
-            >Los cambios se aplican inmediatamente.</span
+            >Changes are applied immediately.</span
           >
           <div class="flex items-center gap-2">
             <button

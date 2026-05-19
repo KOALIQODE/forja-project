@@ -10,6 +10,218 @@ import type { untrack } from "svelte";
 import type { CursorPosition, Token } from "./types";
 
 const { CHUNK_SIZE } = EDITOR_CONFIG;
+const MAX_RENDER_BRACKET_SCAN_LINES = 2_000;
+
+interface LineOffsetCache {
+    lineCache: Map<number, string> | null;
+    revision: number;
+    totalLines: number;
+    offsets: number[];
+}
+
+interface BracketLookup {
+    source: DrawState["bracketColors"] | null;
+    markers: Array<{ offset: number; color: string }>;
+    pairsByOffset: Map<number, { matchOffset: number; color: string }>;
+}
+
+interface BracketMatchCache {
+    lineCache: Map<number, string> | null;
+    revision: number;
+    totalLines: number;
+    cursorLine: number;
+    cursorChar: number;
+    result: { line: number; col: number; color: string } | null;
+}
+
+const lineOffsetCache: LineOffsetCache = {
+    lineCache: null,
+    revision: -1,
+    totalLines: -1,
+    offsets: [],
+};
+
+const bracketLookup: BracketLookup = {
+    source: null,
+    markers: [],
+    pairsByOffset: new Map(),
+};
+
+const bracketMatchCache: BracketMatchCache = {
+    lineCache: null,
+    revision: -1,
+    totalLines: -1,
+    cursorLine: -1,
+    cursorChar: -1,
+    result: null,
+};
+
+function getLineOffsets(
+    lineCache: Map<number, string>,
+    totalLines: number,
+    documentRevision: number,
+): number[] {
+    if (
+        lineOffsetCache.lineCache === lineCache &&
+        lineOffsetCache.revision === documentRevision &&
+        lineOffsetCache.totalLines === totalLines
+    ) {
+        return lineOffsetCache.offsets;
+    }
+
+    const offsets = new Array<number>(totalLines + 1);
+    let offset = 0;
+    for (let line = 0; line < totalLines; line++) {
+        offsets[line] = offset;
+        offset += (lineCache.get(line) ?? "").length + 1;
+    }
+    offsets[totalLines] = offset;
+
+    lineOffsetCache.lineCache = lineCache;
+    lineOffsetCache.revision = documentRevision;
+    lineOffsetCache.totalLines = totalLines;
+    lineOffsetCache.offsets = offsets;
+    return offsets;
+}
+
+function lowerBoundByOffset(items: Array<{ offset: number }>, target: number): number {
+    let lo = 0;
+    let hi = items.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (items[mid].offset < target) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+
+function findLineForOffset(offsets: number[], totalLines: number, charOffset: number): number {
+    let lo = 0;
+    let hi = totalLines - 1;
+    while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (offsets[mid] <= charOffset) lo = mid;
+        else hi = mid - 1;
+    }
+    return lo;
+}
+
+function getBracketLookup(bracketColors: DrawState["bracketColors"]): BracketLookup {
+    if (bracketLookup.source === bracketColors) {
+        return bracketLookup;
+    }
+
+    const markers: BracketLookup["markers"] = [];
+    const pairsByOffset = new Map<number, { matchOffset: number; color: string }>();
+    for (const { start, finish, color } of bracketColors) {
+        const startOffset = start - 1;
+        const finishOffset = finish - 1;
+        markers.push({ offset: startOffset, color });
+        markers.push({ offset: finishOffset, color });
+        pairsByOffset.set(startOffset, { matchOffset: finishOffset, color });
+        pairsByOffset.set(finishOffset, { matchOffset: startOffset, color });
+    }
+    markers.sort((a, b) => a.offset - b.offset);
+
+    bracketLookup.source = bracketColors;
+    bracketLookup.markers = markers;
+    bracketLookup.pairsByOffset = pairsByOffset;
+    return bracketLookup;
+}
+
+function findBracketMatchByScan(
+    lineCache: Map<number, string>,
+    totalLines: number,
+    cursorLine: number,
+    cursorChar: number,
+): { line: number; col: number } | null {
+    const OPEN = new Set(['{', '(', '[']);
+    const CLOSE = new Set(['}', ')', ']']);
+    const PAIRS: Record<string, string> = {
+        '{': '}', '(': ')', '[': ']',
+        '}': '{', ')': '(', ']': '[',
+    };
+
+    const curLineText = lineCache.get(cursorLine) ?? "";
+    const ch = curLineText[cursorChar];
+    if (!ch || (!OPEN.has(ch) && !CLOSE.has(ch))) return null;
+
+    const isOpen = OPEN.has(ch);
+    let depth = 0;
+    if (isOpen) {
+        const scanEnd = Math.min(totalLines, cursorLine + MAX_RENDER_BRACKET_SCAN_LINES);
+        for (let line = cursorLine; line < scanEnd; line++) {
+            const text = lineCache.get(line) ?? "";
+            const startCol = line === cursorLine ? cursorChar : 0;
+            for (let col = startCol; col < text.length; col++) {
+                const token = text[col];
+                if (token === ch) depth++;
+                else if (token === PAIRS[ch]) {
+                    depth--;
+                    if (depth === 0) return { line, col };
+                }
+            }
+        }
+        return null;
+    }
+
+    const scanEnd = Math.max(-1, cursorLine - MAX_RENDER_BRACKET_SCAN_LINES);
+    for (let line = cursorLine; line > scanEnd; line--) {
+        const text = lineCache.get(line) ?? "";
+        const startCol = line === cursorLine ? cursorChar : text.length - 1;
+        for (let col = startCol; col >= 0; col--) {
+            const token = text[col];
+            if (token === ch) depth++;
+            else if (token === PAIRS[ch]) {
+                depth--;
+                if (depth === 0) return { line, col };
+            }
+        }
+    }
+    return null;
+}
+
+function findBracketMatch(
+    lineCache: Map<number, string>,
+    totalLines: number,
+    documentRevision: number,
+    cursorLine: number,
+    cursorChar: number,
+    offsets: number[],
+    brackets: BracketLookup,
+    fallbackColor: string,
+): { line: number; col: number; color: string } | null {
+    const cursorOffset = (offsets[cursorLine] ?? 0) + cursorChar;
+    const pair = brackets.pairsByOffset.get(cursorOffset);
+    if (pair) {
+        const line = findLineForOffset(offsets, totalLines, pair.matchOffset);
+        return {
+            line,
+            col: pair.matchOffset - (offsets[line] ?? 0),
+            color: pair.color,
+        };
+    }
+
+    if (
+        bracketMatchCache.lineCache === lineCache &&
+        bracketMatchCache.revision === documentRevision &&
+        bracketMatchCache.totalLines === totalLines &&
+        bracketMatchCache.cursorLine === cursorLine &&
+        bracketMatchCache.cursorChar === cursorChar
+    ) {
+        return bracketMatchCache.result;
+    }
+
+    const scanned = findBracketMatchByScan(lineCache, totalLines, cursorLine, cursorChar);
+    const result = scanned ? { ...scanned, color: fallbackColor } : null;
+    bracketMatchCache.lineCache = lineCache;
+    bracketMatchCache.revision = documentRevision;
+    bracketMatchCache.totalLines = totalLines;
+    bracketMatchCache.cursorLine = cursorLine;
+    bracketMatchCache.cursorChar = cursorChar;
+    bracketMatchCache.result = result;
+    return result;
+}
 
 interface BlameLine {
     author: string;
@@ -26,6 +238,7 @@ export interface DrawState {
     currentScrollTop: number;
     softWrapEnabled: boolean;
     lineCache: Map<number, string>;
+    documentRevision: number;
     totalLines: number;
     cursorLine: number;
     cursorChar: number;
@@ -34,6 +247,7 @@ export interface DrawState {
     mouseLine: number | null;
     highlightActiveLine: boolean;
     showLineNumbers: boolean;
+    relativeLineNumbers: boolean;
     cursorVisible: boolean;
     highlightEnabled: boolean;
     lastWrapCharWidth: number;
@@ -45,6 +259,7 @@ export interface DrawState {
     chunkRenderer: ChunkRenderer;
     viewportDiffCache: ViewportDiffCache;
     diagByLine: Map<number, Diagnostic>;
+    deferExpensiveDecorations: boolean;
     editorFont: string;
     editorFontSize: number;
     editorFontFamily: string;
@@ -86,6 +301,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
         currentScrollTop,
         softWrapEnabled,
         lineCache,
+        documentRevision,
         totalLines,
         cursorLine,
         cursorChar,
@@ -94,6 +310,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
         mouseLine,
         highlightActiveLine,
         showLineNumbers,
+        relativeLineNumbers,
         cursorVisible,
         highlightEnabled,
         lastWrapCharWidth,
@@ -104,6 +321,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
         chunkRenderer,
         viewportDiffCache,
         diagByLine,
+        deferExpensiveDecorations,
         editorFont,
         editorFontSize,
         editorFontFamily,
@@ -163,6 +381,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
         // If the last frame took too long, skip expensive chunk re-renders
         // (overlays like cursor blink still draw at full speed).
         const overBudget = lastFrameDuration > 14; // > 14ms ≈ below 60fps
+        const shouldDrawExpensiveDecorations = !deferExpensiveDecorations && !overBudget;
 
         const scrollPos = untrack(() => currentScrollTop);
 
@@ -377,7 +596,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                     if (showLineNumbers) {
                         ctx.textAlign = "right";
                         if (s === 0) {
-                            const isRelative = vimModeEnabled && vimMode !== "insert";
+                            const isRelative = relativeLineNumbers; // Preference is master
                             if (isRelative) {
                                 if (i === cursorLine) {
                                     ctx.fillStyle = editorLineNumberActiveColor;
@@ -524,7 +743,7 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                 if (showLineNumbers) {
                     ctx.fillStyle = editorLineNumberColor;
                     ctx.textAlign = "right";
-                    const isRelative = vimModeEnabled && vimMode !== "insert";
+                    const isRelative = relativeLineNumbers;
                     if (isRelative) {
                         if (i === cursorLine) {
                             ctx.fillStyle = editorLineNumberActiveColor;
@@ -631,31 +850,19 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
             }
         }
 
-        // Phase 7: track frame duration for next budget check
-        mutations.setLastFrameDuration(performance.now() - frameStart);
-
         // ── Pass 4: bracket pair colored characters ──────────────────────────────
-        if (bracketColors.length > 0) {
-            // Pre-compute cumulative char offsets for all lines (needed for offset→line lookup)
-            const lineOffsets: number[] = [];
-            let offset = 0;
-            for (let l = 0; l < totalLines; l++) {
-                lineOffsets.push(offset);
-                offset += (lineCache.get(l) ?? "").length + 1; // +1 for \n
-            }
+        if (shouldDrawExpensiveDecorations && bracketColors.length > 0) {
+            const lineOffsets = getLineOffsets(lineCache, totalLines, documentRevision);
+            const brackets = getBracketLookup(bracketColors);
+            const viewportStartOffset = lineOffsets[startLine] ?? 0;
+            const viewportEndOffset = lineOffsets[Math.min(endLine, totalLines)] ?? Number.MAX_SAFE_INTEGER;
 
             ctx.save();
             ctx.font = editorFont;
             ctx.textBaseline = "middle";
 
             const paintBracketChar = (charOffset: number, color: string) => {
-                // Binary-search: find which line this offset belongs to
-                let lo = 0, hi = lineOffsets.length - 1;
-                while (lo < hi) {
-                    const mid = (lo + hi + 1) >> 1;
-                    if (lineOffsets[mid] <= charOffset) lo = mid; else hi = mid - 1;
-                }
-                const line = lo;
+                const line = findLineForOffset(lineOffsets, totalLines, charOffset);
                 if (line < startLine || line >= endLine) return; // outside viewport
                 const col = charOffset - lineOffsets[line];
                 const lineText = lineCache.get(line) ?? "";
@@ -673,76 +880,35 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                 ctx.fillText(ch, x, y);
             };
 
-            for (const { start, finish, color } of bracketColors) {
-                paintBracketChar(start - 1, color);  // Lua is 1-based
-                paintBracketChar(finish - 1, color);
+            for (
+                let i = lowerBoundByOffset(brackets.markers, viewportStartOffset);
+                i < brackets.markers.length && brackets.markers[i].offset < viewportEndOffset;
+                i++
+            ) {
+                const marker = brackets.markers[i];
+                paintBracketChar(marker.offset, marker.color);
             }
 
             ctx.restore();
         }
 
         // ── Pass 5: bracket match highlight (works with or without plugin) ──────
-        {
-            const OPEN  = new Set(['{', '(', '[']);
-            const CLOSE = new Set(['}', ')', ']']);
-            const PAIRS: Record<string, string> = {
-                '{': '}', '(': ')', '[': ']',
-                '}': '{', ')': '(', ']': '[',
-            };
+        if (shouldDrawExpensiveDecorations) {
+            const lineOffsets = getLineOffsets(lineCache, totalLines, documentRevision);
+            const brackets = getBracketLookup(bracketColors);
+            const match = findBracketMatch(
+                lineCache,
+                totalLines,
+                documentRevision,
+                cursorLine,
+                cursorChar,
+                lineOffsets,
+                brackets,
+                editorCursorColor,
+            );
 
-            const curLineText = lineCache.get(cursorLine) ?? "";
-            const ch = curLineText[cursorChar];
-
-            let matchLine = -1;
-            let matchCol  = -1;
-
-            if (ch && (OPEN.has(ch) || CLOSE.has(ch))) {
-                const isOpen = OPEN.has(ch);
-                let depth = 0;
-
-                if (isOpen) {
-                    scan_fwd:
-                    for (let l = cursorLine; l < totalLines; l++) {
-                        const text = lineCache.get(l) ?? "";
-                        const c0 = l === cursorLine ? cursorChar : 0;
-                        for (let c = c0; c < text.length; c++) {
-                            const t = text[c];
-                            if (t === ch)         depth++;
-                            else if (t === PAIRS[ch]) { depth--; if (depth === 0) { matchLine = l; matchCol = c; break scan_fwd; } }
-                        }
-                    }
-                } else {
-                    scan_bwd:
-                    for (let l = cursorLine; l >= 0; l--) {
-                        const text = lineCache.get(l) ?? "";
-                        const c0 = l === cursorLine ? cursorChar : text.length - 1;
-                        for (let c = c0; c >= 0; c--) {
-                            const t = text[c];
-                            if (t === ch)         depth++;
-                            else if (t === PAIRS[ch]) { depth--; if (depth === 0) { matchLine = l; matchCol = c; break scan_bwd; } }
-                        }
-                    }
-                }
-            }
-
-            if (matchLine !== -1) {
-                // Use the bracket-colorizer color for this pair when available
-                let pairColor = editorCursorColor;
-                if (bracketColors.length > 0) {
-                    const lineOffsets2: number[] = [];
-                    let off = 0;
-                    for (let l = 0; l < totalLines; l++) {
-                        lineOffsets2.push(off);
-                        off += (lineCache.get(l) ?? "").length + 1;
-                    }
-                    const curOff = (lineOffsets2[cursorLine] ?? 0) + cursorChar + 1;
-                    const matOff = (lineOffsets2[matchLine]  ?? 0) + matchCol  + 1;
-                    const found  = bracketColors.find(
-                        (b) => (b.start === curOff || b.finish === curOff) &&
-                               (b.start === matOff  || b.finish === matOff)
-                    );
-                    if (found) pairColor = found.color;
-                }
+            if (match) {
+                const pairColor = match.color;
 
                 ctx.save();
                 ctx.font = editorFont;
@@ -770,11 +936,13 @@ export function renderEditorFrame(state: DrawState, mutations: DrawMutations): v
                 };
 
                 drawBox(cursorLine, cursorChar, true);
-                drawBox(matchLine,  matchCol,  false);
+                drawBox(match.line,  match.col,  false);
 
                 ctx.restore();
             }
         }
 
+        // Phase 7: track the full frame, including bracket overlays.
+        mutations.setLastFrameDuration(performance.now() - frameStart);
         scheduleNextFrame();
 }
