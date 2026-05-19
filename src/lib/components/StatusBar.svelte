@@ -4,8 +4,8 @@
   import { openBufferDeleteDialog } from "$lib/stores/dialogStore";
   import { AlertCircle, AlertTriangle, ChevronRight, FileCode, LayoutGrid } from "@lucide/svelte";
   import { errorCount, warningCount } from "$lib/stores/diagnosticsStore";
-  import { getFileIcon } from "$lib/utils/fileIcons";
-  import { getBreadcrumbIcon } from "$lib/utils/explorerHelpers";
+  import { getFileIcon } from "$lib/utils/shared/fileIcons";
+  import { getBreadcrumbIcon } from "$lib/utils/shared/explorerHelpers";
   import { theme } from "$lib/stores/uiThemeStore";
 
   function handleOpenBufferDialog() {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getFileIcon } from '$lib/utils/fileIcons';
+  import { getFileIcon } from '$lib/utils/shared/fileIcons';
   import { activeUITheme } from '$lib/stores/uiThemeStore';
 
   let { filePath, isDirty, totalLines }: {

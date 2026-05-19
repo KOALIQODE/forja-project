@@ -10,10 +10,10 @@ import {
     type PluginInfo,
     type ThemeDefinition,
     type BracketRange,
-} from "$lib/utils/pluginClient";
+} from "$lib/utils/shared/pluginClient";
 import { loadUIThemesFromBackend } from '$lib/stores/uiThemeStore';
-import { applyTheme } from "$lib/utils/themeEngine";
-import { STORAGE_KEYS } from "$lib/utils/constants";
+import { applyTheme } from "$lib/utils/shared/themeEngine";
+import { STORAGE_KEYS } from "$lib/utils/shared/constants";
 
 // ── Core writable stores ──────────────────────────────────────────────────────
 

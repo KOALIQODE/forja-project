@@ -3,15 +3,15 @@
     import { untrack, onMount } from "svelte";
     import { get } from "svelte/store";
     import { listen } from "@tauri-apps/api/event";
-    import { normalizePath } from "$lib/utils/path";
+    import { normalizePath } from "./utils/path";
     import { gitFileStatuses, getFileGitStatus } from "$lib/stores/gitStatusStore"; 
 
-    import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/constants";
-    import { ChunkRenderer } from "$lib/utils/ChunkRenderer";
-    import { TextMetricsCache } from "$lib/utils/TextMetricsCache";
-    import { WrapLayout } from "$lib/utils/WrapLayout";
+    import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/shared/constants";
+    import { ChunkRenderer } from "./utils/ChunkRenderer";
+    import { TextMetricsCache } from "./utils/TextMetricsCache";
+    import { WrapLayout } from "./utils/WrapLayout";
     import { renderEditorFrame, type DrawMutations, type DrawState } from "./EditorRenderer";
-    import { DocumentBridge } from "$lib/utils/documentBridge";
+    import { DocumentBridge } from "./utils/documentBridge";
     import {
         DiffScheduler,
         DiffRenderInvalidationManager,
@@ -21,7 +21,7 @@
         DIFF_COLORS,
         type LineDiffResult,
         type Hunk,
-    } from "$lib/utils/diff";
+    } from "./utils/diff";
     import {
         cursorPosition,
         currentBreadcrumb,
@@ -32,13 +32,13 @@
     import { bufferPreferences } from "$lib/stores/preferencesStore";
     import { dialogState } from "../../stores/dialogStore";
     import { diagnosticsByFile, type Diagnostic } from "$lib/stores/diagnosticsStore";
-    import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "$lib/utils/lspClient";
-    import { pluginRunBracketProviders, pluginEmitEvent, type BracketRange } from "$lib/utils/pluginClient";
+    import { lspOpenDocument, lspChangeDocument, lspCloseDocument } from "./utils/lspClient";
+    import { pluginRunBracketProviders, pluginEmitEvent, type BracketRange } from "$lib/utils/shared/pluginClient";
     import { activeTheme, bracketRanges, loadedPlugins, pluginsReady, pluginActivityVersion } from "$lib/stores/pluginStore";
     import { activeUITheme } from "$lib/stores/uiThemeStore";
-    import { bracketRangesToColors, resolveTokenColors } from "$lib/utils/themeEngine";
-    import { buildDiagByLine } from "$lib/utils/diagnosticsUtils";
-    import { BracketColorizer } from "$lib/utils/BracketColorizer";
+    import { bracketRangesToColors, resolveTokenColors } from "$lib/utils/shared/themeEngine";
+    import { buildDiagByLine } from "./utils/diagnosticsUtils";
+    import { BracketColorizer } from "./utils/BracketColorizer";
     import {
         handleCommandModeKeyDown,
         handleInsertModeKeyDown,
@@ -68,7 +68,7 @@
         findMatchingBracket as _findMatchingBracket,
     } from './textNavigation';
     import { getTextObjectRange as _getTextObjectRange } from './textObjects';
-    import { HighlightManager } from '$lib/utils/HighlightManager';
+    import { HighlightManager } from './utils/HighlightManager';
 
     interface Props {
         filePath: string;

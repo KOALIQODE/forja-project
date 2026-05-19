@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, type Snippet } from 'svelte';
   import { Search, X, File } from "@lucide/svelte";
-  import { closeDialog } from "../../stores/dialogStore";
-  import { activeUITheme } from "../../stores/uiThemeStore";
+  import { closeDialog } from "../stores/dialogStore";
+  import DialogWrapper from './ui/DialogWrapper.svelte';
 
   interface Props {
     title: string;

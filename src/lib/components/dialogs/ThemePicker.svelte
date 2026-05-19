@@ -9,7 +9,7 @@
   } from "$lib/stores/uiThemeStore";
   import { activateThemeByName } from "$lib/stores/pluginStore";
   import { closeDialog } from "$lib/stores/dialogStore";
-  import { theme } from "$lib/stores/uiThemeStore";
+  import DialogWrapper from "$lib/components/dialogs/core/DialogWrapper.svelte";
 
   let { onClose = closeDialog }: { onClose?: () => void } = $props();
   let activeId = $derived($activeUIThemeId);
@@ -52,22 +52,15 @@
   });
 </script>
 
-<!-- Backdrop -->
-<div
-  class="fixed inset-0 z-3000 flex justify-center items-start pt-12"
-  onclick={() => onClose()}
-  role="presentation"
->
+<DialogWrapper {onClose} position="top" zIndex={3000}>
   <!-- Picker card -->
   <div
-    use:theme
     bind:this={pickerEl}
     tabindex="-1"
     role="listbox"
     aria-label="Select theme"
     class="w-100 outline-none overflow-hidden
            bg-(--color-surface-base)
-           font-semibold
            border border-(--color-border)
            animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
   >
@@ -104,7 +97,7 @@
         onclick={() => onClose()}
         class="flex h-6 w-6 items-center justify-center text-(--color-text-muted) hover:text-(--color-text-primary) transition-colors"
       >
-        <X size={14} />
+        <X strokeWidth={2.5} size="1.2em" />
       </button>
     </header>
 
@@ -174,7 +167,7 @@
       {/each}
     </ul>
   </div>
-</div>
+</DialogWrapper>
 
 <style>
   @keyframes picker-in {

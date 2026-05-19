@@ -1,10 +1,10 @@
 import type { Diagnostic } from "$lib/stores/diagnosticsStore";
 import type { VimMode } from "$lib/stores/editorStore";
-import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/constants";
-import type { ChunkRenderer } from "$lib/utils/ChunkRenderer";
-import { DIFF_COLORS, type ViewportDiffCache } from "$lib/utils/diff";
-import type { TextMetricsCache } from "$lib/utils/TextMetricsCache";
-import type { WrapLayout } from "$lib/utils/WrapLayout";
+import { EDITOR_CONFIG, TOKEN_COLORS } from "$lib/utils/shared/constants";
+import type { ChunkRenderer } from "./utils/ChunkRenderer";
+import { DIFF_COLORS, type ViewportDiffCache } from "./utils/diff";
+import type { TextMetricsCache } from "./utils/TextMetricsCache";
+import type { WrapLayout } from "./utils/WrapLayout";
 import type { untrack } from "svelte";
 
 import type { CursorPosition, Token } from "./types";

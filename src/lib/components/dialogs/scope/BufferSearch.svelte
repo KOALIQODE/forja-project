@@ -1,12 +1,12 @@
-<script lang="ts">
+<!-- <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { File } from "@lucide/svelte";
   import SearchBase from "./SearchBase.svelte";
   import { createSearchState } from "./searchLogic.svelte";
   import { currentProject } from "../../stores/projectStore";
   import { openBuffers } from "../../stores/bufferStore";
-  import { getFileIcon } from "../../utils/fileIcons";
-  import { GIT_STATUS_LABELS } from "../../utils/explorerHelpers";
+  import { getFileIcon } from "$lib/utils/shared/fileIcons";
+  import { GIT_STATUS_LABELS } from "$lib/utils/shared/explorerHelpers";
   import { get } from "svelte/store";
 
   const state = createSearchState('buffers');
@@ -125,4 +125,4 @@
   .result-name { color: var(--forja-ui-text-secondary, #dedee2); }
   .result-name--active { color: var(--forja-ui-text-primary, #f4f4f5); }
   .result-path { color: var(--forja-ui-text-secondary, #dedee2); opacity: 0.7; }
-</style>
+</style> -->

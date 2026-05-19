@@ -3,7 +3,7 @@
     dialogState,
     closeDialog,
     DIALOG_REGISTRY,
-  } from "../../stores/dialogStore";
+  } from "$lib/stores/dialogStore";
 
   function handleClose() {
     closeDialog();

@@ -30,14 +30,14 @@
   <section class="flex-1 bg-transparent">
     {#if showWelcome}
       <WelcomeScreen />
-    <!-- {:else if $activeBuffer}
+    {:else if $activeBuffer}
       {#await import("$lib/components/editor/EditorBuffer.svelte") then module}
         <module.default
           filePath={$activeBuffer.filePath}
           bufferId={$activeBuffer.id}
           language={$activeBuffer.language ?? "unknown"}
         />
-      {/await} -->
+      {/await}
     {/if}
   </section>
 </section>

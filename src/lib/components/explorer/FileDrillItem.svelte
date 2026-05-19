@@ -4,8 +4,8 @@
   import { Folder, FolderOpen, Pin, File as FileIcon } from '@lucide/svelte';
   import { activeBufferId } from '$lib/stores/bufferStore';
   import { expandedPaths, inlineAction, type FileEntry } from '$lib/stores/explorerStore';
-  import { GIT_STATUS_LABELS } from '$lib/utils/explorerHelpers';
-  import { getFileIcon } from '$lib/utils/fileIcons';
+  import { GIT_STATUS_LABELS } from '$lib/utils/shared/explorerHelpers';
+  import { getFileIcon } from '$lib/utils/shared/fileIcons';
   import { tick } from 'svelte';
   import { activeUITheme } from '$lib/stores/uiThemeStore';
   import { gitFileStatuses, getFileGitStatus } from '$lib/stores/gitStatusStore';

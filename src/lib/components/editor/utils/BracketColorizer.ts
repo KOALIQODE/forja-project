@@ -6,8 +6,8 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { get } from 'svelte/store';
-import { pluginRunBracketProviders } from './pluginClient';
-import { bracketRangesToColors } from './themeEngine';
+import { pluginRunBracketProviders } from '$lib/utils/shared/pluginClient';
+import { bracketRangesToColors } from '$lib/utils/shared/themeEngine';
 import { bracketRanges, activeTheme } from '$lib/stores/pluginStore';
 
 export type BracketColor = { start: number; finish: number; color: string };

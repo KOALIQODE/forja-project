@@ -4,9 +4,10 @@
   import SearchBase from "./SearchBase.svelte";
   import { createSearchState } from "./searchLogic.svelte";
   import { currentProject } from "../../stores/projectStore";
-  import { getFileIcon } from "../../utils/fileIcons";
+  import { getFileIcon } from "$lib/utils/shared/fileIcons";
+  import { GIT_STATUS_LABELS } from "$lib/utils/shared/explorerHelpers";
 
-  const state = createSearchState('grep');
+  const state = createSearchState('files');
 
   async function updateResults() {
     if (!state.query || !$currentProject) {
@@ -16,19 +17,19 @@
 
     state.isLoading = true;
     try {
-      const grepResults = await invoke<any[]>('search_in_files', { path: $currentProject, query: state.query });
-      state.results = [];
-      for (const file of grepResults) {
-        for (const m of file.matches) {
-          state.results.push({
-            path: file.path,
-            name: file.path.split(/[/\\]/).pop(),
-            line_num: m.line_num,
-            col_num: m.col_num,
-            line_content: m.line_content,
-            is_grep: true
-          });
-        }
+      const fileResults = await invoke<any[]>('search_files', { path: $currentProject, query: state.query });
+      if (fileResults.length > 0) {
+        const paths = fileResults.map((f: any) => f.path);
+        const gitMap = await invoke<Record<string, string>>('get_files_git_status', {
+          projectPath: $currentProject,
+          filePaths: paths,
+        });
+        state.results = fileResults.map((f: any) => ({
+          ...f,
+          git_status: gitMap[f.path] ?? f.git_status ?? null,
+        }));
+      } else {
+        state.results = fileResults;
       }
       state.selectedIdx = 0;
       state.updatePreview();
@@ -45,29 +46,20 @@
     return () => clearTimeout(timeout);
   });
 
-  function escapeHtml(text: string): string {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  function highlightText(text: string, term: string) {
-    const safe = escapeHtml(text);
-    if (!term) return safe;
-    try {
-      const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`(${escapedTerm})`, 'gi');
-      return safe.replace(regex, '<mark class="bg-emerald-500/20 text-emerald-400 px-0.5 border-b border-emerald-500/30">$1</mark>');
-    } catch {
-      return safe;
+  function gitStatusStyle(status: string | undefined): string {
+    switch (status) {
+      case 'modified':  return 'var(--forja-ui-git-modified, #fb923c)';
+      case 'added':     return 'var(--forja-ui-git-added, #4ade80)';
+      case 'deleted':   return 'var(--forja-ui-git-deleted, #f87171)';
+      case 'renamed':   return 'var(--forja-ui-git-renamed, #60a5fa)';
+      case 'untracked': return 'var(--forja-ui-git-untracked, #9a9aaa)';
+      default:          return '';
     }
   }
 </script>
 
 <SearchBase
-  title="LIVE GREP"
+  title="FIND FILES"
   bind:query={state.query}
   isLoading={state.isLoading}
   results={state.results}
@@ -100,16 +92,16 @@
               <span class="result-name min-w-0 truncate text-[12px] font-medium" class:result-name--active={state.selectedIdx === i}>
                 {item.name}
               </span>
-              {#if item.line_num !== undefined}
-                <span class="ml-auto shrink-0 font-mono text-[9px] text-emerald-500/70">:{item.line_num + 1}</span>
+              {#if item.git_status}
+                <span
+                  class="ml-auto shrink-0 font-mono text-[9px] font-bold"
+                  style="color: {gitStatusStyle(item.git_status)}"
+                >{GIT_STATUS_LABELS[item.git_status] ?? '?'}</span>
               {/if}
             </div>
             <span class="result-path truncate text-[10px]">
               {item.path.replace($currentProject || '', '').replace(/^[/\\]/, '')}
             </span>
-            <div class="grep-line truncate text-[11px] leading-relaxed">
-              {@html highlightText(item.line_content.trim(), state.query)}
-            </div>
           </div>
         </div>
       {/each}
@@ -127,10 +119,4 @@
   .result-name { color: var(--forja-ui-text-secondary, #dedee2); }
   .result-name--active { color: var(--forja-ui-text-primary, #f4f4f5); }
   .result-path { color: var(--forja-ui-text-secondary, #dedee2); opacity: 0.7; }
-
-  .grep-line {
-    border-left: 1px solid var(--forja-ui-btn-border, #27272a);
-    padding-left: 0.5rem;
-    color: var(--forja-ui-text-secondary, #dedee2);
-  }
 </style>

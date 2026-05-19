@@ -11,8 +11,8 @@
 
 import { writable, derived } from "svelte/store";
 // import { THEMES, DEFAULT_THEM } from '$lib/themes/index';
-import { pluginGetThemes, type ThemeDefinition } from "$lib/utils/pluginClient";
-import { STORAGE_KEYS } from "$lib/utils/constants";
+import { pluginGetThemes, type ThemeDefinition } from "$lib/utils/shared/pluginClient";
+import { STORAGE_KEYS } from "$lib/utils/shared/constants";
 
 import type { Action } from "svelte/action";
 import { get } from "svelte/store";

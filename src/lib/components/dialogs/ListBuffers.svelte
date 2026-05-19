@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { Search, X, FileCode, Trash2 } from "@lucide/svelte";
   import {
     openBuffers,
@@ -7,48 +6,47 @@
     closeBuffer,
     openBuffer,
   } from "../../stores/bufferStore";
+  import { currentProject } from "../../stores/projectStore";
   import { closeDialog } from "../../stores/dialogStore";
-  import { activeUITheme } from "../../stores/uiThemeStore";
-  import { getFileIcon } from "../../utils/fileIcons";
-  import { GIT_STATUS_LABELS } from "../../utils/explorerHelpers";
-  import {
-    gitFileStatuses,
-    getFileGitStatus,
-  } from "../../stores/gitStatusStore";
-  import { fade, scale } from "svelte/transition";
-
-  let themeStyle = $derived(
-    Object.entries($activeUITheme.vars)
-      .map(([k, v]) => `${k}:${v}`)
-      .join(";"),
-  );
+  import { getFileIcon } from "$lib/utils/shared/fileIcons";
+  import { GIT_STATUS_LABELS } from "$lib/utils/shared/explorerHelpers";
+  import { gitFileStatuses } from "../../stores/gitStatusStore";
+  import DialogWrapper from "./core/DialogWrapper.svelte";
 
   let searchQuery = $state("");
-  let selectedIndex = $state(0);
   let inputElement = $state<HTMLInputElement>();
+
+  function focus(el: HTMLInputElement) {
+    requestAnimationFrame(() => el.focus());
+  }
 
   function gitStatusStyle(status: string | undefined): string {
     switch (status) {
       case "modified":
-        return "var(--forja-ui-git-modified, #fb923c)";
+        return "text-(--color-git-modified)";
       case "added":
-        return "var(--forja-ui-git-added, #4ade80)";
+        return "text-(--color-git-added)";
       case "deleted":
-        return "var(--forja-ui-git-deleted, #f87171)";
+        return "text-(--color-git-deleted)";
       case "renamed":
-        return "var(--forja-ui-git-renamed, #60a5fa)";
+        return "text-(--color-git-renamed)";
       case "untracked":
-        return "var(--forja-ui-git-untracked, #9a9aaa)";
+        return "text-(--color-git-untracked)";
       default:
-        return "";
+        return "text-transparent";
     }
   }
 
-  // Filter buffers based on search query
+  function getGitStatusLabel(filePath: string): string {
+    const fileStatus = $gitFileStatuses.get(filePath);
+    return fileStatus?.status
+      ? (GIT_STATUS_LABELS[fileStatus.status] ?? "?")
+      : "?";
+  }
+
   let filteredBuffers = $derived.by(() => {
     const buffers = Array.from($openBuffers.values());
     if (!searchQuery.trim()) return buffers;
-
     const query = searchQuery.toLowerCase();
     return buffers.filter(
       (b) =>
@@ -57,48 +55,23 @@
     );
   });
 
-  // Reset selected index when filtered list changes
-  $effect(() => {
-    if (selectedIndex >= filteredBuffers.length) {
-      selectedIndex = Math.max(0, filteredBuffers.length - 1);
-    }
-  });
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      selectedIndex = (selectedIndex + 1) % filteredBuffers.length;
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      selectedIndex =
-        (selectedIndex - 1 + filteredBuffers.length) % filteredBuffers.length;
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (filteredBuffers[selectedIndex]) {
-        selectBuffer(filteredBuffers[selectedIndex].id);
-      }
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      closeDialog();
-    } else if (e.key === "d" && (e.ctrlKey || e.altKey)) {
-      // Shortcut to delete buffer
-      e.preventDefault();
-      if (filteredBuffers[selectedIndex]) {
-        handleCloseBuffer(filteredBuffers[selectedIndex].id);
-      }
-    }
-  }
-
   function selectBuffer(id: string) {
-    openBuffer(id); // This sets it as active
+    openBuffer(id);
     closeDialog();
   }
 
   function handleCloseBuffer(id: string) {
     closeBuffer(id);
-    if ($openBuffers.size === 0) {
-      closeDialog();
+    if ($openBuffers.size === 0) closeDialog();
+  }
+
+  function getRelativePath(path: string) {
+    if ($currentProject) {
+      return path.startsWith($currentProject)
+        ? path.slice($currentProject.length + 1)
+        : path;
     }
+    return path;
   }
 
   function getFileName(path: string) {
@@ -106,269 +79,135 @@
   }
 
   function getDirectory(path: string) {
-    const parts = path.split(/[\/\\]/);
+    const rel = getRelativePath(path);
+    const parts = rel.split(/[\/\\]/);
     parts.pop();
-    return parts.join("/") || ".";
+    const dir = parts.join("/") || ".";
+    return dir.length > 30 ? "..." + dir.slice(-27) : dir;
   }
-
-  onMount(() => {
-    inputElement?.focus();
-  });
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  class="fixed inset-0 z-[2000] flex items-start justify-center pt-[15vh] px-4"
-  transition:fade={{ duration: 150 }}
-  onclick={closeDialog}
-  style={themeStyle}
-  data-program-ui
->
+<DialogWrapper onClose={closeDialog} position="center" zIndex={2000}>
   <div
-    class="dialog-shell relative flex w-full max-w-xl flex-col overflow-hidden outline-none"
-    data-dialog-shell
-    transition:scale={{ duration: 200, start: 0.98, opacity: 0 }}
-    onclick={(e) => e.stopPropagation()}
+    class="flex w-full max-w-xl flex-col overflow-hidden bg-(--color-surface-base) border border-(--color-border) animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
   >
-    <!-- Search Input -->
-    <div class="input-row flex items-center gap-3 px-4 py-3">
+    <header
+      class="flex items-center gap-3 px-4 py-3 border-b border-(--color-border) bg-(--color-surface-hover)"
+    >
       <Search
-        size={16}
-        style="color: var(--forja-ui-text-secondary, #dedee2); flex-shrink: 0;"
+        strokeWidth={2.5}
+        size="1.2em"
+        class="text-(--color-text-secondary) shrink-0"
       />
       <input
-        bind:this={inputElement}
+        use:focus
         bind:value={searchQuery}
-        onkeydown={handleKeydown}
         placeholder="Find buffer..."
-        class="search-input flex-1 bg-transparent text-sm focus:outline-none"
+        class="w-full bg-transparent outline-none text-(--color-text-primary) placeholder:text-(--color-text-secondary)"
       />
       <button
         type="button"
         onclick={closeDialog}
-        class="close-btn flex h-6 w-6 cursor-pointer items-center justify-center transition-all"
+        class="flex h-6 w-6 items-center justify-center text-(--color-text-muted) hover:text-(--color-text-primary) transition-colors"
       >
-        <X size={15} />
+        <X strokeWidth={2.5} size="1.2em" />
       </button>
-    </div>
+    </header>
 
-    <!-- Buffers List -->
-    <div class="custom-scrollbar max-h-[400px] overflow-y-auto p-2">
+    <div
+      class="max-h-100 overflow-y-auto [scrollbar-width:thin] scrollbar-thumb-(--color-scrollbar)"
+    >
       {#if filteredBuffers.length === 0}
         <div
-          class="flex flex-col items-center justify-center py-12 text-center"
+          class="flex flex-col items-center justify-center py-12 text-center text-(--color-text-muted)"
         >
-          <p class="empty-label text-xs font-medium">
-            No open buffers matching search
-          </p>
+          <p class="text-xs font-medium">No open buffers matching search</p>
         </div>
       {:else}
-        <div class="flex flex-col gap-0.5">
-          {#each filteredBuffers as buffer, index}
+        <div class="flex flex-col">
+          {#each filteredBuffers as buffer (buffer.id)}
             {@const isActive = buffer.id === $activeBufferId}
-            {@const isSelected = index === selectedIndex}
             {@const fileIconData = getFileIcon(buffer.filePath)}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              class="buffer-item group relative flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left transition-all duration-75"
-              class:buffer-item--selected={isSelected}
-              onclick={() => selectBuffer(buffer.id)}
-              onmouseenter={() => (selectedIndex = index)}
+              class="group flex items-center transition-colors hover:bg-(--color-accent-fill)"
             >
-              <div
-                class="file-icon-wrap flex h-8 w-8 shrink-0 items-center justify-center transition-colors"
-              >
-                {#if fileIconData}
-                  <fileIconData.icon
-                    size={16}
-                    style="color: {fileIconData.color}"
-                  />
-                {:else}
-                  <FileCode size={16} />
-                {/if}
-              </div>
-
-              <div class="flex flex-1 flex-col min-w-0">
-                <div class="flex items-center gap-2">
-                  <span
-                    class="item-name min-w-0 truncate text-[13px] font-medium"
-                    class:item-name--highlight={isSelected || isActive}
-                  >
-                    {getFileName(buffer.filePath)}
-                  </span>
-                  {#if isActive}
-                    <span
-                      class="active-badge px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-tighter"
-                      >active</span
-                    >
-                  {/if}
-                  {#if gitFileStatuses[buffer.filePath]}
-                    <span
-                      class="ml-auto shrink-0 font-mono text-[9px] font-bold"
-                      style="color: {gitStatusStyle(
-                        gitFileStatuses[buffer.filePath],
-                      )}"
-                      >{GIT_STATUS_LABELS[gitFileStatuses[buffer.filePath]] ??
-                        "?"}</span
-                    >
-                  {/if}
-                </div>
-                <span
-                  class="item-dir truncate font-mono text-[10px] tracking-tight"
-                  >{getDirectory(buffer.filePath)}</span
-                >
-              </div>
-
-              <!-- Close Action -->
               <button
                 type="button"
-                class="close-item-btn flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center transition-all"
-                class:opacity-100={isSelected}
-                class:opacity-0={!isSelected}
-                onclick={(e) => {
-                  e.stopPropagation();
-                  handleCloseBuffer(buffer.id);
-                }}
-                title="Close buffer"
+                class="flex flex-1 items-center gap-3 px-3 py-2 text-left"
+                onclick={() => selectBuffer(buffer.id)}
               >
-                <Trash2 size={13} />
+                <!-- Indicators -->
+                <div
+                  class="flex h-8 w-8 shrink-0 items-center justify-center text-(--color-text-muted)"
+                >
+                  {#if isActive}
+                    <div
+                      class="relative flex h-2 w-2 items-center justify-center"
+                    >
+                      <div
+                        class="h-2 w-5 rounded-full bg-(--color-accent)"
+                      ></div>
+                      <div
+                        class="absolute h-4 w-4 rounded-full border-3 border-(--color-accent) opacity-30"
+                      ></div>
+                    </div>
+                  {:else if fileIconData}
+                    <fileIconData.icon
+                      strokeWidth={2.5}
+                      size="1em"
+                      style="color: {fileIconData.color}"
+                    />
+                  {:else}
+                    <FileCode strokeWidth={2.5} size="1em" />
+                  {/if}
+                </div>
+
+                <div class="flex min-w-0 flex-1 flex-col">
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="min-w-0 truncate {isActive
+                        ? 'text-(--color-text-primary)'
+                        : 'text-(--color-text-secondary)'}"
+                    >
+                      {getFileName(buffer.filePath)}
+                    </span>
+
+                    {#if buffer.isDirty}
+                      <div
+                        class="h-1.5 w-1.5 shrink-0 rounded-full bg-(--color-accent)"
+                      ></div>
+                    {/if}
+                  </div>
+                  <span class="truncate text-(--color-text-muted)"
+                    >{getDirectory(buffer.filePath)}</span
+                  >
+                </div>
               </button>
+
+              <div class="flex items-center gap-2 pr-2">
+                {#if $gitFileStatuses.has(buffer.filePath)}
+                  <h6
+                    class="font-bold {gitStatusStyle(
+                      $gitFileStatuses.get(buffer.filePath)?.status ?? '',
+                    )}"
+                  >
+                    {getGitStatusLabel(buffer.filePath)}
+                  </h6>
+                {/if}
+
+                <button
+                  type="button"
+                  class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-(--color-text-primary) hover:bg-(--color-surface-hover) transition-colors"
+                  onclick={() => handleCloseBuffer(buffer.id)}
+                  title="Close buffer"
+                >
+                  <X strokeWidth={2.5} size="1em" />
+                </button>
+              </div>
             </div>
           {/each}
         </div>
       {/if}
     </div>
-
-    <!-- Footer / Keybinds -->
-    <footer class="footer-row flex items-center justify-between px-4 py-2">
-      <div class="flex items-center gap-4 text-[10px]">
-        <div class="flex items-center gap-1 kbd-hint">
-          <kbd class="kbd px-1 py-0.5 font-mono">↵</kbd>
-          <span>select</span>
-        </div>
-        <div class="flex items-center gap-1 kbd-hint">
-          <kbd class="kbd px-1 py-0.5 font-mono">ctrl+d</kbd>
-          <span>close</span>
-        </div>
-      </div>
-      <div class="count-label text-[10px] font-mono">
-        {filteredBuffers.length} buffer{filteredBuffers.length === 1 ? "" : "s"}
-      </div>
-    </footer>
   </div>
-</div>
-
-<style>
-  .dialog-shell {
-    background: var(--forja-ui-picker-bg, #0e0e11);
-    /* border removed for cleaner look */
-    box-shadow:
-      0 24px 64px rgba(0, 0, 0, 0.9),
-      0 8px 24px rgba(0, 0, 0, 0.7);
-  }
-
-  .input-row {
-    border-bottom: 1px solid var(--forja-ui-btn-border, #27272a);
-    background: var(--forja-ui-btn-bg, #09090b);
-  }
-
-  .search-input {
-    color: var(--forja-ui-text-primary, #f4f4f5);
-  }
-  .search-input::placeholder {
-    color: var(--forja-ui-text-secondary, #dedee2);
-  }
-
-  .close-btn {
-    color: var(--forja-ui-text-muted, #b4b4c0);
-  }
-  .close-btn:hover {
-    background: var(--forja-ui-btn-hover-bg, rgba(255, 255, 255, 0.06));
-    color: var(--forja-ui-text-primary, #f4f4f5);
-  }
-
-  .empty-label {
-    color: var(--forja-ui-text-muted, #b4b4c0);
-  }
-
-  .buffer-item {
-    color: var(--forja-ui-text-secondary, #dedee2);
-  }
-  .buffer-item:hover {
-    background: var(--forja-ui-btn-hover-bg, rgba(255, 255, 255, 0.04));
-  }
-  .buffer-item--selected {
-    background: var(--forja-ui-picker-active, rgba(52, 211, 153, 0.1));
-  }
-
-  .file-icon-wrap {
-    color: var(--forja-ui-text-muted, #b4b4c0);
-  }
-
-  .item-name {
-    color: var(--forja-ui-text-secondary, #dedee2);
-  }
-  .item-name--highlight {
-    color: var(--forja-ui-text-primary, #f4f4f5);
-  }
-
-  .active-badge {
-    background: color-mix(
-      in srgb,
-      var(--forja-ui-gradient-from, #34d399) 12%,
-      transparent
-    );
-    color: var(--forja-ui-gradient-from, #34d399);
-  }
-
-  .item-dir {
-    color: var(--forja-ui-text-secondary, #dedee2);
-  }
-
-  .close-item-btn {
-    color: var(--forja-ui-text-muted, #b4b4c0);
-  }
-  .close-item-btn:hover {
-    background: rgba(239, 68, 68, 0.1);
-    color: #f87171;
-  }
-
-  .footer-row {
-    border-top: 1px solid var(--forja-ui-btn-border, #27272a);
-    background: color-mix(
-      in srgb,
-      var(--forja-ui-btn-bg, #09090b) 50%,
-      transparent
-    );
-  }
-
-  .kbd-hint {
-    color: var(--forja-ui-text-muted, #b4b4c0);
-  }
-
-  .kbd {
-    border: 1px solid var(--forja-ui-btn-border, #27272a);
-    background: var(--forja-ui-btn-bg, #09090b);
-    color: var(--forja-ui-text-secondary, #dedee2);
-    font-size: 9px;
-  }
-
-  .count-label {
-    color: var(--forja-ui-text-muted, #b4b4c0);
-  }
-
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--forja-ui-explorer-scrollbar, #1e1e1e);
-    border-radius: 10px;
-  }
-  .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: var(--forja-ui-explorer-scrollbar-hover, #2e2e2e);
-  }
-</style>
+</DialogWrapper>

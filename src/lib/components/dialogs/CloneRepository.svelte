@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { open } from '@tauri-apps/plugin-dialog';
+  import { openProject } from '$lib/stores/projectStore';
   import {
     Check,
     Download,
@@ -9,10 +11,7 @@
     ShieldCheck,
     X,
   } from '@lucide/svelte';
-  import { onMount } from 'svelte';
-
-  import { theme } from '$lib/stores/uiThemeStore';
-  import { openProject } from '$lib/stores/projectStore';
+  import DialogWrapper from '$lib/components/dialogs/core/DialogWrapper.svelte';
   import {
     activeCloneSessionId,
     cleanupCloneSession,
@@ -186,12 +185,7 @@
   }
 </script>
 
-<div
-  class="fixed inset-0 z-[3000] flex items-start justify-center pt-12"
-  onclick={() => void closeCloneRepository()}
-  onkeydown={handleKeyDown}
-  role="presentation"
->
+<DialogWrapper onClose={() => void closeCloneRepository()} position="top" zIndex={3000}>
   <div
     bind:this={dialogEl}
     tabindex="-1"
@@ -200,7 +194,6 @@
     aria-labelledby="clone-repository-title"
     onclick={(event) => event.stopPropagation()}
     onkeydown={handleKeyDown}
-    use:theme
     class="w-170 font-semibold max-w-[calc(100vw-32px)] bg-(--color-surface-base) text-(--color-text-primary) outline-none border border-(--color-border) animate-[picker-in_0.15s_cubic-bezier(0.16,1,0.3,1)]"
   >
     <header class="flex items-center gap-3 px-4 py-2.5 border-b border-(--color-border)">
@@ -501,7 +494,7 @@
       {/if}
     </footer>
   </div>
-</div>
+</DialogWrapper>
 
 <style>
   @keyframes picker-in {

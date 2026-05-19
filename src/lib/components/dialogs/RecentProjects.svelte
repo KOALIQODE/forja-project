@@ -7,8 +7,8 @@
     gitStatuses,
     currentProject,
   } from "$lib/stores/projectStore";
-  import { theme } from "$lib/stores/uiThemeStore";
   import { closeDialog } from "$lib/stores/dialogStore";
+  import DialogWrapper from "$lib/components/dialogs/core/DialogWrapper.svelte";
 
   function getDisplayPath(index: number): string {
     return $shortenedPaths[index] || $recentProjects[index] || "";
@@ -32,10 +32,7 @@
   }
 </script>
 
-<div
-  class="fixed inset-0 z-2000 flex items-start justify-center pt-[15%] font-semibold"
-  use:theme
->
+<DialogWrapper onClose={closeDialog} position="center" zIndex={2000}>
   <div
     class="flex w-full max-w-2xl flex-col overflow-hidden border border-(--color-border) bg-(--color-surface-base)"
   >
@@ -44,6 +41,11 @@
     >
       <span class="text-(--color-text-primary)">Recent Projects</span>
       <div class="h-3 w-px shrink-0 bg-(--color-border)"></div>
+      <FolderOpen
+        strokeWidth={2.5}
+        size="1em"
+        class="shrink-0 text-(--color-text-primary)"
+      />
       <span class="flex-1 text-(--color-text-secondary)"
         >Open a recent project</span
       >
@@ -70,25 +72,25 @@
           <li
             class="group flex items-center transition-colors
               {project === $currentProject
-                ? 'text-(--color-text-primary) bg-(--color-accent-fill)'
-                : 'text-(--color-text-muted) hover:text-(--color-text-primary) hover:bg-(--color-accent-fill)'}"
+              ? 'text-(--color-text-primary) bg-(--color-accent-fill)'
+              : 'text-(--color-text-muted) hover:text-(--color-text-primary) hover:bg-(--color-accent-fill)'}"
           >
             <button
               type="button"
               class="flex flex-1 items-center gap-3 px-4 py-2.5 text-left"
               onclick={() => openSelectedProject(project)}
             >
-              <FolderOpen
+              <!-- <FolderOpen
                 strokeWidth={2.5}
                 size="1.2em"
                 class="shrink-0 text-(--color-text-primary)"
-              />
+              /> -->
 
               <div class="flex min-w-0 flex-1 flex-col gap-1">
                 <h5 class="text-(--color-text-primary)">
                   {getProjectName(project)}
                 </h5>
-                <h6 class="text-(--color-text-secondary)">
+                <h6 class="text-(--color-text-muted)">
                   {getDisplayPath(index)}
                 </h6>
               </div>
@@ -145,4 +147,4 @@
       {/if}
     </ul>
   </div>
-</div>
+</DialogWrapper>

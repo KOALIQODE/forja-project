@@ -1,4 +1,8 @@
 <script lang="ts">
+  // TODO: TRANSLATE TEXT IN ENGLISH
+  import { closeDialog } from "../../stores/dialogStore";
+  import DialogWrapper from "../dialogs/core/DialogWrapper.svelte";
+  import Select from "../ui/Select.svelte";
   import {
     MonitorCog,
     FileCode2,
@@ -8,12 +12,8 @@
     Hash,
     Sparkles,
     PanelLeftClose,
-    RotateCcw,
     X,
   } from "@lucide/svelte";
-  import { closeDialog } from "../../stores/dialogStore";
-  import { theme } from "../../stores/uiThemeStore";
-  import Select from "../ui/Select.svelte";
   import {
     BUFFER_FONT_OPTIONS,
     PROGRAM_FONT_OPTIONS,
@@ -49,7 +49,7 @@
     class="flex items-center justify-between gap-4 px-5 py-3 border-b border-(--color-border) hover:bg-(--color-hover-bg-subtle) transition-colors"
   >
     <div class="min-w-0">
-      <div class="font-bold uppercase text-(--color-text-primary)">{title}</div>
+      <div class="font-bold text-(--color-text-primary)">{title}</div>
       <div class="mt-0.5 text-(--color-text-secondary)">{description}</div>
     </div>
     {@render content()}
@@ -58,21 +58,15 @@
 
 {#snippet sectionTitle(title: string, Icon: any)}
   <div
-    class="flex items-center gap-2 px-5 py-2 uppercase text-(--color-text-secondary) bg-(--color-surface-base) border-b border-(--color-border)"
+    class="flex items-center gap-2 px-5 py-2 text-(--color-text-secondary) bg-(--color-surface-base) border-b border-(--color-border)"
   >
-    <Icon size={9} /><span>{title}</span>
+    <Icon strokeWidth={2.5} size="1em" /><span>{title}</span>
   </div>
 {/snippet}
 
-<div
-  class="fixed inset-0 z-120 flex items-center justify-center p-8"
-  onclick={(e) => e.target === e.currentTarget && closeDialog()}
-  onkeydown={(e) => e.key === "Escape" && closeDialog()}
-  role="presentation"
-  use:theme
->
+<DialogWrapper onClose={closeDialog} position="center" zIndex={120}>
   <div
-    class="flex h-full max-h-170 w-full max-w-4xl flex-col overflow-hidden bg-(--color-surface-base) border border-(--color-border) font-semibold"
+    class="flex h-full max-h-170 w-full max-w-4xl flex-col overflow-hidden bg-(--color-surface-base) border border-(--color-border)"
   >
     <header
       class="flex items-center gap-3 px-4 py-2.5 border-b border-(--color-border)"
@@ -114,7 +108,7 @@
         <nav class="flex flex-col">
           <button
             type="button"
-            class="flex items-center gap-2.5 px-2 py-2.5 text-left transition-colors text-(--color-text-primary) {activeSection ===
+            class="flex items-center gap-2.5 px-5 py-3 text-left transition-colors text-(--color-text-primary) {activeSection ===
             'program'
               ? 'bg-(--color-accent-fill)'
               : 'hover:bg-(--color-hover-bg-subtle)'}"
@@ -123,14 +117,12 @@
             <MonitorCog strokeWidth={2.5} size="1em" class="shrink-0" />
             <div class="min-w-0">
               <div class="font-bold">Programa</div>
-              <div class="mt-0.5 opacity-80">
-                UI, fuentes, explorer
-              </div>
+              <div class="mt-0.5 text-[11px] opacity-80">UI, fuentes, explorer</div>
             </div>
           </button>
           <button
             type="button"
-            class="flex items-center gap-2.5 px-2 py-2.5 text-left transition-colors text-(--color-text-primary) {activeSection ===
+            class="flex items-center gap-2.5 px-5 py-3 text-left transition-colors text-(--color-text-primary) {activeSection ===
             'buffer'
               ? 'bg-(--color-accent-fill)'
               : 'hover:bg-(--color-hover-bg-subtle)'}"
@@ -139,17 +131,15 @@
             <FileCode2 strokeWidth={2.5} size="1em" class="shrink-0" />
             <div class="min-w-0">
               <div class="font-bold">Buffer</div>
-              <div class="mt-0.5 opacity-80">
-                Editor, vim, lectura
-              </div>
+              <div class="mt-0.5 text-[11px] opacity-80">Editor, vim, lectura</div>
             </div>
           </button>
         </nav>
 
         <div
-          class="mx-3 mt-auto mb-3 p-3 border border-(--color-border) bg-(--color-surface-base)"
+          class="mx-4 mt-auto mb-4 p-3 border border-(--color-border) bg-(--color-surface-base)"
         >
-          <p class="mb-2 font-bold uppercase text-(--color-text-secondary)">
+          <p class="mb-2 font-bold text-(--color-text-secondary)">
             Preview
           </p>
           {#if activeSection === "program"}
@@ -157,7 +147,8 @@
               <div
                 class="flex items-center justify-between text-(--color-text-secondary)"
               >
-                <span>Fuente UI</span><span class="text-(--color-text-secondary)"
+                <span>Fuente UI</span><span
+                  class="text-(--color-text-secondary)"
                   >{programFontLabel($programPreferences.fontFamily)}</span
                 >
               </div>
@@ -200,7 +191,11 @@
           {#if activeSection === "program"}
             {@render sectionTitle("Tipografía de interfaz", Type)}
             {#snippet fontSelect()}
-              <Select value={$programPreferences.fontFamily} options={PROGRAM_FONT_OPTIONS} onChange={(v) => setProgramPreference("fontFamily", v)} />
+              <Select
+                value={$programPreferences.fontFamily}
+                options={PROGRAM_FONT_OPTIONS}
+                onChange={(v) => setProgramPreference("fontFamily", v)}
+              />
             {/snippet}
             {@render setting(
               "Fuente",
@@ -279,7 +274,11 @@
             {@render sectionTitle("Fuente del editor", Type)}
 
             {#snippet bufferFontSelect()}
-              <Select value={$bufferPreferences.fontFamily} options={BUFFER_FONT_OPTIONS} onChange={(v) => setBufferPreference("fontFamily", v)} />
+              <Select
+                value={$bufferPreferences.fontFamily}
+                options={BUFFER_FONT_OPTIONS}
+                onChange={(v) => setBufferPreference("fontFamily", v)}
+              />
             {/snippet}
             {@render setting(
               "Fuente",
@@ -365,7 +364,7 @@
                     "showLineNumbers",
                     !$bufferPreferences.showLineNumbers,
                   )}
-                class="font-bold uppercase tracking-wider px-2 py-0.5 border transition-colors min-w-9 text-center {$bufferPreferences.showLineNumbers
+                class="font-bold uppercase px-2 py-0.5 border transition-colors min-w-9 text-center {$bufferPreferences.showLineNumbers
                   ? 'text-(--color-accent) border-(--color-accent-border) bg-(--color-accent-fill)'
                   : 'text-(--color-text-muted) border-(--color-border) bg-(--color-hover-bg-subtle)'}"
                 >{$bufferPreferences.showLineNumbers ? "ON" : "OFF"}</button
@@ -385,7 +384,7 @@
                     "highlightActiveLine",
                     !$bufferPreferences.highlightActiveLine,
                   )}
-                class="font-bold uppercase tracking-wider px-2 py-0.5 border transition-colors min-w-9 text-center {$bufferPreferences.highlightActiveLine
+                class="font-bold uppercase px-2 py-0.5 border transition-colors min-w-9 text-center {$bufferPreferences.highlightActiveLine
                   ? 'text-(--color-accent) border-(--color-accent-border) bg-(--color-accent-fill)'
                   : 'text-(--color-text-muted) border-(--color-border) bg-(--color-hover-bg-subtle)'}"
                 >{$bufferPreferences.highlightActiveLine ? "ON" : "OFF"}</button
@@ -402,8 +401,7 @@
         <div
           class="flex items-center justify-between px-4 py-3 border-t border-(--color-border) bg-(--color-surface-base)"
         >
-          <span
-            class="text-(--color-text-muted)"
+          <span class="text-(--color-text-muted)"
             >Los cambios se aplican inmediatamente.</span
           >
           <div class="flex items-center gap-2">
@@ -424,7 +422,7 @@
       </section>
     </div>
   </div>
-</div>
+</DialogWrapper>
 
 <style>
   input::-webkit-outer-spin-button,

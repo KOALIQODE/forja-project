@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Hunk } from '$lib/utils/diff';
-  import { DIFF_COLORS } from '$lib/utils/diff';
+  import type { Hunk } from '$lib/components/editor/utils/diff';
+  import { DIFF_COLORS } from '$lib/components/editor/utils/diff';
 
   let { hunks, totalLines, editorLineHeight, scrollContainer }: {
     hunks: readonly Hunk[];

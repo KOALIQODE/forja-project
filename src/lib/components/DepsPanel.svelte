@@ -1,4 +1,4 @@
-<script lang="ts">
+<!-- <script lang="ts">
   import {
     availableEcosystems,
     globalSummary,
@@ -783,4 +783,4 @@
     border-radius: 999px;
     animation: pulse 0.9s linear infinite;
   }
-</style>
+</style> -->

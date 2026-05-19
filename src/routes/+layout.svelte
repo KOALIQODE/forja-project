@@ -7,7 +7,7 @@
     activeUITheme,
     loadUIThemesFromBackend,
   } from "../lib/stores/uiThemeStore";
-  import { steppedGradient } from "../lib/utils/backgroundLayer";
+  import { steppedGradient } from "$lib/utils/shared/backgroundLayer";
   import { programPreferences } from "$lib/stores/preferencesStore";
   import { program } from "$lib/services/program";
   import TitleBar from "../lib/components/TitleBar.svelte";
@@ -64,7 +64,7 @@
         <Module.default />
       {/await}
     {/if}
-    {#await import("$lib/components/dialogs/DialogManager.svelte") then Module}
+    {#await import("$lib/components/dialogs/core/DialogManager.svelte") then Module}
       <Module.default />
     {/await}
   </div>

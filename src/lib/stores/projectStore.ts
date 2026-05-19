@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { writable } from "svelte/store";
-import { STORAGE_KEYS, ERROR_MESSAGES } from "../utils/constants.js";
+import { STORAGE_KEYS, ERROR_MESSAGES } from "../utils/shared/constants.js";
 
 export interface GitStatus {
   path: string;

@@ -1,4 +1,4 @@
-<script lang="ts">
+<!-- <script lang="ts">
   import {
     Info,
     Loader2,
@@ -14,7 +14,7 @@
     type Vulnerability,
   } from "$lib/stores/DepsStore";
   import { currentProject } from "$lib/stores/projectStore";
-  import { validateDependency } from "$lib/utils/securityClient";
+  import { validateDependency } from "$lib/utils/shared/securityClient";
 
   type EcosystemOption = {
     id: string;
@@ -282,4 +282,4 @@
       </p>
     </div>
   </div>
-</div>
+</div> -->

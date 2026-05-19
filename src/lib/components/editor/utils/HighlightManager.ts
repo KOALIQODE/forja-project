@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import { ChunkRenderer } from '$lib/utils/ChunkRenderer';
-import { EDITOR_CONFIG } from '$lib/utils/constants';
-import { DiffScheduler } from '$lib/utils/diff';
-import { DocumentBridge } from '$lib/utils/documentBridge';
+import { ChunkRenderer } from './ChunkRenderer';
+import { EDITOR_CONFIG } from '$lib/utils/shared/constants';
+import { DiffScheduler } from './diff';
+import { DocumentBridge } from './documentBridge';
 import type { Token, SyntaxHighlight } from '$lib/components/editor/types';
 
 const { CHUNK_SIZE } = EDITOR_CONFIG;

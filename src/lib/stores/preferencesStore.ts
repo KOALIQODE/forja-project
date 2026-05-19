@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { STORAGE_KEYS } from '$lib/utils/constants';
+import { STORAGE_KEYS } from '$lib/utils/shared/constants';
 
 export const PROGRAM_FONT_OPTIONS: { label: string; value: string }[] = [
   {

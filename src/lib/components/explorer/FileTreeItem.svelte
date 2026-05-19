@@ -4,8 +4,8 @@
   import { activeBufferId } from '$lib/stores/bufferStore';
   import { expandedPaths, pinnedPath, directoryCache, inlineAction, type FileEntry } from '$lib/stores/explorerStore';
   import { slide } from 'svelte/transition';
-  import { GIT_STATUS_LABELS } from '$lib/utils/explorerHelpers';
-  import { getFileIcon } from '$lib/utils/fileIcons';
+  import { GIT_STATUS_LABELS } from '$lib/utils/shared/explorerHelpers';
+  import { getFileIcon } from '$lib/utils/shared/fileIcons';
   import { tick } from 'svelte';
   import FileTreeItem from './FileTreeItem.svelte';
   import { activeUITheme } from '$lib/stores/uiThemeStore';

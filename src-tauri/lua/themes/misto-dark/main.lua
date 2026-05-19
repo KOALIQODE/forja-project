@@ -72,10 +72,17 @@ editor.register_theme({
       ["--color-scrollbar"]         = "#1e1e1e",
       ["--color-scrollbar-hover"]   = "#2e2e2e",
 
-      ["--color-icon"]              = "#71717a",    -- zinc-400
-      ["--color-icon-hover"]        = "#34d399",    -- emerald-400
+      ["--color-icon"]            = "#71717a",    -- zinc-400
+      ["--color-icon-hover"]      = "#34d399",    -- emerald-400
+
+      ["--color-git-modified"]    = "#fb923c",
+      ["--color-git-added"]       = "#4ade80",
+      ["--color-git-renamed"]     = "#60a5fa",
+      ["--color-git-deleted"]     = "#f87171",
+      ["--color-git-untracked"]   = "#9a9aaa",
 
       ["--color-logo-outer"]        = "rgba(126,207,176,0.55)",
+
       ["--color-logo-mid"]          = "#1e3a2f",
       ["--color-logo-core"]         = "#1aab6d",
       ["--color-logo-glow"]         = "rgba(26,171,109,0.45)",

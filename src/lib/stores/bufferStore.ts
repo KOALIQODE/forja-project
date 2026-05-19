@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { currentProject } from './projectStore';
-import { STORAGE_KEYS, LANG_MAP } from '$lib/utils/constants';
+import { STORAGE_KEYS, LANG_MAP } from '$lib/utils/shared/constants';
 
 // Simple extname implementation for browser
 function extname(path: string): string {
@@ -15,6 +15,7 @@ export interface Buffer {
   filePath: string;
   language?: string; // Derived from file extension
   lastModified?: number;
+  isDirty?: boolean;
 }
 
 // Keys for localStorage

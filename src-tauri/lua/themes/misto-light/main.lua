@@ -75,6 +75,12 @@ editor.register_theme({
       ["--color-icon"]            = "#8a8a8a",
       ["--color-icon-hover"]      = "#16a34a",
 
+      ["--color-git-modified"]    = "#d97706",
+      ["--color-git-added"]       = "#16a34a",
+      ["--color-git-renamed"]     = "#2563eb",
+      ["--color-git-deleted"]     = "#dc2626",
+      ["--color-git-untracked"]   = "#71717a",
+
       ["--color-logo-outer"]      = "rgba(134,239,172,0.5)",
       ["--color-logo-mid"]        = "#f0fdf4",
       ["--color-logo-core"]       = "#16a34a",

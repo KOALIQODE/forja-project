@@ -18,6 +18,11 @@ export const DIALOG_IDS = {
 
 export type DialogId = (typeof DIALOG_IDS)[keyof typeof DIALOG_IDS];
 
+export interface DialogConfig {
+  id: DialogId;
+  props?: Record<string, any>;
+}
+
 // Global dialog state
 export interface DialogState {
   activeDialog: DialogConfig | null;
@@ -33,13 +38,13 @@ export const dialogState = writable<DialogState>({
 export const DIALOG_REGISTRY: Record<DialogId, () => Promise<{ default: Component<any> }>> = {
   [DIALOG_IDS.RECENT_PROJECTS]: () => import('../components/dialogs/RecentProjects.svelte'),
   [DIALOG_IDS.BUFFER_DELETE]: () => import('../components/dialogs/ListBuffers.svelte'),
-  [DIALOG_IDS.BUFFER_SEARCH]: () => import('../components/dialogs/BufferSearch.svelte'),
-  [DIALOG_IDS.FILE_SEARCH]: () => import('../components/dialogs/FileSearch.svelte'),
-  [DIALOG_IDS.LIVE_GREP]: () => import('../components/dialogs/LiveGrep.svelte'),
+  [DIALOG_IDS.BUFFER_SEARCH]: () => import('../components/dialogs/scope/BufferSearch.svelte'),
+  [DIALOG_IDS.FILE_SEARCH]: () => import('../components/dialogs/scope/FileSearch.svelte'),
+  [DIALOG_IDS.LIVE_GREP]: () => import('../components/dialogs/scope/LiveGrep.svelte'),
   [DIALOG_IDS.PREFERENCES]: () => import('../components/dialogs/Preferences.svelte'),
-  [DIALOG_IDS.EXTENSIONS]: () => import('../components/dialogs/ExtensionsManager.svelte'),
+  [DIALOG_IDS.EXTENSIONS]: () => import('../components/dialogs/Extensions.svelte'),
   [DIALOG_IDS.THEME_PICKER]: () => import('../components/dialogs/ThemePicker.svelte'),
-  [DIALOG_IDS.CLONE_REPOSITORY]: () => import('../components/dialogs/CloneRepositoryDialog.svelte'),
+  [DIALOG_IDS.CLONE_REPOSITORY]: () => import('../components/dialogs/CloneRepository.svelte'),
   // Add others as needed
   [DIALOG_IDS.SHORTCUTS_HELP]: () => Promise.reject('Not implemented'),
   [DIALOG_IDS.COMMAND_PALETTE]: () => Promise.reject('Not implemented'),

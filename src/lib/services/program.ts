@@ -1,7 +1,7 @@
 import {
   initGitReactivity,
   disposeGitReactivity,
-} from "$lib/init/gitReactivity";
+} from "$lib/services/gitReactivity";
 import { initPlugins } from "$lib/stores/pluginStore";
 import { dialogs } from "./dialogs";
 import { get } from "svelte/store";
